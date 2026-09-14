@@ -1,2 +1,8 @@
 # Local editor/agent state
 .claude/settings.local.json
+
+# eBPF 示例构建产物（由各示例 Makefile 生成，不入库）
+book/examples/**/vmlinux.h
+book/examples/**/*.skel.h
+book/examples/**/*.o
+book/examples/chapter-09/09-netfilter-go/nfctl

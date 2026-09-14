@@ -1,6 +1,10 @@
 # 第 9 章 eBPF 可观测性入门：基于 ebpf.top 入门系列
 
-> 本章当前为扩展版深度骨架，已经按 ebpf.top 的 BPF 入门系列 12 篇文章重组学习路径。后续完整章节应逐篇核对原文细节，并把本章中标注的“计划代码”补齐为独立可编译示例。
+> 本章当前为扩展版深度骨架，已经按 ebpf.top 的 BPF 入门系列 12 篇文章重组学习路径。
+> 本章规划的独立示例已全部落地到 [`book/examples/chapter-09/`](../examples/chapter-09/)，
+> 每个示例包含 BPF 源码、用户态 loader、Makefile、README（运行说明与验证状态），
+> 已在本仓库编写环境完成编译验证；运行验证需特权环境，状态标注见各示例 README。
+> 后续完整章节应逐篇核对原文细节，把正文从骨架扩写为成稿。
 
 ## 学习目标
 
@@ -33,52 +37,27 @@
 
 本章完整写作时要做到两件事：第一，尊重 ebpf.top 系列的学习顺序；第二，把每篇文章的核心知识转写成更系统的书籍内容，包括代码、命令、输出和解释，而不是简单罗列链接。
 
-## 实验目录规划
+## 实验目录（已落地）
+
+本章的独立示例已全部生成于 [`book/examples/chapter-09/`](../examples/chapter-09/)，目录总览和环境前提见其中的 [README](../examples/chapter-09/README.md)：
 
 ```text
 book/examples/chapter-09/
-  00-env/
-    check-env.sh
-  01-hello-world/
-    hello.bpf.c
-    hello.c
-    Makefile
-  02-pid-filter/
-    pid_filter.bpf.c
-    pid_filter.c
-    Makefile
-  03-container-security/
-    container_guard.bpf.c
-    container_guard.c
-    Makefile
-  04-ring-buffer/
-    ringbuf_exec.bpf.c
-    ringbuf_exec.c
-    Makefile
-  05-open-file-kprobe/
-    opensnoop_kprobe.bpf.c
-    opensnoop_kprobe.c
-    Makefile
-  06-open-file-perf-event/
-    opensnoop_perf.bpf.c
-    opensnoop_perf.c
-    Makefile
-  07-open-file-return/
-    openret.bpf.c
-    openret.c
-    Makefile
-  08-open-file-tracepoint/
-    opensnoop_tp.bpf.c
-    opensnoop_tp.c
-    Makefile
-  09-netfilter-go/
-    bpf/nf_guard.bpf.c
-    cmd/nfctl/main.go
-    go.mod
-    Makefile
+  README.md                      目录总览、统一构建模式、验证状态说明
+  00-env/check-env.sh            环境自检脚本
+  01-hello-world/                hello.bpf.c + hello.c + Makefile + README
+  02-pid-filter/                 pid_filter.bpf.c + pid_filter.c + Makefile + README
+  03-container-security/         container_guard.bpf.c + container_guard.c + Makefile + README
+  04-ring-buffer/                ringbuf_exec.bpf.c + ringbuf_exec.c + *_common.h + Makefile + README
+  05-open-file-kprobe/           opensnoop_kprobe.bpf.c + opensnoop_kprobe.c + *_common.h + Makefile + README
+  06-open-file-perf-event/       opensnoop_perf.bpf.c + opensnoop_perf.c + *_common.h + Makefile + README
+  07-open-file-return/           openret.bpf.c + openret.c + *_common.h + Makefile + README
+  08-open-file-tracepoint/       opensnoop_tp.bpf.c + opensnoop_tp.c + *_common.h + Makefile + README
+  09-netfilter-go/               bpf/nf_guard.bpf.c + cmd/nfctl/main.go + go.mod + Makefile
+                                 + scripts/netns-lab.sh（隔离拓扑） + README
 ```
 
-后续完整章节应把这些计划文件落地。每个示例都要包含：内核态 BPF 程序、用户态 loader、编译命令、运行命令、预期输出、逐段解释、常见 verifier/权限/内核版本问题。
+每个示例都包含：内核态 BPF 程序、用户态 loader、编译命令、运行命令、预期输出、逐段解释、常见 verifier/权限/内核版本问题，以及明确的验证状态标注。示例 01–08 采用 libbpf-bootstrap 式三步构建（vmlinux.h -> BPF 编译 -> skeleton -> loader），`*_common.h` 是内核态与用户态共享的事件结构定义。
 
 ## 1. eBPF 技术简介
 
@@ -127,6 +106,8 @@ eBPF 程序：读取上下文 -> 过滤 -> 读写 map -> 输出事件
 
 ## 3. eBPF 开发环境搭建
 
+**独立示例**：[`book/examples/chapter-09/00-env/`](../examples/chapter-09/00-env/)（`check-env.sh` 环境自检脚本）。
+
 完整章节应提供发行版命令和环境验证脚本。计划脚本：
 
 ```bash
@@ -165,6 +146,8 @@ fi
 `tracefs/debugfs` 是早期学习和排错的重要输出入口。Hello World 用 `bpf_printk()` 输出的文本不是写到 stdout，而是进入内核 tracing buffer，通常通过 `/sys/kernel/tracing/trace_pipe` 查看。tracefs 还暴露 tracepoint 列表和字段格式，例如 `events/syscalls/sys_enter_openat/format`。debugfs 在一些老系统上仍承载 tracing 路径。入门阶段如果“程序好像运行了但没有输出”，tracefs 是否挂载、trace_pipe 路径是否正确，是第一批要检查的问题。
 
 ## 4. Hello World
+
+**独立示例**：[`book/examples/chapter-09/01-hello-world/`](../examples/chapter-09/01-hello-world/)。
 
 Hello World 示例的目标是让读者第一次看到 eBPF 输出。相较第 1 章的 tracepoint skeleton 示例，本节应给出更贴近 ebpf.top 入门系列的版本，并解释 `bpf_trace_printk` 与 `bpf_printk` 的关系。
 
@@ -209,6 +192,8 @@ sudo cat /sys/kernel/tracing/trace_pipe
 
 ## 5. 通过 PID 过滤
 
+**独立示例**：[`book/examples/chapter-09/02-pid-filter/`](../examples/chapter-09/02-pid-filter/)。
+
 没有过滤的 eBPF 程序会捕获系统中所有匹配事件。入门阶段很快会遇到噪声问题：你只想观察目标进程，却看到 shell、systemd、容器 runtime、监控 agent 的大量事件。PID 过滤是最小过滤能力。
 
 计划 map 设计：
@@ -249,6 +234,8 @@ sudo ./pid_filter --pid 12345
 
 ## 6. 借助 eBPF 保护容器安全
 
+**独立示例**：[`book/examples/chapter-09/03-container-security/`](../examples/chapter-09/03-container-security/)。
+
 这一篇把过滤维度从 PID 扩展到容器。容器环境中，单纯 PID 不稳定：容器会重启，进程会变化，同一个宿主机上有多个 namespace。更实际的做法是结合 cgroup id、mount namespace、pid namespace 或容器 runtime 暴露的元数据。
 
 计划示例目标：拦截或记录容器内进程访问敏感路径的行为。
@@ -282,6 +269,8 @@ cgroup id 适合作为容器级过滤线索，是因为现代容器运行时通�
 因此，本章示例要明确边界：容器安全的入门版先做“识别目标容器并输出敏感行为事件”。如果要扩展为阻断版，需要切换到合适的程序类型，并说明返回值如何影响内核决策。这样读者不会把观测型探针误用成访问控制系统。
 
 ## 7. 在 eBPF 中使用 ring buffer
+
+**独立示例**：[`book/examples/chapter-09/04-ring-buffer/`](../examples/chapter-09/04-ring-buffer/)。
 
 ring buffer 是现代 eBPF 事件输出的重要机制。相比 `bpf_printk`，它传输结构化数据；相比 perf buffer，它提供 MPSC ring buffer 语义，用户态读取更直接。
 
@@ -329,6 +318,8 @@ ring buffer 满时，`bpf_ringbuf_reserve()` 会返回 NULL。示例里的 `if (
 
 ## 8. 捕获进程打开文件信息
 
+**独立示例**：[`book/examples/chapter-09/05-open-file-kprobe/`](../examples/chapter-09/05-open-file-kprobe/)。
+
 这一篇进入真实 opensnoop 类工具。目标是捕获进程打开文件时的文件名、进程名、PID 等信息。
 
 可选挂载点：
@@ -360,6 +351,8 @@ PID     COMM             FILE
 
 ## 9. 捕获进程打开文件信息 perf_event 篇
 
+**独立示例**：[`book/examples/chapter-09/06-open-file-perf-event/`](../examples/chapter-09/06-open-file-perf-event/)。
+
 这一篇与 ring buffer 形成对照：同样输出结构化事件，但使用 perf event array。
 
 计划 map：
@@ -388,6 +381,8 @@ libbpf 用户态一般使用 `perf_buffer__new()` 创建 reader，传入 map fd�
 与 ring buffer 相比，perf buffer API 更老，使用面更广，很多 BCC 时代工具和旧内核环境仍然依赖它。ring buffer 在现代 libbpf 项目中更简洁，但不能因此跳过 perf buffer。给同一 opensnoop 事件写两个版本，可以让读者直观看到两者差异：BPF 侧一个调用 `bpf_perf_event_output()`，另一个调用 `bpf_ringbuf_reserve/submit()`；用户态一个用 `perf_buffer__poll()`，另一个用 `ring_buffer__poll()`。
 
 ## 10. 捕获进程打开文件信息返回值
+
+**独立示例**：[`book/examples/chapter-09/07-open-file-return/`](../examples/chapter-09/07-open-file-return/)。
 
 只捕获 open enter 事件还不够。很多排障问题关心的是“打开失败了吗，错误码是什么”。返回值需要在函数返回或 syscall exit 时捕获。
 
@@ -426,6 +421,8 @@ key 设计要谨慎。只用 tgid 可能在多线程程序中冲突，因为同�
 
 ## 11. 捕获进程打开文件信息 tracepoint 篇
 
+**独立示例**：[`book/examples/chapter-09/08-open-file-tracepoint/`](../examples/chapter-09/08-open-file-tracepoint/)。
+
 tracepoint 版本强调稳定性。与 kprobe 绑定内核函数名不同，tracepoint 是内核显式提供的事件点，并通过 tracefs 暴露字段格式。
 
 发现 tracepoint：
@@ -455,6 +452,8 @@ syscall tracepoint 的参数通常放在 `ctx->args[]` 中。以 openat 为例�
 tracepoint 的稳定性不等于永远不变。不同架构、不同 syscall ABI、不同内核配置可能导致字段或事件可用性差异。完整章节应要求读者先运行 `ls /sys/kernel/tracing/events/syscalls/` 和 `cat .../format`，再编译对应示例。这样做比直接复制别人机器上的上下文结构更可靠。
 
 ## 12. 在 Netfilter 中使用 eBPF 以及 Go 经验总结
+
+**独立示例**：[`book/examples/chapter-09/09-netfilter-go/`](../examples/chapter-09/09-netfilter-go/)（含 `scripts/netns-lab.sh` 隔离拓扑脚本）。
 
 系列最后一篇把学习从观测推进到网络钩子和 Go 控制面。Netfilter BPF 与 XDP/TC 的侧重点不同：它接近传统防火墙路径，适合解释报文过滤、策略判断和用户态控制面的关系。
 
@@ -542,22 +541,26 @@ tracepoint 更稳定，字段格式可通过 tracefs 查看。kprobe 灵活，�
 
 ## 完整章节验收清单
 
+独立示例资产已落地并通过编译验证（见各示例 README 的验证状态）；
+以下清单用于完整章节定稿前的最终验收：
+
 - [ ] 逐篇核对 ebpf.top BPF 入门系列 12 篇文章标题与核心内容。
 - [ ] 每篇文章对应一个小节，且不是只列提纲。
-- [ ] Hello World 示例可编译运行。
-- [ ] PID 过滤示例包含 map 配置和用户态参数下发。
-- [ ] 容器安全示例明确 cgroup/container 过滤依据和阻断边界。
-- [ ] ring buffer 示例包含 reserve/submit 和用户态 poll。
-- [ ] open 文件 kprobe 示例包含文件名读取解释。
-- [ ] perf_event 版本包含 perf buffer 用户态读取。
-- [ ] 返回值版本包含 enter/exit 关联 map。
-- [ ] tracepoint 版本引用 tracefs `format`。
-- [ ] Netfilter + Go 示例包含隔离网络拓扑和控制面说明。
-- [ ] 每个示例包含编译命令、运行命令、预期输出和排错。
+- [x] Hello World 示例已落地（编译验证通过；运行验证待特权环境）。
+- [x] PID 过滤示例包含 map 配置和用户态参数下发。
+- [x] 容器安全示例明确 cgroup/container 过滤依据和阻断边界。
+- [x] ring buffer 示例包含 reserve/submit 和用户态 poll。
+- [x] open 文件 kprobe 示例包含文件名读取解释。
+- [x] perf_event 版本包含 perf buffer 用户态读取。
+- [x] 返回值版本包含 enter/exit 关联 map。
+- [x] tracepoint 版本引用 tracefs `format`。
+- [x] Netfilter + Go 示例包含隔离网络拓扑和控制面说明。
+- [x] 每个示例包含编译命令、运行命令、预期输出和排错。
+- [ ] 在特权 Linux eBPF 环境完成全部示例的运行验证（或保持显式标注）。
 
 ## 总结
 
-本章应成为全书第一个真正“动手密集”的章节。它不是列出几个工具名，而是围绕 ebpf.top BPF 入门系列的 12 篇文章，把读者从概念带到一组递进代码：先输出文本，再过滤 PID，再识别容器，再传输结构化事件，再跟踪文件打开，再关联返回值，再迁移到 tracepoint，最后进入 Netfilter 和 Go 控制面。后续完整写作要把这里的每个计划示例补齐为可编译、可运行、可解释的代码资产。
+本章应成为全书第一个真正“动手密集”的章节。它不是列出几个工具名，而是围绕 ebpf.top BPF 入门系列的 12 篇文章，把读者从概念带到一组递进代码：先输出文本，再过滤 PID，再识别容器，再传输结构化事件，再跟踪文件打开，再关联返回值，再迁移到 tracepoint，最后进入 Netfilter 和 Go 控制面。本章规划的 10 个独立示例已全部落地于 `book/examples/chapter-09/` 并通过编译验证；剩余工作是在特权环境完成运行验证，并把正文从骨架扩写为成稿。
 
 ## 本章参考来源
 

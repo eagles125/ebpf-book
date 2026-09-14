@@ -41,18 +41,18 @@
 
 ## 4.0 Chapter 9 Standalone Example Assets
 
-- [ ] Generate `book/examples/chapter-09/00-env/check-env.sh`.
-- [ ] Generate `book/examples/chapter-09/01-hello-world/` with BPF C source, userspace loader, Makefile, run instructions, and README.
-- [ ] Generate `book/examples/chapter-09/02-pid-filter/` with map-based PID filtering example, userspace PID configuration, Makefile, run instructions, and README.
-- [ ] Generate `book/examples/chapter-09/03-container-security/` with cgroup/container filtering example, policy map, Makefile, run instructions, and README.
-- [ ] Generate `book/examples/chapter-09/04-ring-buffer/` with ring buffer event output example, userspace polling code, Makefile, run instructions, and README.
-- [ ] Generate `book/examples/chapter-09/05-open-file-kprobe/` with file-open kprobe tracing example, filename read logic, Makefile, run instructions, and README.
-- [ ] Generate `book/examples/chapter-09/06-open-file-perf-event/` with perf event output example, userspace perf buffer reader, Makefile, run instructions, and README.
-- [ ] Generate `book/examples/chapter-09/07-open-file-return/` with enter/exit return-value correlation example, temporary map cleanup, Makefile, run instructions, and README.
-- [ ] Generate `book/examples/chapter-09/08-open-file-tracepoint/` with tracepoint-based file-open tracing example, tracefs format notes, Makefile, run instructions, and README.
-- [ ] Generate `book/examples/chapter-09/09-netfilter-go/` with Netfilter BPF program, Go control plane, build/run scripts, isolated topology notes, and README.
-- [ ] Cross-link Chapter 9 inline code sections to the standalone `book/examples/chapter-09/` files.
-- [ ] Verify Chapter 9 standalone examples compile in a suitable privileged Linux eBPF environment, or mark each example with explicit verification status and reason.
+- [x] Generate `book/examples/chapter-09/00-env/check-env.sh`.
+- [x] Generate `book/examples/chapter-09/01-hello-world/` with BPF C source, userspace loader, Makefile, run instructions, and README.
+- [x] Generate `book/examples/chapter-09/02-pid-filter/` with map-based PID filtering example, userspace PID configuration, Makefile, run instructions, and README.
+- [x] Generate `book/examples/chapter-09/03-container-security/` with cgroup/container filtering example, policy map, Makefile, run instructions, and README.
+- [x] Generate `book/examples/chapter-09/04-ring-buffer/` with ring buffer event output example, userspace polling code, Makefile, run instructions, and README.
+- [x] Generate `book/examples/chapter-09/05-open-file-kprobe/` with file-open kprobe tracing example, filename read logic, Makefile, run instructions, and README.
+- [x] Generate `book/examples/chapter-09/06-open-file-perf-event/` with perf event output example, userspace perf buffer reader, Makefile, run instructions, and README.
+- [x] Generate `book/examples/chapter-09/07-open-file-return/` with enter/exit return-value correlation example, temporary map cleanup, Makefile, run instructions, and README.
+- [x] Generate `book/examples/chapter-09/08-open-file-tracepoint/` with tracepoint-based file-open tracing example, tracefs format notes, Makefile, run instructions, and README.
+- [x] Generate `book/examples/chapter-09/09-netfilter-go/` with Netfilter BPF program, Go control plane, build/run scripts, isolated topology notes, and README.
+- [x] Cross-link Chapter 9 inline code sections to the standalone `book/examples/chapter-09/` files.
+- [x] Verify Chapter 9 standalone examples compile in a suitable privileged Linux eBPF environment, or mark each example with explicit verification status and reason.
 
 ## 4.1 Review Feedback Follow-up
 
@@ -202,10 +202,10 @@
 
 - [x] Rewrite Chapter 9 around all 12 ebpf.top BPF introductory-series articles.
 - [x] Expand all “needs explanation” and “explanation focus” bullet lists into substantive explanations tied to examples.
-- [ ] Generate standalone Chapter 9 examples listed in Section 4.0.
-- [ ] Cross-link Chapter 9 prose to standalone examples after files are generated.
-- [ ] Verify examples in a privileged Linux eBPF environment or mark each one with explicit verification status.
-- [ ] Main-agent review after example assets are generated.
+- [x] Generate standalone Chapter 9 examples listed in Section 4.0.
+- [x] Cross-link Chapter 9 prose to standalone examples after files are generated.
+- [x] Verify examples in a privileged Linux eBPF environment or mark each one with explicit verification status.
+- [x] Main-agent review after example assets are generated.
 
 ### Chapter 10: BCC Toolkit
 
