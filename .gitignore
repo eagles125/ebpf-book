@@ -6,3 +6,6 @@ book/examples/**/vmlinux.h
 book/examples/**/*.skel.h
 book/examples/**/*.o
 book/examples/chapter-09/09-netfilter-go/nfctl
+
+# Comet 本地会话选择状态（change 内的 .comet/ 状态随 change 入库）
+/.comet/
