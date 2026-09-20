@@ -1,0 +1,14 @@
+{
+  "change": "generate-ebpf-book",
+  "phase": "design",
+  "mode": "compact",
+  "canonical_spec": "openspec",
+  "generated_by": "comet-handoff.sh",
+  "context_hash": "9ac39682406ad23e8a43af072741f49c6bf2a53f01a77caa1f73be301c47a3d4",
+  "files": [
+    { "path": "openspec/changes/generate-ebpf-book/proposal.md", "sha256": "e2f3514d3ebe960e548bb93f4e94f7e20bccd91a1dba10714a9a3e612bcafc53" },
+    { "path": "openspec/changes/generate-ebpf-book/design.md", "sha256": "8baa42c5876b82ab910137a5e80785feb697bab6bf86e4aab498291867b8e7ae" },
+    { "path": "openspec/changes/generate-ebpf-book/tasks.md", "sha256": "55b29b04a1543621bc2914adc6ae141c2690a585e6c37bf5a35807e55f7fdfcd" },
+    { "path": "openspec/changes/generate-ebpf-book/specs/ebpf-book-manuscript/spec.md", "sha256": "01c701fe20f2ede93a2952b8bec7f491119d9c8686b9073d637ae9f2454c5ea3" }
+  ]
+}

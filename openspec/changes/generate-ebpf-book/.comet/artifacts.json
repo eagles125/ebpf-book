@@ -1,0 +1,8 @@
+{
+  "openspec_proposal": "openspec/changes/generate-ebpf-book/proposal.md",
+  "openspec_design": "openspec/changes/generate-ebpf-book/design.md",
+  "openspec_tasks": "openspec/changes/generate-ebpf-book/tasks.md",
+  "openspec_delta_spec": "openspec/changes/generate-ebpf-book/specs/ebpf-book-manuscript/spec.md",
+  "handoff_context": "openspec/changes/generate-ebpf-book/.comet/handoff/design-context.json",
+  "handoff_markdown": "openspec/changes/generate-ebpf-book/.comet/handoff/design-context.md"
+}
