@@ -1,13 +1,13 @@
 # Resume Notes — generate-ebpf-book
 
-- 暂存时间：2026-09-21（第二次暂存：第 9 章教学标准重审进行中被用户暂存）
+- 暂存时间：2026-09-22（第三次更新：第 9 章重审已完成并处置，回到 build 计划创建断点）
 - 状态机：`phase: build`，`plan: null`，`build_pause: null`，`isolation/build_mode/tdd_mode: null`，`review_mode: standard`（全局配置默认）
 - 本文件是给「后续拉起」会话的直达断点记录；状态机本身已持久化于 `.comet.yaml`，恢复路由自动生效。
-- **当前有两项待办，拉起后按序处理：① 第 9 章教学标准重审（最新请求，先做）；② build 计划创建（先前的暂存点）**
+- **第 9 章教学标准重审已完成**：报告已交付，差距按保守处置落为第 9 章矩阵 5 项未勾任务（批次 4 补齐），详见 `ch9-teaching-audit.md`。**用户若指示「第 9 章现在升级」，把该 5 项任务并入本次 build 计划即可。**
 
 ## 恢复方式
 
-用户任一说法（如「请拉起当前项目任务」）→ `/comet` → 路由 `comet-classic` → Step 0/1 读取状态 → phase=build 且 plan 未建、工作方式未配置 → 进入 `/comet-build`。**但在此之前先完成第 9 章重审**：读取 `openspec/changes/generate-ebpf-book/.comet/handoff/ch9-teaching-audit.md`（审查证据与初步结论已固化），按其「剩余动作」补齐抽查 → 交付最终审查报告 → 用户选择补救排期（A 现在升级 / B 并入批次 4 / C 仅记录）→ 按选择更新 tasks.md（注意 handoff hash 失效处理，见「已知运行时坑」）→ 再继续下方 build 流程。
+用户任一说法（如「请拉起当前项目任务」）→ `/comet` → 路由 `comet-classic` → Step 0/1 读取状态 → phase=build 且 plan 未建 → 自动进入 `/comet-build` 从 Step 1（创建计划）继续。无需用户复述背景。
 
 ## 本次会话已完成（2026-09-20 ~ 09-21）
 
@@ -21,10 +21,6 @@
 5. 用户请求「按照此标准重新审查第 9 章」→ 审查证据收集约 80% 后被暂存：正文全读、示例资产抽查（README 结构/验证状态/源码中文注释/无 exercises 目录）、5 条教学需求逐条初步判定（详见 `ch9-teaching-audit.md`）。**最终审查报告尚未交付**。
 
 ## 下一步精确动作（拉起后从这里开始）
-
-### 0. 完成第 9 章教学标准重审（最新用户请求，先于 build）
-
-详见 `ch9-teaching-audit.md`（同目录）：证据已收集约 80%（正文全读、示例资产抽查、双视角/练习缺失确认），剩余 = 补齐 00-env 与 03/05/06/07 README 抽查 + tasks.md Chapter 9 矩阵现状 → 产出最终审查报告 → 用 AskUserQuestion 请用户选择补救排期（A 现在升级为 §4.2 任务组并入本次 build / B 并入批次 4 / C 仅记录结论）→ 按选择更新 tasks.md。
 
 ### 1. /comet-build Step 1 — 派发计划创建 subagent
 

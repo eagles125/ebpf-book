@@ -134,7 +134,7 @@
 
 - [ ] Batch 2: Complete Chapters 2-4.
 - [ ] Batch 3: Complete Chapters 5-8.
-- [ ] Batch 4: Complete Chapters 9-14, including verified observability examples where environment allows.
+- [ ] Batch 4: Complete Chapters 9-14, including verified observability examples where environment allows, and the Chapter 9 teaching-standard retrofit tasks recorded in the Chapter 9 matrix.
 - [ ] Batch 5: Complete Chapters 15-19, with special depth for Chapter 17.
 - [ ] Batch 6: Complete Chapters 20-23.
 - [ ] Batch 7: Complete Chapters 24-25 and appendices.
@@ -247,6 +247,14 @@
 - [x] Cross-link Chapter 9 prose to standalone examples after files are generated.
 - [x] Verify examples in a privileged Linux eBPF environment or mark each one with explicit verification status.
 - [x] Main-agent review after example assets are generated.
+
+以下为 2026-09-21 教学标准重审（对照 spec 五条教学需求）确认的差距，安排在批次 4 第 9 章成稿时补齐：
+
+- [ ] 教学标准改造第 9 章正文：将环境素材重组为五层环境阐述（依赖/编译/部署/运行/效果），把「计划代码/计划脚本」措辞替换为对已落地示例的逐段走读（含第 8 节占位代码补全）。
+- [ ] 为第 9 章补齐学生侧环节：每大节增加动手实践清单、阶段性检查点与自测问题。
+- [ ] 创建 `book/examples/chapter-09/exercises/`：不少于 3 项课后扩展任务，每项含完整可编译参考实现、防剧透结构 README（任务与提示在前、实现思路独立成节）与验证状态标注。
+- [ ] 为 `book/examples/chapter-09/00-env/` 补充 README（check-env.sh 用法与输出解读）。
+- [ ] 第 9 章教学改造后的 main-agent 审查（对照五条教学需求逐条核验）。
 
 ### Chapter 10: BCC Toolkit
 
