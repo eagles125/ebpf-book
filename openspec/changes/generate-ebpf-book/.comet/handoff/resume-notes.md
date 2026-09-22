@@ -1,13 +1,17 @@
 # Resume Notes — generate-ebpf-book
 
-- 暂存时间：2026-09-22（第三次更新：第 9 章重审已完成并处置，回到 build 计划创建断点）
-- 状态机：`phase: build`，`plan: null`，`build_pause: null`，`isolation/build_mode/tdd_mode: null`，`review_mode: standard`（全局配置默认）
-- 本文件是给「后续拉起」会话的直达断点记录；状态机本身已持久化于 `.comet.yaml`，恢复路由自动生效。
-- **第 9 章教学标准重审已完成**：报告已交付，差距按保守处置落为第 9 章矩阵 5 项未勾任务（批次 4 补齐），详见 `ch9-teaching-audit.md`。**用户若指示「第 9 章现在升级」，把该 5 项任务并入本次 build 计划即可。**
+- 暂存时间：2026-09-22（第四次更新：build 计划已创建，停在 Step 2 联合决策）
+- 状态机：`phase: build`，`plan: docs/superpowers/plans/2026-09-22-chapter17-teaching.md`，**`build_pause: plan-ready`**，`isolation/build_mode/tdd_mode: null`，`review_mode: standard`（全局默认，尚待用户确认）
+- **第 9 章教学标准重审已完成**：报告已交付，差距落为第 9 章矩阵 5 项未勾任务（批次 4 补齐），详见 `ch9-teaching-audit.md`。用户若指示「第 9 章现在升级」，把该 5 项任务并入 build 执行即可。
 
-## 恢复方式
+## 恢复方式（最快路径）
 
-用户任一说法（如「请拉起当前项目任务」）→ `/comet` → 路由 `comet-classic` → Step 0/1 读取状态 → phase=build 且 plan 未建 → 自动进入 `/comet-build` 从 Step 1（创建计划）继续。无需用户复述背景。
+`/comet` → comet-classic → 检测到 `build_pause: plan-ready` 且 4 项配置未设置 → 按规则回到 `/comet-build` Step 2 重新发起联合决策。**用户只需一句话确认全部配置即可开工**，例如：
+
+- 「按推荐配置继续」（= 隔离 current + subagent-driven + tdd direct + review standard），或
+- 「继续，隔离=当前分支，执行=subagent，TDD=direct，审查=standard」，或任意自定义组合。
+
+**配置不得由 agent 代选**（comet-build 硬约束），必须等用户明确答复。用户答复后：`comet state set generate-ebpf-book build_pause null` → 写入 isolation/build_mode/tdd_mode/review_mode（subagent 模式还需 `subagent_dispatch confirmed`）→ 按所选执行方式加载技能开始 Task 1。
 
 ## 本次会话已完成（2026-09-20 ~ 09-21）
 
