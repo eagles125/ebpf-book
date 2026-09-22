@@ -24,7 +24,7 @@ archived: false
 bound_branch: null
 direct_override: null
 handoff_context: openspec/changes/generate-ebpf-book/.comet/handoff/design-context.json
-handoff_hash: 9ac39682406ad23e8a43af072741f49c6bf2a53f01a77caa1f73be301c47a3d4
+handoff_hash: 19a0f7772c53500827155b717ae79710305c52acb5ae9a23024232d28b8e49c8
 classic_profile: full
 classic_migration: 1
 run_id: 6e7fbdf0-5413-4213-851d-2573d6686de1
