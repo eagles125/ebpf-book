@@ -1825,7 +1825,7 @@ git commit -m "feat(ch17): 阶段5 完整系统（XDP+TC 数据面 + Go fwctl �
 ---
 
 ### Task 8: scripts/ 拓扑、压测与顶层编译级验证
-
+- [x] Task 8: scripts/ 拓扑、压测与顶层编译级验证
 **tasks.md 条目**：§5.1.2「Generate `book/examples/chapter-17/scripts/` with `setup-veth.sh` (topology setup/teardown + safety warnings), `bench-iperf.sh`, `bench-pktgen.sh`, and `verify-build.sh` (top-level compile-level verification across all stages and exercises).」
 
 **Files:**
@@ -1835,7 +1835,7 @@ git commit -m "feat(ch17): 阶段5 完整系统（XDP+TC 数据面 + Go fwctl �
 - Consumes: C5 拓扑契约；C6 验证约定。
 - Produces: `verify-build.sh` 退出码语义（0=全绿，1=存在 FAIL，WARN 仅限 Go 网络依赖）；Task 14 硬性验收依赖它。
 
-- [ ] **Step 1: 创建 `setup-veth.sh`**（完整脚本按 C5 契约实现，头部安全警告「仅操作 veth/netns，绝不触碰物理网卡」）
+- [x] **Step 1: 创建 `setup-veth.sh`**（完整脚本按 C5 契约实现，头部安全警告「仅操作 veth/netns，绝不触碰物理网卡」）
 
 ```bash
 #!/usr/bin/env bash
@@ -1892,7 +1892,7 @@ case "${1:-setup}" in
 esac
 ```
 
-- [ ] **Step 2: 创建 `bench-iperf.sh`**
+- [x] **Step 2: 创建 `bench-iperf.sh`**
 
 ```bash
 #!/usr/bin/env bash
@@ -1912,7 +1912,7 @@ ip netns exec ns-client iperf3 -c 10.0.2.2 -P 8 -t "$DURATION"
 # 指标口径：SUM 行 sender/receiver 吞吐（Gbits/sec）与重传数；对照 fwctl stats 的 pass/drop
 ```
 
-- [ ] **Step 3: 创建 `bench-pktgen.sh`**
+- [x] **Step 3: 创建 `bench-pktgen.sh`**
 
 ```bash
 #!/usr/bin/env bash
@@ -1945,7 +1945,7 @@ grep -E "Result|pps" "$D"
 # （使流量经 veth-fw-c 的 RX 路径进入防火墙，并相应调整 dst/dst_mac）。
 ```
 
-- [ ] **Step 4: 创建 `verify-build.sh`**（顶层编译级验证，本任务起可运行；练习目录尚不存在时跳过并 WARN）
+- [x] **Step 4: 创建 `verify-build.sh`**（顶层编译级验证，本任务起可运行；练习目录尚不存在时跳过并 WARN）
 
 ```bash
 #!/usr/bin/env bash
@@ -1994,12 +1994,12 @@ echo "== 汇总: PASS=$pass WARN=$warn FAIL=$fail =="
 [ "$fail" -eq 0 ]
 ```
 
-- [ ] **Step 5: 首次全量运行（硬性）**
+- [x] **Step 5: 首次全量运行（硬性）**
 
 Run: `bash book/examples/chapter-17/scripts/verify-build.sh`
 Expected: `PASS 01-xdp-drop` … `PASS 05-firewall`；练习段全 `SKIP`；汇总 `FAIL=0`，退出码 0。
 
-- [ ] **Step 6: 提交**
+- [x] **Step 6: 提交**
 
 ```bash
 git add book/examples/chapter-17/scripts/
