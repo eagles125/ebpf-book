@@ -1855,6 +1855,7 @@ esac
 ```bash
 #!/usr/bin/env bash
 # 吞吐压测：依赖 setup-veth.sh 拓扑与 iperf3。运行级待验证（编写环境无 root）。
+# 安全警告：勿在物理网卡误挂 XDP/TC。
 # 用法：sudo bash bench-iperf.sh [时长秒]
 set -euo pipefail
 DURATION=${1:-30}
@@ -1869,6 +1870,7 @@ ip netns exec ns-client iperf3 -c 10.0.2.2 -P 8 -t "$DURATION"
 ```bash
 #!/usr/bin/env bash
 # pktgen 打流压测 pps/丢包率：必须 root；仅作用于 veth（默认 veth-fw-c）。
+# 安全警告：勿在物理网卡误挂 XDP/TC。
 # 运行级待验证：pktgen 依赖 /proc/net/pktgen，无法在编写环境验证，以脚本+预期输出交付。
 # 用法：sudo bash bench-pktgen.sh [dev] [时长秒]
 set -euo pipefail
@@ -1894,6 +1896,7 @@ grep -E "Result|pps" "$D"
 ```bash
 #!/usr/bin/env bash
 # 顶层编译级验证：逐阶段 make + exercises 编译 + 汇总。无特权可执行。
+# 安全警告：勿在物理网卡误挂 XDP/TC。
 # 退出码：0=全绿；1=存在 FAIL；Go 网络依赖失败记 WARN（不算失败，需人工复验）。
 set -u
 cd "$(dirname "$0")/.."                      # 进入 book/examples/chapter-17
