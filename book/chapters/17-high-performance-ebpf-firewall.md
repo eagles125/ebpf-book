@@ -45,7 +45,7 @@
 
 **veth 与网络命名空间前置。** 1.3 的拓扑由 iproute2 的 `ip netns`/`ip link` 创建，运行级实验另需 `tc`（挂 TC filter）与 iperf3（建流、压测）；三者都只影响运行，编译不依赖。
 
-**依赖工具清单与检查。** 清单不必背——运行 `bash book/examples/chapter-17/00-env/check-env.sh`（无 root 也可），脚本按“内核与 BTF → 工具链（编译级）→ 权限分级（加载级/实验级）”三段输出并给出结论。本机（非 root、`unprivileged_bpf_disabled=2`）输出节选（本地验证）：
+**依赖工具清单与检查。** 清单不必背——运行 `bash book/examples/chapter-17/00-env/check-env.sh`（无 root 也可），脚本按“内核与 BTF → 工具链（编译级）→ 权限分级（加载级/实验级）”三段输出并给出结论。本机输出节选（本地验证）——注意权限一行并不属实，原因见后：
 
 ```text
 == 工具链（编译级） ==
@@ -53,12 +53,10 @@ OK    clang（编译 BPF C）
 OK    bpftool（BTF dump / skeleton）
 OK    libbpf 头文件（libbpf-dev）
 == 权限分级（加载级/实验级） ==
-WARN  非 root 且无 CAP_BPF（unprivileged_bpf_disabled=2）：
-      - 可以完成：编译级验证（make / verify-build.sh）
-      - 不能完成：BPF 加载、XDP/TC 挂载、veth 拓扑（需 sudo 或 CAP_BPF+CAP_NET_ADMIN）
+OK    具备 CAP_BPF：可加载程序，实验还需 CAP_NET_ADMIN/CAP_SYS_ADMIN
 ```
 
-读法：编译级全绿即可完成本章全部 `make` 与编译级验证；加载级/实验级要等有特权的实验机再验。
+那行 OK 为何不属实：脚本以 capsh 的 **bounding set** 粗检权限，本机 bounding set 恰含 `cap_bpf`；但 bounding set 不等于生效能力——`capsh --has-p=cap_bpf` 实测 not permitted（本机非 root、`kernel.unprivileged_bpf_disabled=2`），真实档位是上表第三行：可编译、不可加载。判断自身权限要以 permitted/effective 集为准，这个偏差本身就是现成的教学点。
 
 ### 1.2 编译环境
 
@@ -121,7 +119,7 @@ sudo bash book/examples/chapter-17/scripts/setup-veth.sh teardown  # 销毁
 | `attach` | 加载两个 .o、同名 map 合并为同一实例并 pin 到 `/sys/fs/bpf/fw17`，挂载 XDP 与 TC |
 | `detach` | 解除全部挂载并删除 pin 目录 |
 | `rule` | 精确五元组规则 add/del/list（`acl_rules`） |
-| `cidr` | 源网段规则 add/del/list（`acl_lpm`，最长前缀匹配） |
+| `cidr` | 源网段规则 add（`acl_lpm`，最长前缀匹配；仅新增，删除留作练习） |
 | `nat` | SNAT/DNAT 通配规则 add（`nat_map`） |
 | `conntrack` | 连接表 dump（list） |
 | `stats` | per-CPU 统计逐 CPU 求和输出 |
@@ -143,7 +141,7 @@ fwctl attach   （加载 → pin map/prog → 挂载 XDP/TC）
 |---|---|---|
 | 阶段 1 `xdp_drop` | `pass=0 drop=12` | `drop` 递增即 XDP 生效，ping 全部超时 |
 | 阶段 2 ACL 统计 | `total` 与 `drop_acl` 同步递增 | 精确规则需用 `ss -tn` 查真实源端口；网段规则用 `--cidr` |
-| 阶段 3 连接表 dump | `10.0.0.2:41322 -> 10.0.2.2:5201 … proto=6 state=1 idle=0.1s pkts=52` | SYN 首包登记 `state=1`（NEW）；反向报文不可见时停在 1，本拓扑预期 |
+| 阶段 3 连接表 dump | `10.0.0.2:41322 -> 10.0.2.2:5201 … proto=6 state=1 idle=0.1s pkts=52` | SYN 首包登记 `state=1`（NEW）；反向报文不可见时到不了 2（正向 FIN/RST 仍可迁出 1），本拓扑预期 |
 | 阶段 4 NAT 抓包 | `IP 10.0.2.1.41322 > 10.0.2.2.8080: Flags [S]` | 目的/源已按 DNAT/SNAT 改写；`nat` 计数按 2 递进 |
 | 阶段 5 `fwctl stats` | `total=18734 pass=18734 nat=37468` | 解析成功的报文满足 `pass + ct_established + drop_acl = total` |
 
