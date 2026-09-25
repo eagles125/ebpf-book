@@ -57,8 +57,11 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    /* XDP 挂载点无法从 SEC 名推断到具体接口，必须显式 attach */
-    if (!bpf_program__attach_xdp(skel->progs.xdp_drop, ifindex)) {
+    /* XDP 挂载点无法从 SEC 名推断到具体接口，必须显式 attach。
+       注意：libbpf 1.x attach 失败返回 ERR_PTR（非 NULL），必须用 libbpf_get_error 判错，
+       仅判 !link 会漏掉真实失败 */
+    struct bpf_link *link = bpf_program__attach_xdp(skel->progs.xdp_drop, ifindex);
+    if (libbpf_get_error(link)) {
         fprintf(stderr, "attach_xdp 失败（接口是否为 veth？勿挂物理网卡！）\n");
         xdp_drop_bpf__destroy(skel);
         return 1;

@@ -49,13 +49,14 @@ sudo ip netns exec ns-client ping 10.0.2.2
 
 ```text
 XDP 程序已挂载到 veth-fw-c（ifindex=5），Ctrl-C 退出。
-pass=14 drop=12
-pass=14 drop=12
-...
+pass=0 drop=3
+pass=0 drop=7
+pass=0 drop=12
 ```
 
-- `pass` 统计所有到达报文：程序入口无条件 `bump(STAT_PASS)`，含 ARP 等非 IPv4 报文；
-  `drop` 统计被丢弃的 IPv4 报文。因此恒有 `pass >= drop`，ping（如 `-c 12`）期间两者同步递增。
+- `pass` 只计实际放行的报文（残包与非 IPv4，如 ARP），与 `drop` 互斥；`drop` 统计被丢弃的
+  IPv4 报文，ping（如 `-c 12`）期间递增到 12。示例场景中 ARP 已在拓扑建立或此前触发时完成，
+  ping 期间没有新的非 IPv4 报文，故 `pass` 保持 0；若出现新的 ARP 解析，`pass` 会相应递增。
 - 由于 IPv4 报文在 `veth-fw-c` 的驱动层即被丢弃，`10.0.2.2` 应不可达（ping 全部超时）——
   正好用来对照「报文在协议栈之前就被丢了」与「计数映射里看得见丢了多少」。
 
