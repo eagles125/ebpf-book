@@ -27,13 +27,142 @@
 
 ## 一、环境准备
 
-本章实验环境按五层组织，逐层就绪后再进入阶段 1。五层各自的落点是：
+本章实验环境按五层组织，逐层就绪后再进入阶段 1：1.1 确认内核、权限与依赖工具；1.2 装好编译工具链；1.3 搭起实验拓扑；1.4 说明挂载、卸载与规则下发；1.5 汇总预期输出与验证状态约定。
 
-- **1.1 依赖环境**：内核版本与 BTF 要求、root/`CAP_BPF`/`CAP_NET_ADMIN`/`CAP_PERFMON` 权限分级、veth 与网络命名空间前置条件、依赖工具清单与检查方法，对应自检脚本 `book/examples/chapter-17/00-env/check-env.sh`（无 root 也能给出三档结论）。
-- **1.2 编译环境**：clang/LLVM、libbpf 头文件、bpftool、Go 工具链与 cilium/ebpf 依赖的版本要求、安装与验证命令。
-- **1.3 部署环境**：ns-client/ns-fw/ns-server 三命名空间 veth 拓扑的设计与脚本化搭建、销毁步骤与安全警告。
-- **1.4 运行环境**：XDP/TC 挂载与卸载方式、`fwctl` 控制面命令总览、规则与 NAT 下发流程。
-- **1.5 运行效果**：各阶段预期输出、tcpdump 抓包对比、统计与连接表查询示例、验证状态约定（编译验证与运行级待验证的区分口径）。
+### 1.1 依赖环境
+
+**内核版本与 BTF。** 全部示例要求 Linux 5.10+ 且开启 `CONFIG_DEBUG_INFO_BTF`——XDP bpf_link、LRU hash、TC clsact、`bpf_skb_store_bytes` 等在 5.10 上均已可用；每个示例 `make` 的第一步是 `bpftool btf dump file /sys/kernel/btf/vmlinux format c > vmlinux.h`，内核 BTF 缺失则类型头文件无从生成，编译无法开始。
+
+**权限分级。** 加载 BPF 程序需要特权，三档环境的能力边界：
+
+| 环境档位 | 编译 | 加载/挂载 | veth 实验 |
+|---|---|---|---|
+| root | 可 | 可 | 可（仍只挂 veth） |
+| 非 root + `CAP_BPF`/`CAP_NET_ADMIN` | 可 | 可 | 可（网络类操作还需相应 CAP） |
+| 非 root 且无 `CAP_BPF` | 可 | 不可 | 不可 |
+
+不同内核版本对 `CAP_BPF`/`CAP_PERFMON`/`CAP_SYS_ADMIN` 的组合要求略有差异，教学上以 root 或上表第二档为稳妥口径。非 root 加载失败不是程序错误：`kernel.unprivileged_bpf_disabled=2` 时内核明确拒绝非特权加载，`open_and_load` 直接返回失败——这正是本仓库编写环境的档位。
+
+**veth 与网络命名空间前置。** 1.3 的拓扑由 iproute2 的 `ip netns`/`ip link` 创建，运行级实验另需 `tc`（挂 TC filter）与 iperf3（建流、压测）；三者都只影响运行，编译不依赖。
+
+**依赖工具清单与检查。** 清单不必背——运行 `bash book/examples/chapter-17/00-env/check-env.sh`（无 root 也可），脚本按“内核与 BTF → 工具链（编译级）→ 权限分级（加载级/实验级）”三段输出并给出结论。本机（非 root、`unprivileged_bpf_disabled=2`）输出节选（本地验证）：
+
+```text
+== 工具链（编译级） ==
+OK    clang（编译 BPF C）
+OK    bpftool（BTF dump / skeleton）
+OK    libbpf 头文件（libbpf-dev）
+== 权限分级（加载级/实验级） ==
+WARN  非 root 且无 CAP_BPF（unprivileged_bpf_disabled=2）：
+      - 可以完成：编译级验证（make / verify-build.sh）
+      - 不能完成：BPF 加载、XDP/TC 挂载、veth 拓扑（需 sudo 或 CAP_BPF+CAP_NET_ADMIN）
+```
+
+读法：编译级全绿即可完成本章全部 `make` 与编译级验证；加载级/实验级要等有特权的实验机再验。
+
+### 1.2 编译环境
+
+两条构建链路、两套工具：
+
+- **C 链路（阶段 1–4 与练习）**：clang/LLVM 18.x 以 `-target bpf` 编译 BPF C；`libbpf-dev` 提供用户态头文件（`/usr/include/bpf/bpf_helpers.h`）与链接库；bpftool 7.x 负责 BTF dump 与 skeleton 生成；gcc、make 构建用户态 loader。
+- **Go 链路（阶段 5 控制面）**：Go 1.22+；依赖 `cilium/ebpf v0.16.0` 固定于 `user/go.mod`——示例按该版本 API 书写（如 `MapIterator.Next` 一次取一对、接口解析用标准库 `net.InterfaceByName`），升级依赖前先核对这两处。
+
+Ubuntu 安装与版本自检（本机实测输出，本地验证）：
+
+```bash
+sudo apt install clang llvm gcc bpftool libbpf-dev make golang iproute2
+clang --version                 # Ubuntu clang version 18.1.3 (1ubuntu1)
+bpftool version                 # v7.7.0
+go version                      # go1.27.1 linux/amd64
+dpkg -s libbpf-dev | grep ^Version   # Version: 1:1.3.0-2build2
+```
+
+Go 依赖校验和已随仓库提交（`go.sum`），联网环境首次构建通常无需干预；若提示缺依赖，执行 `cd user && go mod tidy`——该步需访问 Go 模块代理（网络依赖），离线环境按 1.5 的约定记“编译级待验证”。
+
+### 1.3 部署环境
+
+实验拓扑为三命名空间两跳链路：客户端与服务端互不可达，一切流量必经 ns-fw 转发，防火墙程序挂在 ns-fw 的两个接口上：
+
+```text
+ns-client ──── 左链路 ────► ns-fw ──── 右链路 ────► ns-server
+veth-c                      veth-fw-c   veth-fw-s   veth-s
+10.0.0.2/24                 10.0.0.1/24 10.0.2.1/24 10.0.2.2/24
+默认路由 → 10.0.0.1         ip_forward=1            默认路由 → 10.0.2.1
+```
+
+| 命名空间 | 接口 | 地址与路由 |
+|---|---|---|
+| ns-client | veth-c | 10.0.0.2/24，默认路由 → 10.0.0.1 |
+| ns-fw | veth-fw-c、veth-fw-s | 10.0.0.1/24、10.0.2.1/24，`ip_forward=1` |
+| ns-server | veth-s | 10.0.2.2/24，默认路由 → 10.0.2.1 |
+
+搭建与销毁（脚本自带残留防护：检测到同名 netns 残留即拒绝执行，避免中途失败遗留游离 veth）：
+
+```bash
+sudo bash book/examples/chapter-17/scripts/setup-veth.sh setup     # 搭建
+sudo ip netns exec ns-client ping 10.0.2.2                         # 连通性验收
+sudo bash book/examples/chapter-17/scripts/setup-veth.sh teardown  # 销毁
+```
+
+清理语义：销毁只需删除三个 netns——veth 对的一端随 netns 消失时，对端即使留在宿主命名空间也会被内核一并回收，不留游离接口。
+
+**安全警告（执行任何挂载命令前必读）**：XDP/TC 程序会直接丢包、真实改写报文，TC egress 还影响该接口发出的全部流量。只允许挂到本拓扑创建的 veth 接口（`veth-fw-c`/`veth-fw-s`），**绝不要挂到物理网卡或 SSH 正在使用的接口**——否则可能立即失联，只能从带外控制台恢复。
+
+### 1.4 运行环境
+
+**XDP 挂载与卸载。** 两条等价路径：阶段 1–3 的 C loader 调 libbpf 的 `bpf_program__attach_xdp` 挂到指定接口，Ctrl-C 退出时随 link 的文件描述符关闭自动解除挂载；阶段 5 的 `fwctl attach` 用 cilium/ebpf 的 `link.AttachXDP` 挂载并把 link pin 成 `/sys/fs/bpf/fw17/xdp_link`——attach 进程退出后挂载持续生效，卸载由 `fwctl detach` 加载该 pinned link 并 close 完成。
+
+**TC 挂载与卸载。** TC 程序不能靠 skeleton 自动挂载：阶段 4 的 C loader 走 libbpf netlink API——`bpf_tc_hook_create` 创建 clsact qdisc（已存在报 `-EEXIST`，视为成功）、`bpf_tc_attach` 绑定 filter，退出前必须显式 `bpf_tc_detach`（filter 持有程序引用，不随进程退出卸载）；阶段 5 的 Go 侧把 pin 好的程序路径交给 iproute2：`tc qdisc replace dev <接口> clsact` 后 `tc filter replace ... bpf direct-action pinned <prog>`（兼容 5.10+，TCX 需 6.6+ 不采用），卸载按方向 `tc filter del dev <接口> ingress/egress`。
+
+**fwctl 七个子命令总览**（与阶段 5 README 一致）：
+
+| 子命令 | 作用 |
+|---|---|
+| `attach` | 加载两个 .o、同名 map 合并为同一实例并 pin 到 `/sys/fs/bpf/fw17`，挂载 XDP 与 TC |
+| `detach` | 解除全部挂载并删除 pin 目录 |
+| `rule` | 精确五元组规则 add/del/list（`acl_rules`） |
+| `cidr` | 源网段规则 add/del/list（`acl_lpm`，最长前缀匹配） |
+| `nat` | SNAT/DNAT 通配规则 add（`nat_map`） |
+| `conntrack` | 连接表 dump（list） |
+| `stats` | per-CPU 统计逐 CPU 求和输出 |
+
+**规则与 NAT 下发流程。** attach 一次，之后改规则、查状态都独立执行，不需要重新挂载：
+
+```text
+fwctl attach   （加载 → pin map/prog → 挂载 XDP/TC）
+  → fwctl rule/cidr/nat add   （逐 key 原子写入 pinned map，不清空重建）
+  → fwctl stats / conntrack list   （观察生效）
+  → fwctl detach   （删除 pin 目录，规则随 map 消失）
+```
+
+### 1.5 运行效果
+
+各阶段关键观测点与预期输出（均为预期输出示例，口径见本节末尾的验证状态约定）：
+
+| 阶段/观测点 | 预期输出示例 | 判读要点 |
+|---|---|---|
+| 阶段 1 `xdp_drop` | `pass=0 drop=12` | `drop` 递增即 XDP 生效，ping 全部超时 |
+| 阶段 2 ACL 统计 | `total` 与 `drop_acl` 同步递增 | 精确规则需用 `ss -tn` 查真实源端口；网段规则用 `--cidr` |
+| 阶段 3 连接表 dump | `10.0.0.2:41322 -> 10.0.2.2:5201 … proto=6 state=1 idle=0.1s pkts=52` | SYN 首包登记 `state=1`（NEW）；反向报文不可见时停在 1，本拓扑预期 |
+| 阶段 4 NAT 抓包 | `IP 10.0.2.1.41322 > 10.0.2.2.8080: Flags [S]` | 目的/源已按 DNAT/SNAT 改写；`nat` 计数按 2 递进 |
+| 阶段 5 `fwctl stats` | `total=18734 pass=18734 nat=37468` | 解析成功的报文满足 `pass + ct_established + drop_acl = total` |
+
+**tcpdump 抓包对比。** 在 ns-server 抓包验证 NAT 改写：`sudo ip netns exec ns-server tcpdump -ni veth-s tcp port 8080`。方法：先由连接表 dump 或 ingress 侧抓包记录原始五元组，再对照改动后报文——目的地址应已改为 DNAT 规则指定的新目的、源地址应已改为 SNAT 指定的新源；若 tcpdump 提示校验和错误，说明增量校验和实现有误（地址项须带 `BPF_F_PSEUDO_HDR`，UDP 校验和 0 跳过改写）。
+
+**stats 与 conntrack 查询。** attach 之后任意时刻、任意进程可查（无需重新 attach）：
+
+```bash
+sudo ./fwctl conntrack list   # 10.0.0.2:41322 -> 10.0.1.1:8080 proto=6 state=NEW
+sudo ./fwctl stats            # 8 项：total/pass/drop_acl/drop_parse/ct_new/ct_established/ct_full/nat
+```
+
+**验证状态约定。** 本章正文与各示例 README 的验证状态统一按三档标注：
+
+| 场景 | 统一标注 |
+|---|---|
+| 编译验证 | 已在编写环境（x86_64、内核 7.0、clang 18、bpftool 7.7、libbpf 1.3 / Go 1.27.1）`make` 通过 |
+| 待运行验证 | 编写环境为非 root（`unprivileged_bpf_disabled=2`），未执行加载与运行；『预期输出』为教学示例 |
+| Go 依赖网络不可用 | 依赖待拉取，编译级待验证（需网络 `go mod tidy`） |
 
 ## 二、总体架构（数据面/控制面分工）
 
