@@ -31,7 +31,7 @@
 | `03-prometheus-export/` | 阶段 5（05-firewall） | BPF 对象 + Go（cilium/ebpf） | `cd 03-prometheus-export && make` |
 | `04-port-rate-limit/` | 阶段 2（02-parse-acl） | C / libbpf skeleton | `cd 04-port-rate-limit && make` |
 
-一键全量编译级验证：`../../scripts/verify-build.sh`（逐阶段 + 逐练习 `make`，Go 依赖拉取失败按 WARN 记录不算失败）。运行任何练习都需要 root 或 `CAP_BPF` + `CAP_NET_ADMIN` 与实验拓扑（`../scripts/setup-veth.sh`）；涉及丢包/NAT 的练习**只应挂载到拓扑创建的 veth 接口**，勿挂物理网卡。
+一键全量编译级验证：`../scripts/verify-build.sh`（逐阶段 + 逐练习 `make`，Go 依赖拉取失败按 WARN 记录不算失败）。运行任何练习都需要 root 或 `CAP_BPF` + `CAP_NET_ADMIN` 与实验拓扑（`../scripts/setup-veth.sh`）；涉及丢包/NAT 的练习**只应挂载到拓扑创建的 veth 接口**，勿挂物理网卡。
 
 ## 验证状态汇总
 

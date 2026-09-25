@@ -1,0 +1,18 @@
+[
+  {
+    "proto": "tcp",
+    "src": "10.0.0.2",
+    "sport": 5201,
+    "dst": "10.0.2.2",
+    "dport": 5201,
+    "action": "allow"
+  },
+  {
+    "proto": "udp",
+    "src": "10.0.0.2",
+    "sport": 53,
+    "dst": "10.0.2.2",
+    "dport": 53,
+    "action": "drop"
+  }
+]

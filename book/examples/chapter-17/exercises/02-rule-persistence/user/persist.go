@@ -29,7 +29,9 @@ type PersistedRule struct {
 func SaveRules(path string, m *ebpf.Map) error {
 	var k FlowKey
 	var v RuleValue
-	var out []PersistedRule
+	// 初始化为空切片而非 nil：空表时 MarshalIndent 产出 [] 而非 null，
+	// 规则文件恒为合法 JSON 数组（load 对 [] 是空操作）
+	out := []PersistedRule{}
 	it := m.Iterate()
 	// cilium/ebpf v0.16.0 的迭代 API 是 Next(keyOut, valueOut) 一次取出一对、
 	// 返回 bool（与 rules.go 的 ListRules 同款）；循环结束后必须检查 Err
