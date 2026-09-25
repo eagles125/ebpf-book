@@ -1185,7 +1185,10 @@ static __always_inline int do_nat(struct __sk_buff *skb, __u8 dir)
     if (!v) {
         struct nat_key wild = key;
         if (dir == 0) { wild.src_ip = 0; wild.src_port = 0; }   /* DNAT：源侧通配 */
-        else          { wild.dst_ip = 0; wild.dst_port = 0; }   /* SNAT：目的侧通配 */
+        else          { wild.dst_ip = 0; wild.dst_port = 0;     /* SNAT：目的侧通配 */
+                        wild.src_port = 0; }   /* 源端口一并通配：--snat 只有 IP 入参，
+                                                  出方向源端口是内核随机分配的临时值，
+                                                  静态规则写不出，按 (源 IP, 协议) 命中 */
         v = bpf_map_lookup_elem(&nat_map, &wild);
     }
     if (!v || v->is_snat != dir)
