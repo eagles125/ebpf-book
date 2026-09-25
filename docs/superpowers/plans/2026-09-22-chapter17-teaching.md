@@ -866,7 +866,7 @@ git commit -m "feat(ch17): 阶段2 报文解析与 ACL（hash 精确 + LPM CIDR�
 
 ```c
 /* ===== 阶段 3 追加：连接跟踪 ===== */
-#define CT_MAX_ENTRIES 65536    /* LRU 上限：满后新连接登记失败（STAT_CT_FULL） */
+#define CT_MAX_ENTRIES 65536    /* LRU 上限：满后内核静默淘汰最久未用项，新连接登记仍成功 */
 
 /* 最小可用 TCP 状态机（不复刻 netfilter conntrack 全量语义） */
 enum ct_state {
@@ -996,7 +996,9 @@ int conntrack_prog(struct xdp_md *ctx)
     if (bpf_map_update_elem(&conntrack, &fwd, &nv, BPF_NOEXIST) == 0)
         bump(STAT_CT_NEW);
     else
-        bump(STAT_CT_FULL);   /* 表满/LRU 异常：放行并计数，正文讨论 DROP 策略取舍 */
+        bump(STAT_CT_FULL);   /* 非 0 = 同 key 并发登记竞争（-EEXIST）或分配失败：放行并计数。
+                                 LRU 满表不走此分支——内核静默淘汰最久未用项后插入仍成功
+                                 （LRU「不阻塞新流」的设计行为）；是否对失败 DROP 由正文讨论取舍 */
     bump(STAT_PASS);
     return XDP_PASS;
 }
@@ -2018,7 +2020,7 @@ git commit -m "feat(ch17): 拓扑/压测/顶层编译级验证脚本"
 
 - [ ] **Step 7: 写「七、阶段 5」（8–10k）**：合并策略（快路径先于 ACL 的原因：established 流量免 ACL 查找）；`fw_common.h` 并集与字段来源标注；Go 侧逐文件讲解：cilium/ebpf 加载流程、**spec 合并共享 map**（同名 map 必须同一实例，否则 XDP/TC 规则不一致——常见事故）、`MapOptions.PinPath` 与 pin 生命周期（map/prog/link 三类）、TC 用 `tc filter replace pinned` 的兼容性理由（TCX 需 6.6+）、`rules.go` 冲突检查与原子更新（逐 key Put，不清空重建）、`stats.go` per-CPU 聚合；CLI 总览表（Task 7 Step 8 口径）；动手 attach→rule add→stats 预期输出示例；检查点 3 问（含「为什么 XDP 与 TC 必须共享同一 map 实例」）。
 
-- [ ] **Step 8: 写「八、压测与结果解读」（4–6k）**：iperf3/pktgen 命令与指标口径（吞吐/重传/pps/drop rate/CPU）；四类常见失败模式定位表：XDP 未生效（native/generic 与挂载接口确认）、conntrack 表满（`ct_full` 计数）、NAT 校验和错（tcpdump 能抓到但对端静默丢弃、`tcpdump -v` 显示 bad cksum）、规则不生效（字节序/方向/key 不一致）。全部结果写「预期输出示例+运行级待验证」。
+- [ ] **Step 8: 写「八、压测与结果解读」（4–6k）**：iperf3/pktgen 命令与指标口径（吞吐/重传/pps/drop rate/CPU）；四类常见失败模式定位表：XDP 未生效（native/generic 与挂载接口确认）、conntrack 满表静默淘汰（观察旧表项消失而非 `ct_full` 递增，见阶段 3 README 教学点）、NAT 校验和错（tcpdump 能抓到但对端静默丢弃、`tcpdump -v` 显示 bad cksum）、规则不生效（字节序/方向/key 不一致）。全部结果写「预期输出示例+运行级待验证」。
 
 - [ ] **Step 9: 更新「可视化：数据路径决策树」**为与实现一致（快路径先于 ACL、`STAT_*` 计数点标注）、「常见问题与排错」（汇总各 README 失败点表并扩展）、「总结」、「本章参考来源」（保留骨架参考条目，追加 cilium/ebpf 文档与 libb-bootstrap）。
 
