@@ -1051,6 +1051,8 @@ static void dump_conntrack(int fd)
 
 ### Task 6: 阶段 4 —— 04-nat-tc TC 路径 SNAT/DNAT 与增量校验和
 
+- [x] Task 6: 阶段 4 —— 04-nat-tc TC 路径 SNAT/DNAT 与增量校验和
+
 **tasks.md 条目**：§5.1.2「Generate `book/examples/chapter-17/04-nat-tc/` with extended `fw_common.h`, `nat.bpf.c` (TC clsact, SNAT/DNAT rewrite, incremental checksum), NAT-provisioning loader, Makefile, and README, with Chinese comments explaining rewrite order and checksum algorithms.」
 
 **Files:**
@@ -1064,7 +1066,7 @@ static void dump_conntrack(int fd)
 - Consumes: C1（追加 STAT_NAT，STAT_MAX=8）、C3（nat_map）；Task 3 loader 骨架。
 - Produces: `do_nat(skb, dir)` 改写核心（阶段 5 fw_tc 复用）；TC attach 模式 `bpf_tc_hook_create + bpf_tc_attach`；skeleton 前缀 `nat_bpf`，程序 `nat_ingress`（DNAT）/`nat_egress`（SNAT）。
 
-- [ ] **Step 1: 创建 `fw_common.h`（阶段 4 版本 = 阶段 3 全文 + 以下追加；STAT_MAX=8，追加 `STAT_NAT`）**
+- [x] **Step 1: 创建 `fw_common.h`（阶段 4 版本 = 阶段 3 全文 + 以下追加；STAT_MAX=8，追加 `STAT_NAT`）**
 
 ```c
 /* ===== 阶段 4 追加：NAT 映射 ===== */
@@ -1089,7 +1091,7 @@ struct nat_value {
 };
 ```
 
-- [ ] **Step 2: 创建 `nat.bpf.c`**
+- [x] **Step 2: 创建 `nat.bpf.c`**
 
 ```c
 // SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause
@@ -1252,7 +1254,7 @@ int nat_egress(struct __sk_buff *skb)    /* SNAT */
 char LICENSE[] SEC("license") = "GPL";
 ```
 
-- [ ] **Step 3: 创建 `nat.c`**（loader + NAT 下发 + TC attach）。TC attach 核心代码（骨架其余同 Task 3）：
+- [x] **Step 3: 创建 `nat.c`**（loader + NAT 下发 + TC attach）。TC attach 核心代码（骨架其余同 Task 3）：
 
 ```c
 #include <bpf/libbpf.h>   /* LIBBPF_OPTS / bpf_tc_* */
@@ -1275,9 +1277,9 @@ sudo ./nat -i veth-fw-c -e veth-fw-s \
 --snat <原源IP>,<新IP>                                  写通配 key {dst=0,dport=0,同 proto}
 ```
 
-- [ ] **Step 4: `Makefile`**（C7，`<名>=nat`）。**Step 5: 编译验证** `make -C book/examples/chapter-17/04-nat-tc` 退出码 0。
-- [ ] **Step 6: `README.md`**（C8）。预期输出示例（运行级待验证）：tcpdump 在 ns-server 抓到目的 10.0.2.2:8080 的报文（原为 10.0.1.1:8080），回程源为 10.0.2.1；`stats` 中 `nat` 计数递增。讲解要点：改写顺序与指针失效、增量校验和数学直觉、UDP 0 校验和、DNAT/SNAT 挂载方向。验证状态 C6。
-- [ ] **Step 7: 提交** `git commit -m "feat(ch17): 阶段4 TC NAT（SNAT/DNAT + 增量校验和）"`
+- [x] **Step 4: `Makefile`**（C7，`<名>=nat`）。**Step 5: 编译验证** `make -C book/examples/chapter-17/04-nat-tc` 退出码 0。
+- [x] **Step 6: `README.md`**（C8）。预期输出示例（运行级待验证）：tcpdump 在 ns-server 抓到目的 10.0.2.2:8080 的报文（原为 10.0.1.1:8080），回程源为 10.0.2.1；`stats` 中 `nat` 计数递增。讲解要点：改写顺序与指针失效、增量校验和数学直觉、UDP 0 校验和、DNAT/SNAT 挂载方向。验证状态 C6。
+- [x] **Step 7: 提交** `git commit -m "feat(ch17): 阶段4 TC NAT（SNAT/DNAT + 增量校验和）"`
 
 ---
 
