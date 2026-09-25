@@ -2138,7 +2138,7 @@ Run: `git add book/chapters/17-high-performance-ebpf-firewall.md && git commit -
 ---
 
 ### Task 12: 练习参考实现（数据面：01-ipv6-acl、04-port-rate-limit）
-
+- [x] Task 12: 练习参考实现（数据面：01-ipv6-acl、04-port-rate-limit）
 **tasks.md 条目**：§5.1.4「为每项课后任务提供完整可编译的参考实现与实现思路说明，存放于 `book/examples/chapter-17/exercises/<nn>-<name>/`，练习 README 采用防剧透结构（任务与提示在前、参考实现思路独立成节），并标注验证状态。」（数据面两项）
 
 **Files:**
@@ -2150,7 +2150,7 @@ Run: `git add book/chapters/17-high-performance-ebpf-firewall.md && git commit -
 - Consumes: Task 4 全部代码（练习 01 为其超集）；C7 Makefile 模板（练习 01 替换表：`<名>=acl`；练习 04：`<名>=ratelimit`）。
 - Produces: `verify-build.sh` 可验证的 exercises/01、exercises/04；防剧透 README 结构约定（Task 13 沿用）。
 
-- [ ] **Step 1: exercises/01-ipv6-acl —— 以阶段 2 代码为基线扩展（完整可编译）**：
+- [x] **Step 1: exercises/01-ipv6-acl —— 以阶段 2 代码为基线扩展（完整可编译）**：
   - `fw_common.h` 追加 IPv6 结构（新增，不动既有契约）：
 
 ```c
@@ -2171,7 +2171,7 @@ struct lpm_key6 { __u32 prefixlen; __be32 addr[4]; };   /* LPM key，前缀最�
   - `acl.bpf.c`：在 `parse_flow` 内 IPv4 分支之外新增 `0x86DD` 分支——`struct ipv6hdr` 固定 40 字节头（无 ihl 类比，`(__u8*)ip6 + sizeof(*ip6)` 后查 L4 边界）、`ip6->nexthdr` 仅处理 6/17（**遇到扩展头（非 6/17）直接 PASS 并计数**，注释说明「完整扩展头链解析超出练习范围，保守放行」）；新增 `acl_rules6`（hash，key `flow_key6`）与 `acl_lpm6`（LPM，key `lpm_key6`，`prefixlen` 0–128）两张 map 与对应 verdict 分支（IPv4 报文查 v4 map，IPv6 查 v6 map，互不混用）。
   - `acl.c`：新增 `--rule6 <action>,<proto>,<src>,<sport>,<dst>,<dport>` 与 `--cidr6 <action>,<cidr>`（`inet_pton(AF_INET6, ...)`；v6 CIDR 前缀 `0–128`），v4 参数与阶段 2 完全兼容。
   - `README.md`：防剧透结构（见 Step 3）；验证状态按 C6（编译级 + 运行级待验证）。
-- [ ] **Step 2: exercises/04-port-rate-limit —— 按端口令牌桶（完整可编译）**：
+- [x] **Step 2: exercises/04-port-rate-limit —— 按端口令牌桶（完整可编译）**：
   - `fw_common.h`：复用阶段 2 结构 + 练习专用结构：
 
 ```c
@@ -2223,14 +2223,14 @@ static __always_inline __u8 rl_allow(__u16 dport, __u64 now)
 
   - `ratelimit.c`：`--limit <port>,<pps>,<burst>` 下发（可重复）+ attach + 统计轮询；burst 缺省 = rate（1 秒突发）。
   - `README.md`：防剧透结构；讲解令牌桶定点数、`elapsed` 折算、多 CPU 写竞争近似。
-- [ ] **Step 3: 练习 README 防剧透结构（两项统一，逐节固定）**：
+- [x] **Step 3: 练习 README 防剧透结构（两项统一，逐节固定）**：
   1. `## 任务`（面向学生的任务描述与验收标准）　2. `## 提示`（涉及哪些 helper/map/结构，不给答案）　3. `## 环境前提与构建`　4. `## 预期输出示例`（运行级待验证）　5. `## 参考实现思路`（独立成节，防剧透分界线 `---` 在第 4 节之后）　6. `## 验证状态`　7. `## 参考来源`。
-- [ ] **Step 4: 编译验证（硬性）**
+- [x] **Step 4: 编译验证（硬性）**
 
 Run: `make -C book/examples/chapter-17/exercises/01-ipv6-acl && make -C book/examples/chapter-17/exercises/04-port-rate-limit`
 Expected: 两个目录退出码均 0。
 
-- [ ] **Step 5: 追加 `.gitignore` 并提交**
+- [x] **Step 5: 追加 `.gitignore` 并提交**
 
 ```bash
 printf '%s\n' 'book/examples/chapter-17/exercises/01-ipv6-acl/acl' \
