@@ -379,6 +379,8 @@ git commit -m "feat(ch17): 章级 README 与 00-env 分级环境自检"
 
 ### Task 3: 阶段 1 —— 01-xdp-drop 最小 XDP 丢弃
 
+- [x] Task 3: 阶段 1 —— 01-xdp-drop 最小 XDP 丢弃
+
 **tasks.md 条目**：§5.1.2「Generate `book/examples/chapter-17/01-xdp-drop/` with `xdp_drop.bpf.c`, C loader, Makefile, and README, with Chinese comments explaining XDP attach point, action return values, and the minimal load-verify-JIT-attach loop.」
 
 **Files:**
@@ -391,7 +393,7 @@ git commit -m "feat(ch17): 章级 README 与 00-env 分级环境自检"
 - Consumes: C7 Makefile 模板（`<名>=xdp_drop`）；C4 SEC 名。
 - Produces: 阶段 1 loader 骨架（`handle_sig`/轮询循环/`sum_percpu`），阶段 2–4 loader 复用；skeleton 符号前缀 `xdp_drop_bpf`。
 
-- [ ] **Step 1: 创建 `xdp_drop.bpf.c`**（丢弃全部 IPv4、放行其余，per-CPU 统计可观测）
+- [x] **Step 1: 创建 `xdp_drop.bpf.c`**（丢弃全部 IPv4、放行其余，per-CPU 统计可观测）
 
 ```c
 // SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause
@@ -455,7 +457,7 @@ int xdp_drop(struct xdp_md *ctx)
 char LICENSE[] SEC("license") = "GPL";   /* GPL 兼容声明，必需 */
 ```
 
-- [ ] **Step 2: 创建 `xdp_drop.c`**（阶段 1–4 loader 骨架，后续任务复用其 `handle_sig`/`sum_percpu`）
+- [x] **Step 2: 创建 `xdp_drop.c`**（阶段 1–4 loader 骨架，后续任务复用其 `handle_sig`/`sum_percpu`）
 
 ```c
 // SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause
@@ -532,22 +534,22 @@ int main(int argc, char **argv)
 }
 ```
 
-- [ ] **Step 3: 创建 `Makefile`** —— 使用共享契约 C7 模板，替换 `<名>=xdp_drop`、目标 `xdp_drop`。
+- [x] **Step 3: 创建 `Makefile`** —— 使用共享契约 C7 模板，替换 `<名>=xdp_drop`、目标 `xdp_drop`。
 
-- [ ] **Step 4: 编译验证（本机真实执行，硬性）**
+- [x] **Step 4: 编译验证（本机真实执行，硬性）**
 
 Run: `make -C book/examples/chapter-17/01-xdp-drop`
 Expected: 退出码 0，生成 `xdp_drop`；`clang -target bpf` 与 `bpftool gen skeleton` 无告警。
 失败即设计缺陷：修代码后重跑，直至通过。
 
-- [ ] **Step 5: 创建 `README.md`** —— 按 C8 十段结构。关键口径：
+- [x] **Step 5: 创建 `README.md`** —— 按 C8 十段结构。关键口径：
   - 演示目标：第一个「加载→verifier→JIT→挂载→触发」闭环。
   - 编译与运行：`make`；`sudo ./xdp_drop -i veth-fw-c`（需先建拓扑，指向 `../scripts/setup-veth.sh`）；触发：`sudo ip netns exec ns-client ping 10.0.2.2`。
   - 预期输出示例（标注运行级待验证）：`pass=0 drop=12`（ping 时 drop 递增）。
   - 常见失败点：非 root 加载失败（预期，指向 check-env.sh）；挂物理网卡风险警告；`vmlinux.h` 缺失。
   - 验证状态：按 C6。
 
-- [ ] **Step 6: 提交**
+- [x] **Step 6: 提交**
 
 ```bash
 git add book/examples/chapter-17/01-xdp-drop/
