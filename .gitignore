@@ -10,3 +10,5 @@ book/examples/chapter-09/09-netfilter-go/nfctl
 # Comet 本地会话选择状态（change 内的 .comet/ 状态随 change 入库）
 /.comet/
 book/examples/chapter-17/05-firewall/fwctl
+book/examples/chapter-17/exercises/01-ipv6-acl/acl
+book/examples/chapter-17/exercises/04-port-rate-limit/ratelimit
