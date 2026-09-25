@@ -399,7 +399,8 @@ git commit -m "feat(ch17): 章级 README 与 00-env 分级环境自检"
  * 阶段 1：最小 XDP 丢弃示例。
  *
  * 闭环：XDP 挂载点（网卡驱动收包最早处）-> 动作返回码 -> loader 轮询 map 观察效果。
- * 行为：丢弃所有 IPv4 报文（XDP_DROP），放行 ARP 等（XDP_PASS），per-CPU 数组计数。
+ * 行为：丢弃所有 IPv4 报文（XDP_DROP），放行 ARP 等（XDP_PASS），per-CPU 数组计数
+ *       （pass 只计实际放行的报文，pass 与 drop 互斥）。
  *
  * 返回值语义（include/uapi/linux/bpf.h 中 enum xdp_action）：
  *   XDP_DROP(1)  在驱动层直接丢弃，不生成 skb、不进协议栈；
@@ -436,17 +437,18 @@ int xdp_drop(struct xdp_md *ctx)
     void *data = (void *)(long)ctx->data;
     void *data_end = (void *)(long)ctx->data_end;
 
-    bump(STAT_PASS);
-
     /* Ethernet 头固定 14 字节；必须在解引用前确认 eth+1 不越过 data_end */
     struct ethhdr *eth = data;
-    if ((void *)(eth + 1) > data_end)
-        return XDP_PASS;          /* 残包交协议栈处理 */
+    if ((void *)(eth + 1) > data_end) {
+        bump(STAT_PASS);          /* 残包交协议栈：计入实际放行 */
+        return XDP_PASS;
+    }
 
     if (eth->h_proto == bpf_htons(ETH_P_IP)) {
         bump(STAT_DROP);
         return XDP_DROP;          /* 教学演示：IPv4 全部丢弃 */
     }
+    bump(STAT_PASS);              /* 非 IPv4（ARP 等）实际放行：计入 pass */
     return XDP_PASS;
 }
 
@@ -507,8 +509,10 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    /* XDP 挂载点无法从 SEC 名推断到具体接口，必须显式 attach */
-    if (!bpf_program__attach_xdp(skel->progs.xdp_drop, ifindex)) {
+    /* XDP 挂载点无法从 SEC 名推断到具体接口，必须显式 attach；
+       libbpf 1.x 失败返回 ERR_PTR（非 NULL），必须用 libbpf_get_error 判错 */
+    struct bpf_link *link = bpf_program__attach_xdp(skel->progs.xdp_drop, ifindex);
+    if (libbpf_get_error(link)) {
         fprintf(stderr, "attach_xdp 失败（接口是否为 veth？勿挂物理网卡！）\n");
         xdp_drop_bpf__destroy(skel);
         return 1;
