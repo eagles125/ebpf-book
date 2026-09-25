@@ -2242,7 +2242,7 @@ git commit -m "feat(ch17): 课后练习参考实现（IPv6 ACL 与按端口限�
 ---
 
 ### Task 13: 练习参考实现（控制面：02-rule-persistence、03-prometheus-export）与 exercises 总览
-
+- [x] Task 13: 练习参考实现（控制面：02-rule-persistence、03-prometheus-export）与 exercises 总览
 **tasks.md 条目**：§5.1.4「为每项课后任务提供完整可编译的参考实现与实现思路说明，存放于 `book/examples/chapter-17/exercises/<nn>-<name>/`，练习 README 采用防剧透结构（任务与提示在前、参考实现思路独立成节），并标注验证状态。」（控制面两项）
 
 **Files:**
@@ -2255,7 +2255,7 @@ git commit -m "feat(ch17): 课后练习参考实现（IPv6 ACL 与按端口限�
 - Consumes: Task 7 的 user/ 四文件与 Makefile 模式（Makefile 目标 `fwctl`，`user` 目录结构一致）。
 - Produces: `persist.go`（`Save/Load`，JSON 格式）；`exporter.go`（`ServeMetrics(listen, statsMap)`）。
 
-- [ ] **Step 1: exercises/02-rule-persistence**：`persist.go` 核心（其余为 05-firewall user/ 复制品）：
+- [x] **Step 1: exercises/02-rule-persistence**：`persist.go` 核心（其余为 05-firewall user/ 复制品）：
 
 ```go
 package main
@@ -2340,7 +2340,7 @@ func LoadRules(path string, m *ebpf.Map) error {
 
 CLI 增补：`fwctl rules save --file rules.json` / `fwctl rules load --file rules.json`；`rules.example.json` 给出 2 条示例（一 allow 一 drop）。`protoName/int2ip/be16` 为 Task 7 rules.go 已有共享小工具，随 user/ 其余文件一并复制。
 
-- [ ] **Step 2: exercises/03-prometheus-export**：`exporter.go`（标准库 net/http + Prometheus 文本格式，不引入第三方依赖）：
+- [x] **Step 2: exercises/03-prometheus-export**：`exporter.go`（标准库 net/http + Prometheus 文本格式，不引入第三方依赖）：
 
 ```go
 package main
@@ -2383,9 +2383,9 @@ func ServeMetrics(listen string, stats *ebpf.Map) error {
 
 CLI 增补：`fwctl export --listen :9100`（阻塞运行）。
 
-- [ ] **Step 3: `exercises/README.md`**：四项任务总览表（与章末表格一致）+ 防剧透阅读法（先做后看）+ 各练习构建命令 + 验证状态汇总表（编译级/运行级）。
-- [ ] **Step 4: 编译验证（硬性）**：`make -C book/examples/chapter-17/exercises/02-rule-persistence && make -C book/examples/chapter-17/exercises/03-prometheus-export` 退出码均 0（Go 依赖失败按 C6 处理）。
-- [ ] **Step 5: 追加 `.gitignore` 并提交**
+- [x] **Step 3: `exercises/README.md`**：四项任务总览表（与章末表格一致）+ 防剧透阅读法（先做后看）+ 各练习构建命令 + 验证状态汇总表（编译级/运行级）。
+- [x] **Step 4: 编译验证（硬性）**：`make -C book/examples/chapter-17/exercises/02-rule-persistence && make -C book/examples/chapter-17/exercises/03-prometheus-export` 退出码均 0（Go 依赖失败按 C6 处理）。
+- [x] **Step 5: 追加 `.gitignore` 并提交**
 
 ```bash
 printf '%s\n' 'book/examples/chapter-17/exercises/02-rule-persistence/fwctl' \
