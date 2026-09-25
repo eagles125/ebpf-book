@@ -560,6 +560,8 @@ git commit -m "feat(ch17): 阶段1 最小 XDP 丢弃（BPF+loader+Makefile+READM
 
 ### Task 4: 阶段 2 —— 02-parse-acl 报文解析与 ACL
 
+- [x] Task 4: 阶段 2 —— 02-parse-acl 报文解析与 ACL
+
 **tasks.md 条目**：§5.1.2「Generate `book/examples/chapter-17/02-parse-acl/` with staged `fw_common.h`, `acl.bpf.c` (Ethernet/IPv4/TCP/UDP parsing + hash-map exact rules + LPM-trie CIDR blacklist/whitelist), rule-provisioning loader, Makefile, and README, with Chinese comments explaining parser bounds checks, five-tuple normalization, and map design.」
 
 **Files:**
@@ -573,7 +575,7 @@ git commit -m "feat(ch17): 阶段1 最小 XDP 丢弃（BPF+loader+Makefile+READM
 - Consumes: C1/C2/C3 契约（阶段 2 版本）；Task 3 的 loader 骨架（`handle_sig`/`sum_percpu` 逐字复制）。
 - Produces: `parse_flow(ctx, key)`（阶段 3 扩展为带 `__u8 *tcp_flags` 出参）；`bump(idx)`；`fw_common.h` 阶段 2 版本；skeleton 前缀 `acl_bpf`。
 
-- [ ] **Step 1: 创建 `fw_common.h`（阶段 2 版本）**
+- [x] **Step 1: 创建 `fw_common.h`（阶段 2 版本）**
 
 ```c
 /* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
@@ -639,7 +641,7 @@ struct lpm_value {
 #endif /* FW_COMMON_H */
 ```
 
-- [ ] **Step 2: 创建 `acl.bpf.c`**
+- [x] **Step 2: 创建 `acl.bpf.c`**
 
 ```c
 // SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause
@@ -768,7 +770,7 @@ int acl_prog(struct xdp_md *ctx)
 char LICENSE[] SEC("license") = "GPL";
 ```
 
-- [ ] **Step 3: 创建 `acl.c`**（loader + 命令行规则下发；复制 Task 3 的 `handle_sig`/`sum_percpu`，新增解析下发）
+- [x] **Step 3: 创建 `acl.c`**（loader + 命令行规则下发；复制 Task 3 的 `handle_sig`/`sum_percpu`，新增解析下发）
 
 用法固定（README 与正文同口径）：
 
@@ -823,20 +825,20 @@ static int parse_cidr_arg(const char *s, struct lpm_key *k, struct lpm_value *v)
 
 `main()` 流程：解析 `-i` 与全部 `--rule/--cidr` → `acl_bpf__open_and_load()` → 遍历参数把规则写入 `skel->maps.acl_rules` / `skel->maps.acl_lpm`（`bpf_map_update_elem`，失败报「规则数超上限或格式错误」）→ `bpf_program__attach_xdp` → 每 2 秒打印 4 个统计项（`STAT_TOTAL/PASS/DROP_ACL/DROP_PARSE`）。
 
-- [ ] **Step 4: 创建 `Makefile`** —— C7 模板替换 `<名>=acl`，目标 `acl`；`.bpf.o` 规则依赖追加 `fw_common.h`。
+- [x] **Step 4: 创建 `Makefile`** —— C7 模板替换 `<名>=acl`，目标 `acl`；`.bpf.o` 规则依赖追加 `fw_common.h`。
 
-- [ ] **Step 5: 编译验证（硬性）**
+- [x] **Step 5: 编译验证（硬性）**
 
 Run: `make -C book/examples/chapter-17/02-parse-acl`
 Expected: 退出码 0。
 
-- [ ] **Step 6: 创建 `README.md`**（C8 结构）。要点：
+- [x] **Step 6: 创建 `README.md`**（C8 结构）。要点：
   - 预期输出示例（运行级待验证）：下发 `--cidr drop,10.0.0.0/24` 后 `total=512 drop_acl=512 pass=0`。
   - 动手顺序：建拓扑 → 服务端 `iperf3 -s -p 5201` → 客户端 `iperf3 -c 10.0.2.2 -p 5201` → 用固定端口五元组下发 `--rule` 观察丢包。
   - 讲解要点：字节序「存什么查什么」、hash vs LPM 选型、`BPF_F_NO_PREALLOC` 原因、`ihl` 处理。
   - 验证状态按 C6；参考来源：libbpf LPM 文档、内核 `map` 文档。
 
-- [ ] **Step 7: 提交**
+- [x] **Step 7: 提交**
 
 ```bash
 git add book/examples/chapter-17/02-parse-acl/
