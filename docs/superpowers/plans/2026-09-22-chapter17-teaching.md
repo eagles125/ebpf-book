@@ -1284,7 +1284,7 @@ sudo ./nat -i veth-fw-c -e veth-fw-s \
 ---
 
 ### Task 7: 阶段 5 —— 05-firewall 完整系统与 Go 控制面
-
+- [x] Task 7: 阶段 5 —— 05-firewall 完整系统与 Go 控制面
 **tasks.md 条目**：§5.1.2「Generate `book/examples/chapter-17/05-firewall/` complete system: `bpf/fw_common.h` (full union of stages 2-4), `bpf/fw_xdp.bpf.c`, `bpf/fw_tc.bpf.c`, `user/` Go control plane (go.mod with pinned cilium/ebpf, main/rules/maps/stats), combined Makefile, and README, with Chinese comments throughout.」
 
 **Files:**
@@ -1301,9 +1301,9 @@ sudo ./nat -i veth-fw-c -e veth-fw-s \
 - Consumes: Task 4–6 全部 BPF 逻辑；C2 Go 镜像结构；C5 拓扑。
 - Produces: `fwctl` CLI（attach/detach/rule/nat/conntrack/stats）；pin 目录 `/sys/fs/bpf/fw17`；spec 合并共享 map 模式（练习 02/03 复用 user/ 四文件）。
 
-- [ ] **Step 1: 创建 `bpf/fw_common.h`** —— Task 4+5+6 三份 `fw_common.h` 的**逐字并集**：常量区（MAX_RULES/MAX_LPM_KEYS/STAT_MAX=8/CT_MAX_ENTRIES/NAT_MAX_ENTRIES）→ `enum stat_idx`（含全部 8 项，逐项注释「阶段 N 新增」）→ flow_key/fw_action/rule_value/lpm_key/lpm_value → ct_state/ct_key/ct_value → nat_key/nat_value。头注释写明「本文件为阶段 2–4 的严格并集，正文按新增字段来源讲解」。
+- [x] **Step 1: 创建 `bpf/fw_common.h`** —— Task 4+5+6 三份 `fw_common.h` 的**逐字并集**：常量区（MAX_RULES/MAX_LPM_KEYS/STAT_MAX=8/CT_MAX_ENTRIES/NAT_MAX_ENTRIES）→ `enum stat_idx`（含全部 8 项，逐项注释「阶段 N 新增」）→ flow_key/fw_action/rule_value/lpm_key/lpm_value → ct_state/ct_key/ct_value → nat_key/nat_value。头注释写明「本文件为阶段 2–4 的严格并集，正文按新增字段来源讲解」。
 
-- [ ] **Step 2: 创建 `bpf/fw_xdp.bpf.c`** —— 阶段 2 的解析/ACL + 阶段 3 的 conntrack 合并，关键差异：**快路径先于 ACL**（已建立连接跳过 ACL 查找）：
+- [x] **Step 2: 创建 `bpf/fw_xdp.bpf.c`** —— 阶段 2 的解析/ACL + 阶段 3 的 conntrack 合并，关键差异：**快路径先于 ACL**（已建立连接跳过 ACL 查找）：
 
 ```c
 /* 主流程（SEC("xdp") int fw_xdp(struct xdp_md *ctx)）：
@@ -1318,9 +1318,9 @@ sudo ./nat -i veth-fw-c -e veth-fw-s \
 
 实现时把 Task 4 `acl.bpf.c` 与 Task 5 `conntrack.bpf.c` 的代码逐段合并进单一文件（两张 ACL map + conntrack map + stats map 四个 map 定义同文件），不要发明新逻辑。
 
-- [ ] **Step 3: 创建 `bpf/fw_tc.bpf.c`** —— Task 6 的 `do_nat`/map 定义原样迁入；SEC 名改为 `fw_tc_ingress`/`fw_tc_egress`（`SEC("tc") int fw_tc_ingress(struct __sk_buff *skb) { return do_nat(skb, 0); }` 等）；注释标注「与阶段 4 的差异仅程序名与共享 map pin」。
+- [x] **Step 3: 创建 `bpf/fw_tc.bpf.c`** —— Task 6 的 `do_nat`/map 定义原样迁入；SEC 名改为 `fw_tc_ingress`/`fw_tc_egress`（`SEC("tc") int fw_tc_ingress(struct __sk_buff *skb) { return do_nat(skb, 0); }` 等）；注释标注「与阶段 4 的差异仅程序名与共享 map pin」。
 
-- [ ] **Step 4: 创建 `user/go.mod`（固定版本，与第 9 章 09-netfilter-go 一致）**
+- [x] **Step 4: 创建 `user/go.mod`（固定版本，与第 9 章 09-netfilter-go 一致）**
 
 ```text
 module github.com/ebpf-book/fwctl
@@ -1335,7 +1335,7 @@ require (
 
 随后执行 `cd book/examples/chapter-17/05-firewall/user && go mod tidy` 生成 `go.sum` 并提交（网络不可用时在 README 标注「依赖待拉取」并继续，见 C6）。
 
-- [ ] **Step 5: 创建 `user/maps.go`**（类型镜像 + 加载/pin/attach/detach）
+- [x] **Step 5: 创建 `user/maps.go`**（类型镜像 + 加载/pin/attach/detach）
 
 ```go
 package main
@@ -1517,7 +1517,7 @@ func openMap(name string) (*ebpf.Map, error) {
 
 （加载失败时若 `os.IsNotExist(pinDir)` 给出「先执行 attach」提示。）
 
-- [ ] **Step 6: 创建 `user/rules.go`**
+- [x] **Step 6: 创建 `user/rules.go`**
 
 ```go
 package main
@@ -1699,7 +1699,7 @@ func protoName(p uint8) string {
 
 实现注意：`ListRules` 使用的 `int2ip`/`be16` 即上方共享小工具；`AddNat` 的 snat 分支不带端口，数据面按 `new_port==0` 仅改地址（与 Task 6 `do_nat` 的 `do_port` 契约一致）。
 
-- [ ] **Step 7: 创建 `user/stats.go`**
+- [x] **Step 7: 创建 `user/stats.go`**
 
 ```go
 package main
@@ -1761,7 +1761,7 @@ func PrintConntrack(m *ebpf.Map) error {
 }
 ```
 
-- [ ] **Step 8: 创建 `user/main.go`** —— `flag.NewFlagSet` 子命令分发，CLI 固定口径：
+- [x] **Step 8: 创建 `user/main.go`** —— `flag.NewFlagSet` 子命令分发，CLI 固定口径：
 
 ```text
 sudo ./fwctl attach --xdp-obj bpf/fw_xdp.bpf.o --tc-obj bpf/fw_tc.bpf.o \
@@ -1776,7 +1776,7 @@ sudo ./fwctl detach --xdp-iface veth-fw-c --tc-ingress veth-fw-c --tc-egress vet
 
 `main()` 结构：`switch os.Args[1]` → 各子命令开 flagset → 调 `maps.go/rules.go/stats.go` 函数；map 名常量 `acl_rules/acl_lpm/conntrack/nat_map/stats` 与 C3 一致；usage 文本中文。
 
-- [ ] **Step 9: 创建 `Makefile`** —— 参照 `book/examples/chapter-09/09-netfilter-go/Makefile`，目标与依赖：
+- [x] **Step 9: 创建 `Makefile`** —— 参照 `book/examples/chapter-09/09-netfilter-go/Makefile`，目标与依赖：
 
 ```makefile
 # 第 17 章阶段 5 构建脚本：BPF 数据面 + Go 控制面联合构建。
@@ -1808,13 +1808,13 @@ clean:
 	rm -f bpf/*.o bpf/vmlinux.h fwctl
 ```
 
-- [ ] **Step 10: 编译验证（硬性）**
+- [x] **Step 10: 编译验证（硬性）**
 
 Run: `make -C book/examples/chapter-17/05-firewall`
 Expected: 退出码 0（BPF 编译 + `go build` 成功）。若 go 依赖因网络失败：执行 `go mod tidy` 重试；仍失败则按 C6 在 README 标注并记录，其余阶段继续。
 
-- [ ] **Step 11: `README.md`**（C8 + 增补「与阶段 1–4 的关系」与「pin 对象生命周期」小节）。预期输出示例（运行级待验证）：`fwctl stats` 表格输出 8 项计数、`fwctl conntrack list` 列出 ESTABLISHED 表项。
-- [ ] **Step 12: 追加 `.gitignore` 并提交**
+- [x] **Step 11: `README.md`**（C8 + 增补「与阶段 1–4 的关系」与「pin 对象生命周期」小节）。预期输出示例（运行级待验证）：`fwctl stats` 表格输出 8 项计数、`fwctl conntrack list` 列出 ESTABLISHED 表项。
+- [x] **Step 12: 追加 `.gitignore` 并提交**
 
 ```bash
 echo 'book/examples/chapter-17/05-firewall/fwctl' >> .gitignore
