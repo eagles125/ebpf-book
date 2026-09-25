@@ -236,6 +236,8 @@ git commit -m "docs(ch17): STYLE.md 新增实战章节教学模板（五层环�
 
 ### Task 2: 章级 README 与 00-env 环境自检
 
+- [x] Task 2: 章级 README 与 00-env 环境自检
+
 **tasks.md 条目**：§5.1.2「Generate chapter-level `book/examples/chapter-17/README.md` with the stage table (stage, datapath focus, learning outcome, attach point, output mechanism), learning path, safety warnings, and verification-status conventions.」＋「Generate `book/examples/chapter-17/00-env/check-env.sh` with graded environment diagnostics (kernel/BTF, toolchain, privileges) that runs and reports meaningfully without root.」
 
 **Files:**
@@ -246,7 +248,7 @@ git commit -m "docs(ch17): STYLE.md 新增实战章节教学模板（五层环�
 - Consumes: 共享契约 C5（拓扑/地址）、C6（验证状态约定）。
 - Produces: `check-env.sh` 输出三档结论（编译级/加载级/实验级），供所有阶段 README「环境前提」引用；`00-env/` 无 Makefile（纯脚本）。
 
-- [ ] **Step 1: 创建 `book/examples/chapter-17/README.md`**
+- [x] **Step 1: 创建 `book/examples/chapter-17/README.md`**
 
 结构对齐 `book/examples/chapter-09/README.md`，内容如下（表格逐字固定）：
 
@@ -300,7 +302,7 @@ vmlinux.h（bpftool 由 /sys/kernel/btf/vmlinux 生成） -> *.bpf.o（clang -ta
   （`unprivileged_bpf_disabled=2`），各 README 中「预期输出」均为教学示例。
 ```
 
-- [ ] **Step 2: 创建 `book/examples/chapter-17/00-env/check-env.sh`**
+- [x] **Step 2: 创建 `book/examples/chapter-17/00-env/check-env.sh`**
 
 分级诊断脚本（无 root 可运行且输出有意义），完整内容：
 
@@ -361,12 +363,12 @@ fi
 exit "$fail"
 ```
 
-- [ ] **Step 3: 本机验证（无特权可执行）**
+- [x] **Step 3: 本机验证（无特权可执行）**
 
 Run: `chmod +x book/examples/chapter-17/00-env/check-env.sh && bash book/examples/chapter-17/00-env/check-env.sh`
 Expected: 退出码 0；工具链各行 OK；权限分级输出 WARN 段（本机非 root）并明示「可以完成编译级验证」。
 
-- [ ] **Step 4: 提交**
+- [x] **Step 4: 提交**
 
 ```bash
 git add book/examples/chapter-17/README.md book/examples/chapter-17/00-env/
