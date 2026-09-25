@@ -1839,6 +1839,7 @@ git commit -m "feat(ch17): 阶段5 完整系统（XDP+TC 数据面 + Go fwctl �
 
 ```bash
 #!/usr/bin/env bash
+# 安全警告：勿在物理网卡误挂 XDP/TC。
 # 第 17 章实验拓扑：ns-client -- ns-fw -- ns-server（三命名空间，veth 组网）。
 # 安全警告：本脚本只创建 veth 与 netns；XDP/TC 只允许挂到 veth-fw-c / veth-fw-s。
 # 用法：sudo bash setup-veth.sh [setup|teardown]
@@ -1847,6 +1848,13 @@ NS_CLIENT=ns-client; NS_FW=ns-fw; NS_SERVER=ns-server
 
 setup() {
     [ "$(id -u)" -eq 0 ] || { echo "需要 root（sudo）运行"; exit 1; }
+    # 幂等防护：残留命名空间会让下方 ip link set 中途失败并在宿主 ns 遗留游离 veth 对
+    for ns in "$NS_CLIENT" "$NS_FW" "$NS_SERVER"; do
+        if ip netns list | awk '{print $1}' | grep -qx "$ns"; then
+            echo "检测到残留命名空间 $ns，请先执行 teardown（sudo bash $0 teardown）"
+            exit 1
+        fi
+    done
     ip netns add $NS_CLIENT 2>/dev/null || true
     ip netns add $NS_FW     2>/dev/null || true
     ip netns add $NS_SERVER 2>/dev/null || true
@@ -1863,7 +1871,8 @@ setup() {
     ip -n $NS_CLIENT route replace default via 10.0.0.1
     ip -n $NS_FW addr add 10.0.0.1/24 dev veth-fw-c;  ip -n $NS_FW link set veth-fw-c up
     ip -n $NS_FW addr add 10.0.2.1/24 dev veth-fw-s;  ip -n $NS_FW link set veth-fw-s up
-    ip -n $NS_FW sysctl -w net.ipv4.ip_forward=1
+    # ip 无 sysctl 子对象，进 ns 执行 sysctl 是标准用法
+    ip netns exec $NS_FW sysctl -w net.ipv4.ip_forward=1
     ip -n $NS_SERVER addr add 10.0.2.2/24 dev veth-s; ip -n $NS_SERVER link set veth-s up
     ip -n $NS_SERVER route replace default via 10.0.2.1
     echo "拓扑就绪。连通性：sudo ip netns exec $NS_CLIENT ping 10.0.2.2"
@@ -1892,8 +1901,13 @@ esac
 # 用法：sudo bash bench-iperf.sh [时长秒]
 set -euo pipefail
 DURATION=${1:-30}
-ip netns exec ns-server iperf3 -s -D          # 后台服务端
-trap 'pkill iperf3 2>/dev/null || true' EXIT
+# 时长校验：仅接受正整数
+case "$DURATION" in
+    ''|*[!0-9]*|0) echo "用法: $0 [时长秒]（需为正整数）"; exit 1 ;;
+esac
+ip netns exec ns-server iperf3 -s >/dev/null 2>&1 &   # 后台服务端（不用 -D，前台后台化以便记录 PID）
+IPERF_PID=$!
+trap 'kill "$IPERF_PID" 2>/dev/null || true' EXIT     # 退出时只清理本脚本启动的服务端
 ip netns exec ns-client iperf3 -c 10.0.2.2 -P 8 -t "$DURATION"
 # 指标口径：SUM 行 sender/receiver 吞吐（Gbits/sec）与重传数；对照 fwctl stats 的 pass/drop
 ```
@@ -1907,21 +1921,28 @@ ip netns exec ns-client iperf3 -c 10.0.2.2 -P 8 -t "$DURATION"
 # 运行级待验证：pktgen 依赖 /proc/net/pktgen，无法在编写环境验证，以脚本+预期输出交付。
 # 用法：sudo bash bench-pktgen.sh [dev] [时长秒]
 set -euo pipefail
+[ "$(id -u)" -eq 0 ] || { echo "需要 root（sudo）运行"; exit 1; }   # 写 /proc/net/pktgen 需 root
 DEV=${1:-veth-fw-c}; SECS=${2:-10}
 PG=/proc/net/pktgen
+# 依赖检查：count 的微秒换算需要 bc，缺失时报错并给出安装提示
+command -v bc >/dev/null 2>&1 || { echo "缺少依赖：bc 未安装，请先安装（如 apt install bc 或 dnf install bc）后重试"; exit 1; }
 modprobe pktgen 2>/dev/null || true
 [ -d "$PG" ] || { echo "内核未启用 pktgen"; exit 1; }
 echo "rem_device_all"                              > "$PG/kpktgend_0"
 echo "add_device ${DEV}@0"                         > "$PG/kpktgend_0"
 D="$PG/${DEV}@0"
-echo "count $(echo "$SECS"*1000000 | bc)"          > "$D"   # 微秒时长
+echo "count $(echo "$SECS"*1000000 | bc)"          > "$D"   # 发包个数：count 按包数计（非微秒），按 1 Mpps 假设折算 SECS 秒
 echo "delay 0"                                     > "$D"
 echo "pkt_size 64"                                 > "$D"
 echo "dst_mac 00:00:00:00:00:02"                   > "$D"   # 按拓扑实际对端 MAC 修改
 echo "dst 10.0.0.2"                                > "$D"
 echo "start"                                       > "$PG/pgctrl"
 grep -E "Result|pps" "$D"
-# 指标口径：pps（发送速率）、acked/dropped；与 fwctl stats 的 drop_acl 对照
+# 指标口径：pps（发送速率）、acked/dropped。
+# 方向注意：默认对 veth-fw-c 打流走 TX 路径（veth-fw-c 发送→ns-client），
+# 不经过 veth-fw-c 的 XDP（RX）与 veth-fw-s 的 TC egress，与挂载点不交叉；
+# 要对照 fwctl stats 的 drop_acl，需在 ns-client 内对 veth-c 打流
+# （使流量经 veth-fw-c 的 RX 路径进入防火墙，并相应调整 dst/dst_mac）。
 ```
 
 - [ ] **Step 4: 创建 `verify-build.sh`**（顶层编译级验证，本任务起可运行；练习目录尚不存在时跳过并 WARN）
