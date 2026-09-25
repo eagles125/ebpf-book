@@ -8,6 +8,13 @@ NS_CLIENT=ns-client; NS_FW=ns-fw; NS_SERVER=ns-server
 
 setup() {
     [ "$(id -u)" -eq 0 ] || { echo "需要 root（sudo）运行"; exit 1; }
+    # 幂等防护：残留命名空间会让下方 ip link set 中途失败并在宿主 ns 遗留游离 veth 对
+    for ns in "$NS_CLIENT" "$NS_FW" "$NS_SERVER"; do
+        if ip netns list | awk '{print $1}' | grep -qx "$ns"; then
+            echo "检测到残留命名空间 $ns，请先执行 teardown（sudo bash $0 teardown）"
+            exit 1
+        fi
+    done
     ip netns add $NS_CLIENT 2>/dev/null || true
     ip netns add $NS_FW     2>/dev/null || true
     ip netns add $NS_SERVER 2>/dev/null || true
@@ -24,7 +31,8 @@ setup() {
     ip -n $NS_CLIENT route replace default via 10.0.0.1
     ip -n $NS_FW addr add 10.0.0.1/24 dev veth-fw-c;  ip -n $NS_FW link set veth-fw-c up
     ip -n $NS_FW addr add 10.0.2.1/24 dev veth-fw-s;  ip -n $NS_FW link set veth-fw-s up
-    ip -n $NS_FW sysctl -w net.ipv4.ip_forward=1
+    # ip 无 sysctl 子对象，进 ns 执行 sysctl 是标准用法
+    ip netns exec $NS_FW sysctl -w net.ipv4.ip_forward=1
     ip -n $NS_SERVER addr add 10.0.2.2/24 dev veth-s; ip -n $NS_SERVER link set veth-s up
     ip -n $NS_SERVER route replace default via 10.0.2.1
     echo "拓扑就绪。连通性：sudo ip netns exec $NS_CLIENT ping 10.0.2.2"
