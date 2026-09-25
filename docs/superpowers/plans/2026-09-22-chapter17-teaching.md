@@ -1023,9 +1023,13 @@ static void dump_conntrack(int fd)
     while (bpf_map_get_next_key(fd, &cur, &next) == 0) {
         if (bpf_map_lookup_elem(fd, &next, &v) == 0) {
             struct in_addr s = { .s_addr = next.src_ip }, d = { .s_addr = next.dst_ip };
+            /* 不能在一条 printf 里调用两次 inet_ntoa：它返回线程内静态缓冲区，
+             * 第二次调用会覆盖第一次的结果（两个 IP 打成同一个），
+             * 故改用可重入的 inet_ntop 各自写入独立缓冲区 */
+            char sstr[INET_ADDRSTRLEN], dstr[INET_ADDRSTRLEN];
             printf("%-15s:%-5u -> %-15s:%-5u proto=%u state=%u idle=%.1fs pkts=%llu\n",
-                   inet_ntoa(s), ntohs(next.src_port),
-                   inet_ntoa(d), ntohs(next.dst_port),
+                   inet_ntop(AF_INET, &s, sstr, sizeof(sstr)), ntohs(next.src_port),
+                   inet_ntop(AF_INET, &d, dstr, sizeof(dstr)), ntohs(next.dst_port),
                    next.proto, v.state,
                    now_s() - v.last_seen_ns / 1e9,
                    (unsigned long long)v.packets);
@@ -1036,7 +1040,7 @@ static void dump_conntrack(int fd)
 ```
 
 - [ ] **Step 4: `Makefile`**（C7，`<名>=conntrack`）。**Step 5: 编译验证** `make -C book/examples/chapter-17/03-conntrack` 退出码 0。
-- [ ] **Step 6: `README.md`**（C8）。预期输出示例（运行级待验证）：iperf 建流后 dump 出一条 `state=1`，数秒后 `state=2 idle=...`。讲解要点：正反 key 互换规则、LRU 静默淘汰、写竞争近似、超时回收归控制面。验证状态 C6。
+- [ ] **Step 6: `README.md`**（C8）。预期输出示例（运行级待验证）：iperf3 建流后 dump 出一条 `state=1`，客户端 FIN 后同一条目推进为 `state=3 idle=...`；单一挂载点看不到反向报文、`state=2` 在本拓扑不可复现——「挂载点决定数据面可见性」写成本阶段教学点（控制器裁定 2026-09-25）。讲解要点：正反 key 互换规则、LRU 静默淘汰、写竞争近似、超时回收归控制面。验证状态 C6。
 - [ ] **Step 7: 提交** `git commit -m "feat(ch17): 阶段3 连接跟踪（正反 key + 状态机 + LRU + dump）"`
 
 ---
