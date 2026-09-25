@@ -158,9 +158,19 @@ func detach(xdpIface, tcIngress, tcEgress string) error {
 	if l, err := link.LoadPinnedLink(filepath.Join(pinDir, "xdp_link"), nil); err == nil {
 		_ = l.Close() // 关闭 pinned XDP link 即解除挂载
 	}
-	for _, d := range []string{tcIngress, tcEgress} {
-		_ = exec.Command("tc", "filter", "del", "dev", d, "bpf").Run()
+	/* filter 必须按方向 flush：内核拒绝指定 kind 的 flush——
+	 * `tc filter del dev <dev> bpf` 实测报
+	 * 「Error: Cannot flush filters with protocol, handle or kind set.」（exit 2）且
+	 * filter 原样残留，只有 `tc filter del dev <dev> ingress/egress` 才能清掉。
+	 * 这里显式检查退出码、不静默吞错：filter 持有程序引用，残留会让防火墙在
+	 * 「卸载成功」的假象下继续过滤/改写流量，比报错更危险 */
+	for _, f := range []struct{ dev, dir string }{{tcIngress, "ingress"}, {tcEgress, "egress"}} {
+		if out, err := exec.Command("tc", "filter", "del", "dev", f.dev, f.dir).CombinedOutput(); err != nil {
+			return fmt.Errorf("tc filter del dev %s %s: %v: %s", f.dev, f.dir, err, out)
+		}
 	}
+	/* qdisc 为尽力清理：无 clsact 时（如重复 detach）容忍失败——filter 已按方向清空，
+	 * 空 clsact 不再持有程序引用 */
 	_ = exec.Command("tc", "qdisc", "del", "dev", tcEgress, "clsact").Run()
 	return os.RemoveAll(pinDir) // map/prog/link pin 一并清理，避免残留导致二次 attach 失败
 }

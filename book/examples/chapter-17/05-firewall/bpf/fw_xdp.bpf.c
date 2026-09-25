@@ -212,6 +212,8 @@ int fw_xdp(struct xdp_md *ctx)
          * 首包过 ACL 时已判定该连接的合法性，这里只刷新计量与状态。
          * RST/FIN 迁移必须保留（与阶段 3 一致），否则已建立连接永远无法收尾 */
         if (ct->state == CT_ESTABLISHED) {
+            /* 多 CPU 同时更新同一表项存在写竞争（后写覆盖）；教学实现接受该近似，
+               生产可改 per-CPU 计量或 spin_lock（与阶段 3 同一口径） */
             ct->last_seen_ns = now;
             ct->packets++;
             ct->bytes += pkt_len;

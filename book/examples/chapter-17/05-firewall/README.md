@@ -114,7 +114,7 @@ drop_parse      0
 ct_new          1
 ct_established  0
 ct_full         0
-nat             18732
+nat             37468
 ```
 
 - **`ct_established=0` 与 `state=NEW` 是本拓扑的预期现象**（如实说明）：`CT_NEW -> CT_ESTABLISHED` 由反向报文触发，而 XDP 单挂载只见接收方向（见「与阶段 1–4 的关系」），服务端回包不经过挂载点，连接停在 `state=NEW`、每个报文都走「命中但未建立」的慢路径（ACL 照查、表项照常刷新）。当反向报文可见时（例如把同一程序按同一 pin 再挂到 `veth-fw-s`——两个挂载点共享同一张 pin 的 conntrack；本示例 CLI 固定为单挂载，双挂载变体留作正文/练习），连接表即列出 ESTABLISHED 表项、后续报文走快路径：
@@ -123,11 +123,11 @@ nat             18732
 10.0.0.2:41322 -> 10.0.1.1:8080 proto=6 state=ESTABLISHED
 ```
 
-- 计数口径（阶段 5 起）：`total` = 成功解析出五元组的报文数；`pass` = 慢路径放行（ACL 放行、登记放行、残包放行各 +1）；`ct_established` = 快路径放行数（含连接转入 ESTABLISHED 的那一次）；`pass + ct_established + drop_acl = total`（残包放行在 total 之外）；`drop_parse` 为保留计数恒 0；`nat` 只计实际改写成功的报文（与阶段 4 口径一致）。
+- 计数口径（阶段 5 起）：`total` = 成功解析出五元组的报文数；`pass` = 慢路径放行（ACL 放行、登记放行、残包放行各 +1）；`ct_established` = 快路径放行数（含连接转入 ESTABLISHED 的那一次）；对解析成功的报文恒等式 `pass + ct_established + drop_acl = total` 成立；残包放行计入 pass 但不计入 total（无独立计数，`drop_parse` 恒 0）；`nat` 只计实际改写成功的报文（与阶段 4 口径一致）。
 
 ## 代码讲解要点
 
-- **快路径先于 ACL 的顺序与理由**：`fw_xdp` 在 conntrack 正反查找命中且 `state==CT_ESTABLISHED` 时直接刷新表项、`bump(STAT_CT_ESTABLISHED)`、返回 `XDP_PASS`——不再调用 `acl_verdict`。理由：连接的合法性在首包过 ACL 时已判定，有状态防火墙的性能优势正来自「已建立连接零策略成本」。快路径里保留 RST/FIN 状态迁移（与阶段 3 一致），否则已建立连接永远无法进入 CLOSED/FIN_WAIT。
+- **快路径先于 ACL 的顺序与理由**：`fw_xdp` 在 conntrack 正反查找命中且 `state==CT_ESTABLISHED` 时直接刷新表项、`bump(STAT_CT_ESTABLISHED)`、返回 `XDP_PASS`——不再调用 `acl_verdict`。理由：连接的合法性在首包过 ACL 时已判定，有状态防火墙的性能优势正来自「已建立连接零策略成本」。快路径里保留 RST/FIN 状态迁移（与阶段 3 一致），否则已建立连接永远无法进入 CLOSED/FIN_WAIT。快慢两条路径对同一 `ct_value` 的更新都是裸写，多 CPU 同时命中同一连接时存在写竞争（后写覆盖）——与阶段 3 同一口径，教学实现接受该近似，生产可改 per-CPU 计量或 `bpf_spin_lock`。
 - **未命中也必须先过 ACL**：新连接的 SYN 是连接表必然未命中的报文，若未命中路径跳过 ACL 直接登记放行，任何连接的首包都能绕过策略、快路径反而成了后门。因此 ACL 只对「ESTABLISHED 命中」这一种情况跳过；被 ACL 拒绝的报文也不刷新连接表项（被拒的连接不因后续报文保持活跃）。
 - **同名 map 必为同一实例（C3）**：cilium/ebpf 不允许一个 Collection 里出现同名 map，`mergeSpecs` 把 TC spec 的程序与缺失 map 并入 XDP spec 后一次加载，五个 map 天然共享，再经 `MapOptions.PinPath` pin 到 `/sys/fs/bpf/fw17`——XDP 与 TC 看到同一份规则/连接/NAT/统计。若图省事对两个 .o 各跑一次 `NewCollection`，会得到两套独立实例：「XDP 侧登记的连接 TC 侧看不到、规则只改了一半」这类事故在运行期几乎无法从报文表现定位，只能在加载方式上杜绝。
 - **map 定义里的 `__uint(pinning, LIBBPF_PIN_BY_NAME)`**：`MapOptions.PinPath` 只对声明了该属性的 map 生效（按名 pin/复用，复用时校验类型/key/value/max_entries 兼容）；没有它，pin 目录里根本不会出现 map，独立子命令也就无从读写。
