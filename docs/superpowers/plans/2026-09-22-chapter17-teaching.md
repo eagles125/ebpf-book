@@ -2009,7 +2009,7 @@ git commit -m "feat(ch17): 拓扑/压测/顶层编译级验证脚本"
 ---
 
 ### Task 9: 章节正文重写（五阶段四段式叙事，§5.1.3）
-
+- [x] Task 9: 章节正文重写（五阶段四段式叙事，§5.1.3）
 **tasks.md 条目**：§5.1.3「重写第 17 章正文：按五层环境阐述组织开篇，按五个渐进阶段推进叙事（每阶段四段式：教师视角引入→核心代码原理讲解→学生动手→检查点自测），将骨架式“计划/建议”表述替换为基于已落地实现的陈述式讲解。」＋「为报文解析与 verifier 边界检查写逐段原理讲解：为什么每次访问前必须 `data + offset <= data_end`，verifier 如何推理路径安全。」＋「为 ACL 匹配（阶段 2：hash 精确五元组 + LPM CIDR 黑白名单）写原理讲解与查找路径可视化。」＋「为 conntrack 状态机与 LRU 回收（阶段 3）写原理讲解：正反向 key、状态迁移、超时策略、数据面/控制面分工。」＋「为 SNAT/DNAT 与校验和增量更新（阶段 4）写原理讲解：NAT 映射表设计、改写顺序、checksum 增量算法。」＋「为 Go 控制面（阶段 5）写原理讲解：cilium/ebpf 加载、map pin、原子更新、CLI 命令实现。」＋「为压测写结果解读讲解：iperf/pktgen 命令、指标口径、常见失败模式与定位方法。」
 
 （本任务完成阶段叙事主体；「五层环境开篇」由 Task 10 并入，「双视角补齐」由 Task 11 核验——这是 tasks.md §5.1.3 首条的两处交叉要求，拆分落地。）
@@ -2021,7 +2021,7 @@ git commit -m "feat(ch17): 拓扑/压测/顶层编译级验证脚本"
 - Consumes: Task 2–8 全部资产（正文代码块必须与示例文件一一对应）；Task 1 教学模板。
 - Produces: 最终章节大纲骨架（Task 10/11/14 在其上填充）；五层环境小节标题先占位为一级列表（Task 10 填充内容）。
 
-- [ ] **Step 1: 重写为以下大纲（标题逐字固定；一节内容 Task 10 写，本任务保留节标题与 2–3 句导语）**
+- [x] **Step 1: 重写为以下大纲（标题逐字固定；一节内容 Task 10 写，本任务保留节标题与 2–3 句导语）**
 
 ```text
 # 第 17 章 实战：构建高性能 eBPF 防火墙
@@ -2042,34 +2042,34 @@ git commit -m "feat(ch17): 拓扑/压测/顶层编译级验证脚本"
 ## 本章参考来源
 ```
 
-- [ ] **Step 2: 写「二、总体架构」**（3–4k 字符）：删除骨架的「建议」措辞，改陈述式；重绘架构图为 05-firewall 实际结构（fw_xdp/fw_tc/fwctl/pin 目录/5 张共享 map，对照 C3）；保留并修正原「XDP 与 TC 的选择分析」为「为什么 XDP 做丢弃与 ACL、TC 做 NAT」的结论性叙述（给出实际挂载表：veth-fw-c XDP + TC ingress、veth-fw-s TC egress）。
+- [x] **Step 2: 写「二、总体架构」**（3–4k 字符）：删除骨架的「建议」措辞，改陈述式；重绘架构图为 05-firewall 实际结构（fw_xdp/fw_tc/fwctl/pin 目录/5 张共享 map，对照 C3）；保留并修正原「XDP 与 TC 的选择分析」为「为什么 XDP 做丢弃与 ACL、TC 做 NAT」的结论性叙述（给出实际挂载表：veth-fw-c XDP + TC ingress、veth-fw-s TC egress）。
 
-- [ ] **Step 3: 写「三、阶段 1」（6–9k）**，四段式内容锚点：
+- [x] **Step 3: 写「三、阶段 1」（6–9k）**，四段式内容锚点：
   - 教师引入：痛点=防火墙先要会丢包；类比=门口保安先学会拦人；误区=`XDP_PASS`≠“我处理过了”、XDP 发生在 skb 分配之前（保守措辞：native XDP 于驱动收包路径早期，generic XDP 在 skb 之后，随内核版本而异）。
   - 原理讲解：贴 `01-xdp-drop/xdp_drop.bpf.c` 全文逐段（SEC 推断程序类型、`xdp_md`、`XDP_DROP/PASS` 语义表、per-CPU map 选型）；loader 侧讲 open_and_load→attach_xdp→轮询；文本图「加载-校验-JIT-挂载-触发」。
   - 动手：`make`、`sudo ./xdp_drop -i veth-fw-c`、ping 触发；预期输出示例+运行级待验证标注。
   - 检查点（3 问+提示）：(1) `XDP_DROP` 的报文还会被协议栈看到吗？(提示：native/generic 差异) (2) 为什么 `eth+1 > data_end` 检查不可省？(提示：verifier 定界) (3) per-CPU map 为什么要 loader 求和？
 
-- [ ] **Step 4: 写「四、阶段 2」（6–9k）**：逐段讲 `parse_flow` 的**每一层边界检查**（对应 §5.1.3 第 2 条：verifier 如何沿路径推理、漏检查的报错形态示意）；五元组与字节序规范化（网络字节序存原样即可匹配）；贴 `acl.bpf.c` 的 map 定义与 `acl_verdict`；**查找路径可视化**（text 图：报文→hash 命中?→LPM 最长前缀?→默认 allow）；`--rule/--cidr` 下发流程与动手命令；检查点 3 问（LPM 为何 `BPF_F_NO_PREALLOC`、`ihl` 处理、hash 通配为什么做不到）。
+- [x] **Step 4: 写「四、阶段 2」（6–9k）**：逐段讲 `parse_flow` 的**每一层边界检查**（对应 §5.1.3 第 2 条：verifier 如何沿路径推理、漏检查的报错形态示意）；五元组与字节序规范化（网络字节序存原样即可匹配）；贴 `acl.bpf.c` 的 map 定义与 `acl_verdict`；**查找路径可视化**（text 图：报文→hash 命中?→LPM 最长前缀?→默认 allow）；`--rule/--cidr` 下发流程与动手命令；检查点 3 问（LPM 为何 `BPF_F_NO_PREALLOC`、`ihl` 处理、hash 通配为什么做不到）。
 
-- [ ] **Step 5: 写「五、阶段 3」（6–9k）**：正反 key 互换规则与示意图；状态迁移图（CT_NEW→ESTABLISHED→FIN_WAIT/CLOSED，UDP 简化）；LRU 容量与静默淘汰（`STAT_CT_FULL` 的两种策略取舍）；超时回收归控制面的原因；`dump` 弱遍历语义；动手 dump 预期输出示例；检查点 3 问。
+- [x] **Step 5: 写「五、阶段 3」（6–9k）**：正反 key 互换规则与示意图；状态迁移图（CT_NEW→ESTABLISHED→FIN_WAIT/CLOSED，UDP 简化）；LRU 容量与静默淘汰（`STAT_CT_FULL` 的两种策略取舍）；超时回收归控制面的原因；`dump` 弱遍历语义；动手 dump 预期输出示例；检查点 3 问。
 
-- [ ] **Step 6: 写「六、阶段 4」（6–9k）**：XDP vs TC 上下文差异（`xdp_md` vs `__sk_buff`）；`do_nat` 改写顺序逐条讲解（指针失效约束、store_bytes 绝对偏移、`bpf_l4_csum_replace` 的 `BPF_F_PSEUDO_HDR`、UDP 0 校验和）；增量校验和数学直觉（`~old+new` 进位折叠，配 16 位手算示例）；DNAT/SNAT 挂载方向表；动手 tcpdump 对比预期输出示例；检查点 3 问。
+- [x] **Step 6: 写「六、阶段 4」（6–9k）**：XDP vs TC 上下文差异（`xdp_md` vs `__sk_buff`）；`do_nat` 改写顺序逐条讲解（指针失效约束、store_bytes 绝对偏移、`bpf_l4_csum_replace` 的 `BPF_F_PSEUDO_HDR`、UDP 0 校验和）；增量校验和数学直觉（`~old+new` 进位折叠，配 16 位手算示例）；DNAT/SNAT 挂载方向表；动手 tcpdump 对比预期输出示例；检查点 3 问。
 
-- [ ] **Step 7: 写「七、阶段 5」（8–10k）**：合并策略（快路径先于 ACL 的原因：established 流量免 ACL 查找）；`fw_common.h` 并集与字段来源标注；Go 侧逐文件讲解：cilium/ebpf 加载流程、**spec 合并共享 map**（同名 map 必须同一实例，否则 XDP/TC 规则不一致——常见事故）、`MapOptions.PinPath` 与 pin 生命周期（map/prog/link 三类）、TC 用 `tc filter replace pinned` 的兼容性理由（TCX 需 6.6+）、`rules.go` 冲突检查与原子更新（逐 key Put，不清空重建）、`stats.go` per-CPU 聚合；CLI 总览表（Task 7 Step 8 口径）；动手 attach→rule add→stats 预期输出示例；检查点 3 问（含「为什么 XDP 与 TC 必须共享同一 map 实例」）。
+- [x] **Step 7: 写「七、阶段 5」（8–10k）**：合并策略（快路径先于 ACL 的原因：established 流量免 ACL 查找）；`fw_common.h` 并集与字段来源标注；Go 侧逐文件讲解：cilium/ebpf 加载流程、**spec 合并共享 map**（同名 map 必须同一实例，否则 XDP/TC 规则不一致——常见事故）、`MapOptions.PinPath` 与 pin 生命周期（map/prog/link 三类）、TC 用 `tc filter replace pinned` 的兼容性理由（TCX 需 6.6+）、`rules.go` 冲突检查与原子更新（逐 key Put，不清空重建）、`stats.go` per-CPU 聚合；CLI 总览表（Task 7 Step 8 口径）；动手 attach→rule add→stats 预期输出示例；检查点 3 问（含「为什么 XDP 与 TC 必须共享同一 map 实例」）。
 
-- [ ] **Step 8: 写「八、压测与结果解读」（4–6k）**：iperf3/pktgen 命令与指标口径（吞吐/重传/pps/drop rate/CPU）；四类常见失败模式定位表：XDP 未生效（native/generic 与挂载接口确认）、conntrack 满表静默淘汰（观察旧表项消失而非 `ct_full` 递增，见阶段 3 README 教学点）、NAT 校验和错（tcpdump 能抓到但对端静默丢弃、`tcpdump -v` 显示 bad cksum）、规则不生效（字节序/方向/key 不一致）。全部结果写「预期输出示例+运行级待验证」。
+- [x] **Step 8: 写「八、压测与结果解读」（4–6k）**：iperf3/pktgen 命令与指标口径（吞吐/重传/pps/drop rate/CPU）；四类常见失败模式定位表：XDP 未生效（native/generic 与挂载接口确认）、conntrack 满表静默淘汰（观察旧表项消失而非 `ct_full` 递增，见阶段 3 README 教学点）、NAT 校验和错（tcpdump 能抓到但对端静默丢弃、`tcpdump -v` 显示 bad cksum）、规则不生效（字节序/方向/key 不一致）。全部结果写「预期输出示例+运行级待验证」。
 
-- [ ] **Step 9: 更新「可视化：数据路径决策树」**为与实现一致（快路径先于 ACL、`STAT_*` 计数点标注）、「常见问题与排错」（汇总各 README 失败点表并扩展）、「总结」、「本章参考来源」（保留骨架参考条目，追加 cilium/ebpf 文档与 libb-bootstrap）。
+- [x] **Step 9: 更新「可视化：数据路径决策树」**为与实现一致（快路径先于 ACL、`STAT_*` 计数点标注）、「常见问题与排错」（汇总各 README 失败点表并扩展）、「总结」、「本章参考来源」（保留骨架参考条目，追加 cilium/ebpf 文档与 libb-bootstrap）。
 
-- [ ] **Step 10: 骨架残留检查（硬性）**
+- [x] **Step 10: 骨架残留检查（硬性）**
 
 Run: `grep -nE "计划|建议|后续完整章节|将补齐|占位" book/chapters/17-high-performance-ebpf-firewall.md | grep -v 预期`
 Expected: 仅允许出现于「本书其他章节将…」类全书导航句；第 17 章实现相关表述零命中。
 Run: `wc -m book/chapters/17-high-performance-ebpf-firewall.md`
 Expected: ≥ 32000（本任务后中段值；Task 14 终检 40–60k）。
 
-- [ ] **Step 11: 提交**
+- [x] **Step 11: 提交**
 
 ```bash
 git add book/chapters/17-high-performance-ebpf-firewall.md
