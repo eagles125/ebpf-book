@@ -22,7 +22,7 @@ enum stat_idx {
     STAT_DROP_PARSE,     /* 保留（阶段 2 暂不使用，残包按 PASS 处理） */
     STAT_CT_NEW,         /* 阶段 3 新增：新连接登记成功（TCP SYN 或 UDP 首包） */
     STAT_CT_ESTABLISHED, /* 阶段 3 新增：反向报文命中，连接转入 ESTABLISHED */
-    STAT_CT_FULL,        /* 阶段 3 新增：LRU 表满/并发竞争，新连接登记失败 */
+    STAT_CT_FULL,        /* 阶段 3 新增：登记失败计数（同 key 并发竞争/分配失败；LRU 满表不触发） */
     STAT_MAX,            /* 阶段 3 统计计数个数 =7（阶段 4 在此行前追加，值自然递增） */
 };
 
@@ -61,7 +61,7 @@ struct lpm_value {
 };
 
 /* ===== 阶段 3 追加：连接跟踪 ===== */
-#define CT_MAX_ENTRIES 65536    /* LRU 上限：满后新连接登记失败（STAT_CT_FULL） */
+#define CT_MAX_ENTRIES 65536    /* LRU 上限：满后内核静默淘汰最久未用项，新连接登记仍成功 */
 
 /* 最小可用 TCP 状态机（不复刻 netfilter conntrack 全量语义） */
 enum ct_state {

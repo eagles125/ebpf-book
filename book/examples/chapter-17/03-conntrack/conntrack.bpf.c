@@ -174,7 +174,9 @@ int conntrack_prog(struct xdp_md *ctx)
     if (bpf_map_update_elem(&conntrack, &fwd, &nv, BPF_NOEXIST) == 0)
         bump(STAT_CT_NEW);
     else
-        bump(STAT_CT_FULL);   /* 表满/LRU 异常：放行并计数，正文讨论 DROP 策略取舍 */
+        bump(STAT_CT_FULL);   /* 非 0 = 同 key 并发登记竞争（-EEXIST）或分配失败：放行并计数。
+                                 LRU 满表不走此分支——内核静默淘汰最久未用项后插入仍成功
+                                 （LRU「不阻塞新流」的设计行为）；是否对失败 DROP 由正文讨论取舍 */
     bump(STAT_PASS);
     return XDP_PASS;
 }

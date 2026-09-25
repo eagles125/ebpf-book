@@ -6,7 +6,7 @@
 
 - 理解连接跟踪的基本模型：把「孤立的报文」组织成「连接」——登记（首包）→ 命中（后续同向/反向报文）→ 状态推进（FIN/RST）→ 回收（控制面超时清理）。
 - 掌握正反 key 互换规则：一条连接的两个方向各构成一个五元组 key，`fill_ct_key()` 按 `reverse` 交换源/目的构造；先查正向（报文自身方向），未命中再查反向（回包方向），命中即同一连接。
-- 认识 LRU 哈希映射的容量语义：`BPF_MAP_TYPE_LRU_HASH` 容量固定（`CT_MAX_ENTRIES=65536`），满时自动淘汰最久未用项——表不会无限增长，但**淘汰是静默的**；新连接登记失败计入 `ct_full`。
+- 认识 LRU 哈希映射的容量语义：`BPF_MAP_TYPE_LRU_HASH` 容量固定（`CT_MAX_ENTRIES=65536`），满时自动淘汰最久未用项——表不会无限增长，但**淘汰是静默的**，且新连接从不被阻塞（满表插入仍成功）；`ct_full` 只在同 key 并发登记竞争等罕见场景递增。
 - 学会用 `bpf_map_get_next_key` + `bpf_map_lookup_elem` 弱遍历 dump 映射，并用与 `bpf_ktime_get_ns` 同源的单调时钟（`CLOCK_MONOTONIC`）计算表项 idle。
 
 ## 文件说明
@@ -73,13 +73,17 @@ total=1889 pass=1889 drop_acl=0 drop_parse=0 ct_new=1 ct_established=0 ct_full=0
   报文真的经过挂载点（例如让同一张 conntrack 表同时挂到 `veth-fw-c` 与 `veth-fw-s` 两个
   接口）才会看到 `state=2`——这正是「挂载点决定数据面可见性」的活教材，正反 key 查找逻辑
   本身已就绪，一旦反向报文可见即可触发。
-- 只有一条流时 `pkts` 与 `total` 相等：每个成功解析的报文都命中该条目并累加 `packets`；
-  `pass` ≥ `total` 的差值是非 IPv4/TCP/UDP 报文（解析失败按放行处理），`pass` 只计实际
-  放行（与阶段 1/2 口径一致）。`drop_acl`/`drop_parse` 是阶段 2 判 ACL 的保留计数，本阶段
-  只观测不判 ACL，恒为 0。
-- `ct_full=0`：65536 的 LRU 容量在教学拓扑打不满。若把 `CT_MAX_ENTRIES` 临时调小（如 16）
-  重建，多连接并发时即可看到新连接登记失败、`ct_full` 递增，同时旧表项被**静默淘汰**
-  （dump 里直接消失）。
+- 只有一条流时 `pkts` 与 `total` 相等：首包（SYN）是登记——`packets` 记 1、`total` 同样
+  +1；此后每个成功解析的报文才命中该条目累加 `packets`，两者同步递增故相等。
+  `pass` ≥ `total` 的差值是非 IPv4/TCP/UDP 报文——残包（截断报文）与解析失败都走同一放行
+  路径，`pass` 只计实际放行（与阶段 1/2 口径一致）。`drop_acl`/`drop_parse` 是阶段 2 判
+  ACL 的保留计数，本阶段只观测不判 ACL，恒为 0。
+- `ct_full=0`：65536 的 LRU 容量在教学拓扑打不满。把 `CT_MAX_ENTRIES` 临时调小（如 16）
+  重建、多连接并发时，看到的是 `ct_new` 持续增长、旧表项在 dump 里**静默消失**，而
+  `ct_full` 恒为 0——LRU 满表时内核淘汰最久未用项后插入**仍然成功**，新连接从不被阻塞，
+  这正是 LRU「不阻塞新流」的设计意图；「为什么调小容量也看不到 `ct_full`」本身就是本阶段
+  要讲清的教学点，`ct_full` 只在多 CPU 同时登记同一新连接（`BPF_NOEXIST` 竞争失败
+  `-EEXIST`）等罕见场景才会递增，教学拓扑几乎观测不到。
 
 ## 代码讲解要点
 
@@ -92,11 +96,13 @@ total=1889 pass=1889 drop_acl=0 drop_parse=0 ct_new=1 ct_established=0 ct_full=0
   判断，两者直接覆盖当前状态）；UDP 无状态机，只有 `CT_NEW`。TCP 非 SYN 的「中途报文」
   查不到记录时跳过登记——避免把观测开始前就已建立的连接误登记成新连接。
 - LRU 选型与静默淘汰：连接数随流量不可预知，普通 hash 表满后新表项直接插入失败、旧表项
-  永不回收；`BPF_MAP_TYPE_LRU_HASH` 满时自动淘汰最久未用项，内存有上界。代价是「淘汰是
-  静默的」——数据面无法感知淘汰发生，只能靠统计（`ct_full`）与控制面观测。
-- `STAT_CT_FULL` 的触发路径：登记用 `bpf_map_update_elem(..., BPF_NOEXIST)`，返回非 0 即
-  计满——LRU 满时的插入竞争、多 CPU 同时登记同一新连接（后到者失败）都会走到这里。策略上
-  本阶段选择放行并计数（观测优先），是否 DROP 的取舍留给正文讨论。
+  永不回收；`BPF_MAP_TYPE_LRU_HASH` 满时自动淘汰最久未用项、新 key 插入**仍然成功**，
+  内存有上界且不阻塞新流。代价是「淘汰是静默的」——数据面无法感知淘汰发生，只能靠控制面
+  （dump/遍历）观测，`ct_full` 与淘汰无关。
+- `STAT_CT_FULL` 的触发路径：登记用 `bpf_map_update_elem(..., BPF_NOEXIST)`，返回非 0 时
+  计数。注意 **LRU 满表并不触发它**（见上：满表插入仍成功）；返回非 0 的真实场景只剩
+  多 CPU 同时登记同一新连接的竞争（`-EEXIST`，`BPF_NOEXIST` 语义）与极端的内存分配失败
+  （`-ENOMEM`）。策略上本阶段选择放行并计数（观测优先），是否 DROP 的取舍留给正文讨论。
 - 写竞争近似：多 CPU 同时更新同一条目（`packets++`/`bytes +=`/状态写回）存在丢更新竞争
   （后写覆盖），教学实现接受该近似；生产可改 per-CPU 计量或 `bpf_spin_lock`。
 - 超时回收归控制面：表项只带 `last_seen_ns`（`bpf_ktime_get_ns` 单调时钟，非墙钟），数据面
@@ -125,7 +131,7 @@ total=1889 pass=1889 drop_acl=0 drop_parse=0 ct_new=1 ct_established=0 ct_full=0
 | 编译报 `use of undeclared identifier 'ETH_P_IP'` | `vmlinux.h` 只含类型不含宏；示例源码内已 `#define ETH_P_IP 0x0800`，删掉该行即复现 |
 | dump 一直为空（有流量但无表项） | TCP 只登记以 SYN 开始的连接：程序挂载晚于连接建立时，中途报文（非 SYN 且无记录）按设计跳过登记。重跑 `iperf3` 重新建流即可 |
 | `state` 一直停在 1、`ct_established` 恒为 0 | 反向报文未经过挂载点：XDP 只作用于接收方向，本拓扑中服务端回包在 `veth-fw-c` 上是发送方向，看不见即不触发 `CT_ESTABLISHED`（见「预期输出」第 3 条） |
-| `ct_new` 停止增长、`ct_full` 递增 | LRU 表满（65536）后新连接登记失败，同时旧表项被静默淘汰；调大容量或由控制面清理前，新连接不再登记。教学可调小 `CT_MAX_ENTRIES` 复现 |
+| 表项在 dump 里突然消失（`ct_new` 仍增长、`ct_full` 恒 0） | LRU 表满（65536）后的正常行为：内核静默淘汰最久未用项、新连接登记**仍成功**（LRU 设计就是不阻塞新流），淘汰本身只能靠 dump/控制面观测。调小 `CT_MAX_ENTRIES` 可观察；`ct_full` 仅在同 key 并发登记竞争（`-EEXIST`）等罕见场景递增 |
 | `idle` 数值巨大或为负 | 时间基准混用：`last_seen_ns` 来自 `bpf_ktime_get_ns`（单调时钟），用户态必须用 `CLOCK_MONOTONIC` 对齐，不能用墙钟（`time()`/`CLOCK_REALTIME`） |
 
 ## 验证状态
