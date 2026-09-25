@@ -2397,7 +2397,7 @@ git commit -m "feat(ch17): 课后练习参考实现（规则持久化与 Prometh
 ---
 
 ### Task 14: 交叉链接、全量编译级验证与状态标注（§5.1.5 前两条）
-
+- [x] Task 14: 交叉链接、全量编译级验证与状态标注（§5.1.5 前两条）
 **tasks.md 条目**：§5.1.5「Cross-link Chapter 17 prose to the standalone `book/examples/chapter-17/` stage directories and exercise assets after they are generated.」＋「Run `book/examples/chapter-17/scripts/verify-build.sh` compile-level verification locally (all stages + exercises); fix any compile failures. Verify load/runtime behavior in a privileged Linux eBPF environment or mark each component with explicit verification status and reason.」（运行级行为的落点=按 C6 全量标注，见 Step 3）
 
 **Files:**
@@ -2407,22 +2407,22 @@ git commit -m "feat(ch17): 课后练习参考实现（规则持久化与 Prometh
 - Consumes: Task 2–13 全部产物；chapter-09 的链接惯例（相对链接 `../examples/chapter-17/...` + 仓库根路径文本）。
 - Produces: 全绿 verify-build 记录；各 README 验证状态区终稿。
 
-- [ ] **Step 1: 交叉链接**：章首加「本章独立示例已全部落地到 [`book/examples/chapter-17/`](../examples/chapter-17/)」与目录总览；每个阶段小节末尾加「**独立示例**：`../examples/chapter-17/<stage>/`」链接；每个正文代码块前后标注对应文件路径；课后扩展任务节链接 exercises/ 各目录。格式与第 9 章一致（相对路径链接 + 仓库根路径文本）。
-- [ ] **Step 2: 全量编译级验证（硬性验收）**
+- [x] **Step 1: 交叉链接**：章首加「本章独立示例已全部落地到 [`book/examples/chapter-17/`](../examples/chapter-17/)」与目录总览；每个阶段小节末尾加「**独立示例**：`../examples/chapter-17/<stage>/`」链接；每个正文代码块前后标注对应文件路径；课后扩展任务节链接 exercises/ 各目录。格式与第 9 章一致（相对路径链接 + 仓库根路径文本）。
+- [x] **Step 2: 全量编译级验证（硬性验收）**
 
 Run: `bash book/examples/chapter-17/scripts/verify-build.sh`
 Expected: 9 个目标（5 阶段 + 4 练习）全 PASS；WARN 仅允许出现在 Go 网络依赖且需在对应 README 标注；`FAIL=0`、退出码 0。任何 FAIL 回到对应任务修复后重跑。
 记录：把本次运行摘要（PASS/WARN/FAIL 数与命令版本）写入 `book/examples/chapter-17/README.md` 验证状态说明区。
 
-- [ ] **Step 3: 验证状态全量标注核对**：逐个打开 6 阶段 + 4 练习 README，确认每份都有 C6 口径的「验证状态」节（编译级=本机已过；运行级=待验证+原因 `unprivileged_bpf_disabled=2`/无 root）；正文 1.5 节验证状态表与各 README 一致。矩阵条目「Verify firewall examples in isolated privileged network lab or mark each component with explicit verification status.」以本步骤 + Task 8/14 记录为完成口径。
-- [ ] **Step 4: 篇幅终检（硬性）**
+- [x] **Step 3: 验证状态全量标注核对**：逐个打开 6 阶段 + 4 练习 README，确认每份都有 C6 口径的「验证状态」节（编译级=本机已过；运行级=待验证+原因 `unprivileged_bpf_disabled=2`/无 root）；正文 1.5 节验证状态表与各 README 一致。矩阵条目「Verify firewall examples in isolated privileged network lab or mark each component with explicit verification status.」以本步骤 + Task 8/14 记录为完成口径。
+- [x] **Step 4: 篇幅终检（硬性）**
 
 Run: `wc -m book/chapters/17-high-performance-ebpf-firewall.md`
 Expected: 60000–70000（2026-09-25 控制裁定上调，原 40000–60000；低于下限：优先补原理讲解而非注水（设计 §7）；高于上限：压缩重复叙述，不删原理）。
 Run: `grep -c "](../examples/chapter-17/" book/chapters/17-high-performance-ebpf-firewall.md`
 Expected: ≥ 7（五个阶段目录 + exercises + 顶层 README）。
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add book/chapters/17-high-performance-ebpf-firewall.md book/examples/chapter-17/
