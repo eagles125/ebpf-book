@@ -2079,7 +2079,7 @@ git commit -m "docs(ch17): 正文重写为五阶段四段式教学叙事"
 ---
 
 ### Task 10: 五层环境阐述并入正文（§5.1.1）
-
+- [x] Task 10: 五层环境阐述并入正文（§5.1.1）
 **tasks.md 条目**：§5.1.1 五条全部——「阐述依赖环境：内核版本与 BTF 要求、root/`CAP_BPF`/`CAP_NET_ADMIN` 权限、veth 与网络命名空间前置条件、依赖工具清单与检查方法。」「阐述编译环境：clang/LLVM、libbpf 头文件、Go 工具链与 cilium/ebpf 库的版本要求、安装与验证命令。」「阐述部署环境：ns-client/ns-fw/ns-server veth 实验拓扑设计、脚本化搭建与销毁步骤、安全警告（避免在物理网卡误挂 XDP）。」「阐述运行环境：XDP/TC 挂载与卸载方式、fwctl 控制面启动流程、规则与 NAT 下发步骤。」「阐述运行效果：每个关键阶段的预期输出、tcpdump 抓包对比、stats 与 conntrack 查询结果示例。」
 
 **Files:**
@@ -2089,12 +2089,12 @@ git commit -m "docs(ch17): 正文重写为五阶段四段式教学叙事"
 - Consumes: Task 2 `check-env.sh`、Task 8 `setup-veth.sh`/`bench-*`、Task 7 fwctl CLI、C6 验证约定。
 - Produces: 1.5 小节的「验证状态约定」表（Task 14 审计依据）。
 
-- [ ] **Step 1: 写 1.1 依赖环境（约 1.2k）**：内核 ≥5.10 与 `CONFIG_DEBUG_INFO_BTF`；权限矩阵表（root / CAP_BPF+CAP_NET_ADMIN / 非 root 三档 × 可编译/可加载/可实验）；veth+netns 前置；工具清单与 `bash book/examples/chapter-17/00-env/check-env.sh` 三档结论解读（含本机 `unprivileged_bpf_disabled=2` 语境示例输出，标注「本地验证」）。
-- [ ] **Step 2: 写 1.2 编译环境（约 1k）**：clang/LLVM（18.x）、`libbpf-dev`（头文件 `bpf_helpers.h`）、bpftool（7.x）、Go（1.22+，模块 `cilium/ebpf v0.16.0` 固定于 go.mod）；各版本验证命令（`clang --version` 等，本机实测输出可标「本地验证」）；`apt install` 与 `go mod tidy` 说明（网络依赖注明）。
-- [ ] **Step 3: 写 1.3 部署环境（约 1.3k）**：C5 拓扑 ASCII 图 + 地址/路由表；`setup-veth.sh setup|teardown` 用法与「veth 对随 netns 销毁」的清理语义；**显式安全警告段**（只挂 veth，勿挂物理网卡/SSH 接口，后果=失联）。
-- [ ] **Step 4: 写 1.4 运行环境（约 1.2k）**：XDP 挂载两种方式（loader 内 `bpf_program__attach_xdp`、fwctl `link.AttachXDP`+pin link）与卸载（destroy/pinned link close）；TC 挂载（C 侧 `bpf_tc_attach`、Go 侧 `tc filter replace pinned`）与 `tc filter del`；fwctl 七个子命令总览表（引用 Task 7 口径）；规则/NAT 下发流程图（attach→map pin→rule add→stats）。
-- [ ] **Step 5: 写 1.5 运行效果（约 1.3k）**：表格汇总各阶段关键预期输出（xdp_drop 计数、acl drop_acl、conntrack 状态、nat 后 tcpdump 五元组变化、fwctl stats）；tcpdump 抓包对比方法（改动前后五元组/校验和）；stats 与 conntrack 查询示例；验证状态约定说明（C6 三条，逐字引入）。
-- [ ] **Step 6: 核对与提交**
+- [x] **Step 1: 写 1.1 依赖环境（约 1.2k）**：内核 ≥5.10 与 `CONFIG_DEBUG_INFO_BTF`；权限矩阵表（root / CAP_BPF+CAP_NET_ADMIN / 非 root 三档 × 可编译/可加载/可实验）；veth+netns 前置；工具清单与 `bash book/examples/chapter-17/00-env/check-env.sh` 三档结论解读（含本机 `unprivileged_bpf_disabled=2` 语境示例输出，标注「本地验证」）。
+- [x] **Step 2: 写 1.2 编译环境（约 1k）**：clang/LLVM（18.x）、`libbpf-dev`（头文件 `bpf_helpers.h`）、bpftool（7.x）、Go（1.22+，模块 `cilium/ebpf v0.16.0` 固定于 go.mod）；各版本验证命令（`clang --version` 等，本机实测输出可标「本地验证」）；`apt install` 与 `go mod tidy` 说明（网络依赖注明）。
+- [x] **Step 3: 写 1.3 部署环境（约 1.3k）**：C5 拓扑 ASCII 图 + 地址/路由表；`setup-veth.sh setup|teardown` 用法与「veth 对随 netns 销毁」的清理语义；**显式安全警告段**（只挂 veth，勿挂物理网卡/SSH 接口，后果=失联）。
+- [x] **Step 4: 写 1.4 运行环境（约 1.2k）**：XDP 挂载两种方式（loader 内 `bpf_program__attach_xdp`、fwctl `link.AttachXDP`+pin link）与卸载（destroy/pinned link close）；TC 挂载（C 侧 `bpf_tc_attach`、Go 侧 `tc filter replace pinned`）与 `tc filter del`；fwctl 七个子命令总览表（引用 Task 7 口径）；规则/NAT 下发流程图（attach→map pin→rule add→stats）。
+- [x] **Step 5: 写 1.5 运行效果（约 1.3k）**：表格汇总各阶段关键预期输出（xdp_drop 计数、acl drop_acl、conntrack 状态、nat 后 tcpdump 五元组变化、fwctl stats）；tcpdump 抓包对比方法（改动前后五元组/校验和）；stats 与 conntrack 查询示例；验证状态约定说明（C6 三条，逐字引入）。
+- [x] **Step 6: 核对与提交**
 
 Run: `grep -c "^### 1\." book/chapters/17-high-performance-ebpf-firewall.md`
 Expected: 5
