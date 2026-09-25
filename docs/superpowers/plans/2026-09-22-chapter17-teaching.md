@@ -167,6 +167,8 @@ clean:
 
 ### Task 1: STYLE.md 新增「实战章节教学模板」
 
+- [x] Task 1: STYLE.md 新增「实战章节教学模板」
+
 **tasks.md 条目**：§5.1.0「Update `book/STYLE.md` with the teaching template: five-layer environment narrative (dependency, build, deploy, run, effects), core-code principle-annotation rules, teacher-student dual-perspective sections, and the post-chapter exercise convention (`book/examples/<chapter>/exercises/` with reference implementations and verification status)」
 
 **Files:**
@@ -176,7 +178,7 @@ clean:
 - Consumes: 设计文档 §5（四部分内容口径）。
 - Produces: 后续所有任务的 README/正文写作模板依据；无代码接口。
 
-- [ ] **Step 1: 在 `## 验证标注` 之前插入以下完整章节**
+- [x] **Step 1: 在 `## 验证标注` 之前插入以下完整章节**
 
 ```markdown
 ## 实战章节教学模板
@@ -218,12 +220,12 @@ clean:
 - 每项练习必须标注验证状态：编译级「已验证/待验证」+ 运行级一律「待验证」。
 ```
 
-- [ ] **Step 2: 核对**
+- [x] **Step 2: 核对**
 
 Run: `grep -c "^### " book/STYLE.md && grep -n "实战章节教学模板" book/STYLE.md`
 Expected: 新章节 4 个三级标题；文件中只出现一处「实战章节教学模板」章节头。
 
-- [ ] **Step 3: 提交**
+- [x] **Step 3: 提交**
 
 ```bash
 git add book/STYLE.md
