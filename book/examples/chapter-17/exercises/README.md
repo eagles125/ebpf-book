@@ -40,6 +40,6 @@
 | 01-ipv6-acl | 已在编写环境（x86_64、内核 7.0、clang 18、bpftool 7.7、libbpf 1.3）`make` 通过 | 待验证 |
 | 02-rule-persistence | 已在编写环境（同上 / Go 1.27.1）`make` 通过（含 `go vet`） | 待验证 |
 | 03-prometheus-export | 已在编写环境（同上 / Go 1.27.1）`make` 通过（含 `go vet`） | 待验证 |
-| 04-port-rate-limit | 已在编写环境（同上）`make` 通过 | 待验证 |
+| 04-port-rate-limit | 已在编写环境（同上，无 Go）`make` 通过 | 待验证 |
 
 统一口径：编写环境为非 root（`unprivileged_bpf_disabled=2`），四项练习均未执行加载、挂载与运行，各 README 的「预期输出示例」均为教学示例；练习 2/3 的 Go 依赖已提交 `go.sum`，正常联网环境可直接编译，离线环境按「依赖待拉取，编译级待验证」处理。

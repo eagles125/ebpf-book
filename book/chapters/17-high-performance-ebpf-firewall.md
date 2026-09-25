@@ -1198,7 +1198,7 @@ struct {
 
 attach 之后的子命令只读写 pin 的映射，不需要重新加载程序——detach 才清理。
 
-**spec 合并：同名 map 必为同一实例。** `user/maps.go` 的核心（完整原文）：
+**spec 合并：同名映射必为同一实例。** `user/maps.go` 的核心（完整原文）：
 
 ```go
 /* 两个 .o 的同名 map 必须是同一实例（XDP 与 TC 要看到同一份规则/统计）。
@@ -1229,7 +1229,7 @@ TC 程序不能靠 skeleton 自动挂载（本示例也本就没有 skeleton，G
 
 | 对象 | 何时 pin | 谁引用它 | 何时消失 |
 |---|---|---|---|
-| map（5 张） | 加载时按名 pin（`MapOptions.PinPath`） | 数据面程序、`fwctl` 各子命令（`LoadPinnedMap`） | `detach` 删除 pin 目录，最后一个引用消失即释放——规则随之消失 |
+| 映射（5 张） | 加载时按名 pin（`MapOptions.PinPath`） | 数据面程序、`fwctl` 各子命令（`LoadPinnedMap`） | `detach` 删除 pin 目录，最后一个引用消失即释放——规则随之消失 |
 | prog（3 个） | 加载后逐个 pin 成 `<名>.prog` | `tc filter replace ... pinned`（TC 两个）、XDP link | 同上；TC filter 与 link 各持有程序引用 |
 | link（1 个） | XDP `bpf_link` pin 成 `xdp_link` | 内核中的 XDP 挂载关系本身 | `detach` 加载该 link 并关闭 fd，挂载解除 |
 
@@ -1508,7 +1508,7 @@ nat_map 精确查找 ──未命中──► 通配二次查找（清零非 NAT
 - RFC 1624：Computation of the Internet Checksum via Incremental Update（增量校验和的算术口径）。
 - libbpf 文档：`bpf_program__attach_xdp`、TC 挂载 API（`bpf_tc_hook_create`/`bpf_tc_attach`/`bpf_tc_detach`）、`LIBBPF_PIN_BY_NAME` 与对象 pinning 模型、per-CPU 映射的用户态语义、`bpf_map_get_next_key` 遍历组合。
 - libbpf-bootstrap 上游示例：skeleton + `open_and_load` 模式（阶段 1–4 同源）。
-- cilium/ebpf 文档（v0.16.0）：`MapOptions.PinPath` 与同名 map 复用语义、`link.AttachXDP`、`MapIterator`、`rlimit.RemoveMemlock`。
+- cilium/ebpf 文档（v0.16.0）：`MapOptions.PinPath` 与同名映射复用语义、`link.AttachXDP`、`MapIterator`、`rlimit.RemoveMemlock`。
 - `tc(8)`/`tc-bpf(8)`：clsact qdisc、`tc filter replace ... pinned` 的生命周期与 `direct-action` 语义。
 - Cilium documentation：eBPF networking 与 network policy（生产级有状态防火墙的工程参照）。
 - LWN.net：BPF 与 XDP 系列文章（验证器与 XDP 机制背景）。

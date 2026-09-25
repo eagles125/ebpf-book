@@ -120,7 +120,7 @@ IP 10.0.2.2.8080 > 10.0.2.1.41322: Flags [S.], seq 0, ...   # 回程：目的 = 
 - RFC 1624：Computation of the Internet Checksum via Incremental Update（增量校验和的
   正确算术与对 RFC 1141 进位次序的修正）。
 - `include/uapi/linux/bpf.h`：`bpf_skb_store_bytes`/`bpf_l3_csum_replace`/`bpf_l4_csum_replace`
-  的语义，`BPF_F_PSEUDO_HDR`/`BPF_F_MARK_MANGLED_0` 标志，`BPF_F_PSEUDO_HDR` 与部分校验和状态。
+  的语义，`BPF_F_PSEUDO_HDR`/`BPF_F_MARK_MANGLED_0` 标志。
 - `include/uapi/linux/pkt_cls.h`：`TC_ACT_OK` 等 TC 动作返回值。
 - libbpf 文档：TC 挂载 API（`bpf_tc_hook_create`/`bpf_tc_attach`/`bpf_tc_detach`，clsact
   qdisc 与 handle/priority 的定位语义）。
