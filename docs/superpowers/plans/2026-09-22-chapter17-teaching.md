@@ -849,6 +849,8 @@ git commit -m "feat(ch17): 阶段2 报文解析与 ACL（hash 精确 + LPM CIDR�
 
 ### Task 5: 阶段 3 —— 03-conntrack 连接跟踪与 LRU
 
+- [x] Task 5: 阶段 3 —— 03-conntrack 连接跟踪与 LRU
+
 **tasks.md 条目**：§5.1.2「Generate `book/examples/chapter-17/03-conntrack/` with extended `fw_common.h`, `conntrack.bpf.c` (forward/reverse keys, state machine, LRU cap), dump-capable loader, Makefile, and README, with Chinese comments explaining state transitions and map capacity pitfalls.」
 
 **Files:**
@@ -862,7 +864,7 @@ git commit -m "feat(ch17): 阶段2 报文解析与 ACL（hash 精确 + LPM CIDR�
 - Consumes: 阶段 2 全部（`parse_flow`、map 模式）；C1 枚举追加 CT_*；C3 conntrack LRU。
 - Produces: `parse_flow(ctx, key, tcp_flags)` 三参版本（阶段 5 沿用）；`ct_key` 构造函数 `fill_ct_key()`；skeleton 前缀 `conntrack_bpf`。
 
-- [ ] **Step 1: 创建 `fw_common.h`（阶段 3 版本 = 阶段 2 全文 + 以下追加）**
+- [x] **Step 1: 创建 `fw_common.h`（阶段 3 版本 = 阶段 2 全文 + 以下追加）**
 
 ```c
 /* ===== 阶段 3 追加：连接跟踪 ===== */
@@ -898,7 +900,7 @@ struct ct_value {
 
 并把 `enum stat_idx` 扩为 `STAT_TOTAL/PASS/DROP_ACL/DROP_PARSE/CT_NEW/CT_ESTABLISHED/CT_FULL/STAT_MAX`（`STAT_MAX=7`，注释各加「阶段 3 新增」）。
 
-- [ ] **Step 2: 创建 `conntrack.bpf.c`**（阶段 2 的 map/`bump`/`acl_verdict` 不需要——本阶段只观测，不判 ACL；`parse_flow` 升级为三参）
+- [x] **Step 2: 创建 `conntrack.bpf.c`**（阶段 2 的 map/`bump`/`acl_verdict` 不需要——本阶段只观测，不判 ACL；`parse_flow` 升级为三参）
 
 ```c
 /* 阶段 3：parse_flow 增加出参 tcp_flags（仅 TCP 有效；位含义见下方宏） */
@@ -1006,7 +1008,7 @@ int conntrack_prog(struct xdp_md *ctx)
 char LICENSE[] SEC("license") = "GPL";
 ```
 
-- [ ] **Step 3: 创建 `conntrack.c`**：Task 3 loader 骨架（头文件追加 `<arpa/inet.h>` 与 `<time.h>`）+ 每 2 秒 dump：
+- [x] **Step 3: 创建 `conntrack.c`**：Task 3 loader 骨架（头文件追加 `<arpa/inet.h>` 与 `<time.h>`）+ 每 2 秒 dump：
 
 ```c
 /* bpf_ktime_get_ns 基于 CLOCK_MONOTONIC；用户态取同源单调时钟对齐时间基准 */
@@ -1041,9 +1043,9 @@ static void dump_conntrack(int fd)
 }
 ```
 
-- [ ] **Step 4: `Makefile`**（C7，`<名>=conntrack`）。**Step 5: 编译验证** `make -C book/examples/chapter-17/03-conntrack` 退出码 0。
-- [ ] **Step 6: `README.md`**（C8）。预期输出示例（运行级待验证）：iperf3 建流后 dump 出一条 `state=1`，客户端 FIN 后同一条目推进为 `state=3 idle=...`；单一挂载点看不到反向报文、`state=2` 在本拓扑不可复现——「挂载点决定数据面可见性」写成本阶段教学点（控制器裁定 2026-09-25）。讲解要点：正反 key 互换规则、LRU 静默淘汰、写竞争近似、超时回收归控制面。验证状态 C6。
-- [ ] **Step 7: 提交** `git commit -m "feat(ch17): 阶段3 连接跟踪（正反 key + 状态机 + LRU + dump）"`
+- [x] **Step 4: `Makefile`**（C7，`<名>=conntrack`）。**Step 5: 编译验证** `make -C book/examples/chapter-17/03-conntrack` 退出码 0。
+- [x] **Step 6: `README.md`**（C8）。预期输出示例（运行级待验证）：iperf3 建流后 dump 出一条 `state=1`，客户端 FIN 后同一条目推进为 `state=3 idle=...`；单一挂载点看不到反向报文、`state=2` 在本拓扑不可复现——「挂载点决定数据面可见性」写成本阶段教学点（控制器裁定 2026-09-25）。讲解要点：正反 key 互换规则、LRU 静默淘汰、写竞争近似、超时回收归控制面。验证状态 C6。
+- [x] **Step 7: 提交** `git commit -m "feat(ch17): 阶段3 连接跟踪（正反 key + 状态机 + LRU + dump）"`
 
 ---
 
