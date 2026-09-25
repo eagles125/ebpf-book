@@ -2432,14 +2432,14 @@ git commit -m "docs(ch17): 交叉链接示例资产并完成全量编译级验�
 ---
 
 ### Task 15: 主审（teaching completeness）与 tasks.md 勾选（§5.1.5 收口）
-
+- [x] Task 15: 主审（teaching completeness）与 tasks.md 勾选（§5.1.5 收口）
 **tasks.md 条目**：§5.1.5「Main-agent review: audit Chapter 17 against the teaching completeness requirement (five-layer environments, core-code annotations, dual perspective, exercises with reference implementations).」；同时收口矩阵节五条（引用见下方清单）。
 
 **Files:**
 - Modify: `openspec/changes/generate-ebpf-book/tasks.md`（勾选）
 - 产出：审查报告进入最终回复（不创建报告文件）
 
-- [ ] **Step 1: 按 §8「Chapter Execution Workflow」要求逐项审计并记录结论**：
+- [x] **Step 1: 按 §8「Chapter Execution Workflow」要求逐项审计并记录结论**：
   1. 五层环境（1.1–1.5 内容口径齐备，check-env/setup-veth/fwctl/预期输出全部被引用）；
   2. 核心代码注释（抽查 3 份 `.bpf.c` + 2 份 Go 文件：字段语义/边界检查原因/helper 选型/map 选型/失败模式五类注释在场）；
   3. 双视角（八个主要小节教师视角 + 学生动手/检查点齐备）；
@@ -2450,9 +2450,9 @@ git commit -m "docs(ch17): 交叉链接示例资产并完成全量编译级验�
   
   审计发现问题回对应任务修复后复验；全绿才进入 Step 2。
 
-- [ ] **Step 2: 勾选 tasks.md**：将 §5.1.0（1 条）、§5.1.1（5 条）、§5.1.2（8 条）、§5.1.3（7 条）、§5.1.4（4 条）、§5.1.5（3 条）与矩阵节 Chapter 17 的 5 条未勾选项全部置为 `[x]`（仅当对应交付物真实存在且验收通过；Go 网络依赖 WARN 的项在勾选同时在该行末尾加注「（Go 依赖拉取待网络复验）」）。
+- [x] **Step 2: 勾选 tasks.md**：将 §5.1.0（1 条）、§5.1.1（5 条）、§5.1.2（8 条）、§5.1.3（7 条）、§5.1.4（4 条）、§5.1.5（3 条）与矩阵节 Chapter 17 的 5 条未勾选项全部置为 `[x]`（仅当对应交付物真实存在且验收通过；Go 网络依赖 WARN 的项在勾选同时在该行末尾加注「（Go 依赖拉取待网络复验）」）。
 
-- [ ] **Step 3: 最终提交与交付报告**
+- [x] **Step 3: 最终提交与交付报告**
 
 ```bash
 git add openspec/changes/generate-ebpf-book/tasks.md
