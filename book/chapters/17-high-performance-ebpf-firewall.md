@@ -1,6 +1,24 @@
 # 第 17 章 实战：构建高性能 eBPF 防火墙
 
-本章把一个“麻雀虽小，五脏俱全”的 eBPF 防火墙拆成五个渐进阶段完整实现：从最小的 XDP 丢包闭环，到报文解析与 ACL、连接跟踪、TC 上的 SNAT/DNAT，最终汇合成一套带 Go 控制面的完整系统。全部示例源码与脚本位于 `book/examples/chapter-17/`，按阶段独立成目录、独立可编译；本章正文讲解的每一段代码都与该目录下的源文件一一对应，文中标注了每个代码块的出处文件。
+> 本章规划的独立示例已全部落地到 [`book/examples/chapter-17/`](../examples/chapter-17/)，
+> 每个阶段独立成目录、独立可编译，含 BPF 源码、用户态 loader/控制面、Makefile 与 README
+> （运行说明与验证状态）；编译级验证已在编写环境全量通过（`scripts/verify-build.sh`，9/9 PASS），
+> 运行级验证需特权环境，状态标注见各 README 与 1.5 节。
+
+本章把一个“麻雀虽小，五脏俱全”的 eBPF 防火墙拆成五个渐进阶段完整实现：从最小的 XDP 丢包闭环，到报文解析与 ACL、连接跟踪、TC 上的 SNAT/DNAT，最终汇合成一套带 Go 控制面的完整系统。全部示例源码与脚本位于 `book/examples/chapter-17/`，按阶段独立成目录、独立可编译；本章正文讲解的每一段代码都与该目录下的源文件一一对应，文中标注了每个代码块的出处文件。目录总览：
+
+```text
+book/examples/chapter-17/
+  README.md            目录总览、统一构建模式、验证状态说明
+  00-env/              check-env.sh 环境自检（无 root 也能给出三档结论）
+  01-xdp-drop/         阶段 1：最小 XDP 丢弃
+  02-parse-acl/        阶段 2：报文解析 + ACL
+  03-conntrack/        阶段 3：连接跟踪
+  04-nat-tc/           阶段 4：TC NAT
+  05-firewall/         阶段 5：完整系统（bpf/ 数据面 + user/ Go 控制面）
+  scripts/             setup-veth.sh 拓扑、bench-*.sh 压测、verify-build.sh 编译级验证
+  exercises/           课后扩展任务 4 项参考实现（各含独立 README）
+```
 
 ## 学习目标
 
@@ -135,7 +153,7 @@ sudo bash book/examples/chapter-17/scripts/setup-veth.sh teardown  # 销毁
 
 | 子命令 | 作用 |
 |---|---|
-| `attach` | 加载两个 .o、同名 map 合并为同一实例并 pin 到 `/sys/fs/bpf/fw17`，挂载 XDP 与 TC |
+| `attach` | 加载两个 .o、同名映射合并为同一实例并 pin 到 `/sys/fs/bpf/fw17`，挂载 XDP 与 TC |
 | `detach` | 解除全部挂载并删除 pin 目录 |
 | `rule` | 精确五元组规则 add/del/list（`acl_rules`） |
 | `cidr` | 源网段规则 add（`acl_lpm`，最长前缀匹配；仅新增，删除留作练习） |
@@ -409,6 +427,8 @@ pass=0 drop=12
 3. **per-CPU 统计映射为什么要 loader 求和？**
    答案提示：每 CPU 一份独立副本，数据面只更新本 CPU 那份；用户态一次 lookup 读回全部副本的拼接，任何单份都不代表全机值。
 
+**独立示例**：[`book/examples/chapter-17/01-xdp-drop/`](../examples/chapter-17/01-xdp-drop/)（`xdp_drop.bpf.c` + `xdp_drop.c` + Makefile + README）。
+
 ## 四、阶段 2：报文解析与 ACL
 
 ### 教师视角引入：从“无脑丢”到“看懂再判”
@@ -634,7 +654,7 @@ total=512 pass=0 drop_acl=512 drop_parse=0
 total=1337 pass=0 drop_acl=1337 drop_parse=0
 ```
 
-怎么读：客户端 10.0.0.2 属于 10.0.0.0/24，每个 IPv4/TCP 报文命中网段规则被丢弃，`total` 与 `drop_acl` 同步递增，iperf3 无法建立连接、吞吐为 0。若不下发任何规则（只写 `-i`），`total` 与 `pass` 同步递增——这正是查找路径第 3 步的默认放行。一个高频困惑：`--rule` 是六个字段**全等**的精确匹配，而 iperf3 客户端的源端口默认随机，规则可能永远不命中——用 `ss -tn` 在防火墙命名空间查真实五元组再按实下发，或改用 `--cidr`。
+怎么读：客户端 10.0.0.2 属于 10.0.0.0/24，每个 IPv4/TCP 报文命中网段规则被丢弃，`total` 与 `drop_acl` 同步递增（统计跨刷新累计、不清零——`total` 从 512 跳到 1337 是客户端多轮建流尝试累计的结果），iperf3 无法建立连接、吞吐为 0。若不下发任何规则（只写 `-i`），`total` 与 `pass` 同步递增——这正是查找路径第 3 步的默认放行。一个高频困惑：`--rule` 是六个字段**全等**的精确匹配，而 iperf3 客户端的源端口默认随机，规则可能永远不命中——用 `ss -tn` 在防火墙命名空间查真实五元组再按实下发，或改用 `--cidr`。
 
 ### 检查点：自测三问
 
@@ -644,6 +664,8 @@ total=1337 pass=0 drop_acl=1337 drop_parse=0
    答案提示：IPv4 头长的单位是 4 字节；`l4` 是新指针，旧指针的定界证据不随指针算术自动转移，越界与否必须重新比较。
 3. **hash 精确五元组为什么做不到“匹配任意源端口”？**
    答案提示：hash 是 key 全等匹配，`flow_key` 里没有掩码或通配语义；端口填 0 也只是“匹配端口为 0 的报文”。通配要么展开成多条精确规则，要么换数据结构。
+
+**独立示例**：[`book/examples/chapter-17/02-parse-acl/`](../examples/chapter-17/02-parse-acl/)（`acl.bpf.c` + `acl.c` + `fw_common.h` + Makefile + README）。
 
 ## 五、阶段 3：连接跟踪
 
@@ -706,7 +728,7 @@ static __always_inline void fill_ct_key(struct ct_key *k, const struct flow_key 
 dump 出的条目因此是“归一化到首包方向”的。
 ```
 
-`parse_flow` 相对阶段 2 只增加一个出参 `tcp_flags`（仅 TCP 有效；UDP 分支置 0，失败路径不写、调用方已预初始化），TCP 标志位从位域成员打包为 4 bit：
+`parse_flow` 相对阶段 2 只增加一个出参 `tcp_flags`（仅 TCP 有效；UDP 分支置 0，失败路径不写、调用方已预初始化）——以下为 `book/examples/chapter-17/03-conntrack/conntrack.bpf.c` 节选，TCP 标志位从位域成员打包为 4 bit：
 
 ```c
         *tcp_flags = (tcp->fin ? TCP_FLAG_FIN : 0) | (tcp->syn ? TCP_FLAG_SYN : 0)
@@ -868,6 +890,8 @@ total=1889 pass=1889 drop_acl=0 drop_parse=0 ct_new=1 ct_established=0 ct_full=0
    答案提示：不会。满表时内核静默淘汰最久未用项、插入仍成功；`ct_full` 只在同 key 并发登记竞争（`-EEXIST`）或分配失败（`-ENOMEM`）时递增。
 3. **`idle` 字段为什么必须用 `CLOCK_MONOTONIC` 计算？**
    答案提示：`last_seen_ns` 来自单调时钟 `bpf_ktime_get_ns()`；用墙钟相减会因校时/时区变化得到巨大或负值。
+
+**独立示例**：[`book/examples/chapter-17/03-conntrack/`](../examples/chapter-17/03-conntrack/)（`conntrack.bpf.c` + `conntrack.c` + `fw_common.h` + Makefile + README）。
 
 ## 六、阶段 4：TC 与 NAT、校验和
 
@@ -1072,6 +1096,8 @@ IP 10.0.2.2.8080 > 10.0.2.1.41322: Flags [S.], seq 0, ...   # 回程：目的 = 
 3. **UDP 校验和为 0 的报文为什么要跳过校验和改写？**
    答案提示：0 是“发送方未计算校验和”的线缆约定（真实零以 0xFFFF 发送）；对 0 值调用辅助函数会把哨兵改成非 0，接收方误判为校验和错误而丢包。
 
+**独立示例**：[`book/examples/chapter-17/04-nat-tc/`](../examples/chapter-17/04-nat-tc/)（`nat.bpf.c` + `nat.c` + `fw_common.h` + Makefile + README）。
+
 ## 七、阶段 5：完整系统与 Go 控制面
 
 ### 教师视角引入：合并与收口
@@ -1141,7 +1167,7 @@ struct {
         }
 ```
 
-（节选到慢路径的 ACL 拒绝分支为止；ACL 放行后是阶段 3 的刷新与状态迁移——源码注释原文为“先 CT_NEW->ESTABLISHED 转移、再 RST/FIN 覆盖，顺序与阶段 3 一致”——随后 `bump(STAT_PASS); return XDP_PASS;` 收尾，完整函数见示例目录。）关键是未命中路径——同样先 ACL，登记必须发生在策略放行之后：
+（节选到慢路径的 ACL 拒绝分支为止；ACL 放行后是阶段 3 的刷新与状态迁移——源码注释原文为“先 CT_NEW->ESTABLISHED 转移、再 RST/FIN 覆盖，顺序与阶段 3 一致”——随后 `bump(STAT_PASS); return XDP_PASS;` 收尾，完整函数见 `book/examples/chapter-17/05-firewall/bpf/fw_xdp.bpf.c`。）关键是未命中路径——同样先 ACL，登记必须发生在策略放行之后：
 
 ```c
     /* 未命中：同样先 ACL——首包若被策略拒绝，连接不登记、不建立快路径。
@@ -1162,7 +1188,7 @@ struct {
 
 | 子命令 | 作用 | 操作对象 |
 |---|---|---|
-| `attach` | 加载两个 .o（同名 map 合并为同一实例）、挂 XDP 与 TC、pin 全部对象 | 5 张映射 + 3 程序 + 1 link |
+| `attach` | 加载两个 .o（同名映射合并为同一实例）、挂 XDP 与 TC、pin 全部对象 | 5 张映射 + 3 程序 + 1 link |
 | `detach` | 解除 XDP link 与 TC filter，清理 pin 目录 | 同上 |
 | `rule add/del/list` | 精确五元组规则 | `acl_rules` |
 | `cidr add` | 源地址网段规则 | `acl_lpm` |
@@ -1285,6 +1311,8 @@ nat             37468
    答案提示：pin 到 bpffs 的 5 张映射、3 个程序、1 个 link 都在，挂载由 pinned link 与 TC filter 维持；清理责任在 `fwctl detach`。
 3. **`rule add` 的“原子更新”指什么？为什么不清空重建？**
    答案提示：指逐 key 操作语义——先冲突检查再 `Put`，单 key 写入本身原子；清空重建会产生“规则表为空”的中间态，等于瞬时全放行或全阻断。
+
+**独立示例**：[`book/examples/chapter-17/05-firewall/`](../examples/chapter-17/05-firewall/)（`bpf/` 数据面 + `user/` Go 控制面 + Makefile + README）。
 
 ## 八、压测与结果解读
 
@@ -1455,16 +1483,16 @@ nat_map 精确查找 ──未命中──► 通配二次查找（清零非 NAT
 
 ## 课后扩展任务
 
-本章配套四项课后扩展任务，覆盖数据面与控制面两个扩展维度，按难度由浅入深编号，每项对应 `book/examples/chapter-17/exercises/` 下的一个独立目录（任务编号即目录编号）：
+本章配套四项课后扩展任务，覆盖数据面与控制面两个扩展维度，按难度由浅入深编号，每项对应 [`book/examples/chapter-17/exercises/`](../examples/chapter-17/exercises/) 下的一个独立目录（任务编号即目录编号，总览见其 [README](../examples/chapter-17/exercises/README.md)）：
 
 | 任务 | 扩展维度 | 任务描述 | 参考实现 |
 |---|---|---|---|
-| 1 | 数据面 | IPv6 ACL 支持：解析分支 + map key 扩展 | `book/examples/chapter-17/exercises/01-ipv6-acl/` |
-| 2 | 控制面 | 规则持久化与重启恢复：保存/加载/原子替换 | `book/examples/chapter-17/exercises/02-rule-persistence/` |
-| 3 | 控制面 | Prometheus 指标导出：per-CPU 聚合 + /metrics | `book/examples/chapter-17/exercises/03-prometheus-export/` |
-| 4 | 数据面 | 按端口限速：令牌桶 map + 超额动作 | `book/examples/chapter-17/exercises/04-port-rate-limit/` |
+| 1 | 数据面 | IPv6 ACL 支持：解析分支 + map key 扩展 | [`book/examples/chapter-17/exercises/01-ipv6-acl/`](../examples/chapter-17/exercises/01-ipv6-acl/) |
+| 2 | 控制面 | 规则持久化与重启恢复：保存/加载/原子替换 | [`book/examples/chapter-17/exercises/02-rule-persistence/`](../examples/chapter-17/exercises/02-rule-persistence/) |
+| 3 | 控制面 | Prometheus 指标导出：per-CPU 聚合 + /metrics | [`book/examples/chapter-17/exercises/03-prometheus-export/`](../examples/chapter-17/exercises/03-prometheus-export/) |
+| 4 | 数据面 | 按端口限速：令牌桶 map + 超额动作 | [`book/examples/chapter-17/exercises/04-port-rate-limit/`](../examples/chapter-17/exercises/04-port-rate-limit/) |
 
-**防剧透约定**：每项课后扩展任务的 README 均按「任务在前、参考实现思路独立成节放在后部」的结构组织——先只读任务描述与提示、自行实现，再对照参考实现；各练习复用本章主示例的构建体系（Makefile 同构）。验证状态：四项参考实现当前均为「编译级待验证、运行级待验证」，练习目录落地后按 1.5 节三档约定逐项复标（练习 3 含 Go 依赖，离线环境另按「依赖待拉取，编译级待验证」标注）。
+**防剧透约定**：每项课后扩展任务的 README 均按「任务在前、参考实现思路独立成节放在后部」的结构组织——先只读任务描述与提示、自行实现，再对照参考实现；各练习复用本章主示例的构建体系（Makefile 同构）。验证状态：四项参考实现已按 1.5 节三档约定逐项复标为「编译级已验证（本机，`verify-build.sh` 全量通过）」；运行级待验证——编写环境为非 root（`unprivileged_bpf_disabled=2`），未执行加载与运行，各 README「预期输出」均为教学示例（练习 3 含 Go 依赖，离线环境另按「依赖待拉取，编译级待验证」标注）。
 
 ## 总结
 

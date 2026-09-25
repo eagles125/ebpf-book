@@ -43,5 +43,9 @@ vmlinux.h（bpftool 由 /sys/kernel/btf/vmlinux 生成） -> *.bpf.o（clang -ta
 
 - **编译验证**：已在编写环境（x86_64、内核 7.0、clang 18、bpftool 7.7、libbpf 1.3、Go 1.27.1）
   通过 `scripts/verify-build.sh` 全量编译（结果见各 README 验证状态区）。
+- **最近一次全量验证**：2026-09-25 运行 `bash scripts/verify-build.sh`
+  （clang 18.1.3 / bpftool v7.7.0 / Go 1.27.1，逐阶段 `make clean all`）：
+  **PASS=9（5 阶段 + 4 练习）、WARN=0、FAIL=0，退出码 0**；
+  Go 依赖已在本地模块缓存，未出现网络拉取 WARN。
 - **待运行验证**：加载/挂载/NAT/压测需要特权内核环境；编写环境为非 root
   （`unprivileged_bpf_disabled=2`），各 README 中「预期输出」均为教学示例。
