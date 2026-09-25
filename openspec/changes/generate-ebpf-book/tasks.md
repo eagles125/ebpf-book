@@ -77,49 +77,49 @@
 
 ### 5.1.0 Teaching Spec in STYLE.md
 
-- [ ] Update `book/STYLE.md` with the teaching template: five-layer environment narrative (dependency, build, deploy, run, effects), core-code principle-annotation rules, teacher-student dual-perspective sections, and the post-chapter exercise convention (`book/examples/<chapter>/exercises/` with reference implementations and verification status).
+- [x] Update `book/STYLE.md` with the teaching template: five-layer environment narrative (dependency, build, deploy, run, effects), core-code principle-annotation rules, teacher-student dual-perspective sections, and the post-chapter exercise convention (`book/examples/<chapter>/exercises/` with reference implementations and verification status).
 
 ### 5.1.1 Five-Layer Environment Narrative
 
-- [ ] 阐述依赖环境：内核版本与 BTF 要求、root/`CAP_BPF`/`CAP_NET_ADMIN` 权限、veth 与网络命名空间前置条件、依赖工具清单与检查方法。
-- [ ] 阐述编译环境：clang/LLVM、libbpf 头文件、Go 工具链与 cilium/ebpf 库的版本要求、安装与验证命令。
-- [ ] 阐述部署环境：ns-client/ns-fw/ns-server veth 实验拓扑设计、脚本化搭建与销毁步骤、安全警告（避免在物理网卡误挂 XDP）。
-- [ ] 阐述运行环境：XDP/TC 挂载与卸载方式、fwctl 控制面启动流程、规则与 NAT 下发步骤。
-- [ ] 阐述运行效果：每个关键阶段的预期输出、tcpdump 抓包对比、stats 与 conntrack 查询结果示例。
+- [x] 阐述依赖环境：内核版本与 BTF 要求、root/`CAP_BPF`/`CAP_NET_ADMIN` 权限、veth 与网络命名空间前置条件、依赖工具清单与检查方法。
+- [x] 阐述编译环境：clang/LLVM、libbpf 头文件、Go 工具链与 cilium/ebpf 库的版本要求、安装与验证命令。
+- [x] 阐述部署环境：ns-client/ns-fw/ns-server veth 实验拓扑设计、脚本化搭建与销毁步骤、安全警告（避免在物理网卡误挂 XDP）。
+- [x] 阐述运行环境：XDP/TC 挂载与卸载方式、fwctl 控制面启动流程、规则与 NAT 下发步骤。
+- [x] 阐述运行效果：每个关键阶段的预期输出、tcpdump 抓包对比、stats 与 conntrack 查询结果示例。
 
 ### 5.1.2 Standalone Example Assets with Annotated Code (Progressive Stages)
 
-- [ ] Generate chapter-level `book/examples/chapter-17/README.md` with the stage table (stage, datapath focus, learning outcome, attach point, output mechanism), learning path, safety warnings, and verification-status conventions.
-- [ ] Generate `book/examples/chapter-17/00-env/check-env.sh` with graded environment diagnostics (kernel/BTF, toolchain, privileges) that runs and reports meaningfully without root.
-- [ ] Generate `book/examples/chapter-17/01-xdp-drop/` with `xdp_drop.bpf.c`, C loader, Makefile, and README, with Chinese comments explaining XDP attach point, action return values, and the minimal load-verify-JIT-attach loop.
-- [ ] Generate `book/examples/chapter-17/02-parse-acl/` with staged `fw_common.h`, `acl.bpf.c` (Ethernet/IPv4/TCP/UDP parsing + hash-map exact rules + LPM-trie CIDR blacklist/whitelist), rule-provisioning loader, Makefile, and README, with Chinese comments explaining parser bounds checks, five-tuple normalization, and map design.
-- [ ] Generate `book/examples/chapter-17/03-conntrack/` with extended `fw_common.h`, `conntrack.bpf.c` (forward/reverse keys, state machine, LRU cap), dump-capable loader, Makefile, and README, with Chinese comments explaining state transitions and map capacity pitfalls.
-- [ ] Generate `book/examples/chapter-17/04-nat-tc/` with extended `fw_common.h`, `nat.bpf.c` (TC clsact, SNAT/DNAT rewrite, incremental checksum), NAT-provisioning loader, Makefile, and README, with Chinese comments explaining rewrite order and checksum algorithms.
-- [ ] Generate `book/examples/chapter-17/05-firewall/` complete system: `bpf/fw_common.h` (full union of stages 2-4), `bpf/fw_xdp.bpf.c`, `bpf/fw_tc.bpf.c`, `user/` Go control plane (go.mod with pinned cilium/ebpf, main/rules/maps/stats), combined Makefile, and README, with Chinese comments throughout.
-- [ ] Generate `book/examples/chapter-17/scripts/` with `setup-veth.sh` (topology setup/teardown + safety warnings), `bench-iperf.sh`, `bench-pktgen.sh`, and `verify-build.sh` (top-level compile-level verification across all stages and exercises).
+- [x] Generate chapter-level `book/examples/chapter-17/README.md` with the stage table (stage, datapath focus, learning outcome, attach point, output mechanism), learning path, safety warnings, and verification-status conventions.
+- [x] Generate `book/examples/chapter-17/00-env/check-env.sh` with graded environment diagnostics (kernel/BTF, toolchain, privileges) that runs and reports meaningfully without root.
+- [x] Generate `book/examples/chapter-17/01-xdp-drop/` with `xdp_drop.bpf.c`, C loader, Makefile, and README, with Chinese comments explaining XDP attach point, action return values, and the minimal load-verify-JIT-attach loop.
+- [x] Generate `book/examples/chapter-17/02-parse-acl/` with staged `fw_common.h`, `acl.bpf.c` (Ethernet/IPv4/TCP/UDP parsing + hash-map exact rules + LPM-trie CIDR blacklist/whitelist), rule-provisioning loader, Makefile, and README, with Chinese comments explaining parser bounds checks, five-tuple normalization, and map design.
+- [x] Generate `book/examples/chapter-17/03-conntrack/` with extended `fw_common.h`, `conntrack.bpf.c` (forward/reverse keys, state machine, LRU cap), dump-capable loader, Makefile, and README, with Chinese comments explaining state transitions and map capacity pitfalls.
+- [x] Generate `book/examples/chapter-17/04-nat-tc/` with extended `fw_common.h`, `nat.bpf.c` (TC clsact, SNAT/DNAT rewrite, incremental checksum), NAT-provisioning loader, Makefile, and README, with Chinese comments explaining rewrite order and checksum algorithms.
+- [x] Generate `book/examples/chapter-17/05-firewall/` complete system: `bpf/fw_common.h` (full union of stages 2-4), `bpf/fw_xdp.bpf.c`, `bpf/fw_tc.bpf.c`, `user/` Go control plane (go.mod with pinned cilium/ebpf, main/rules/maps/stats), combined Makefile, and README, with Chinese comments throughout.
+- [x] Generate `book/examples/chapter-17/scripts/` with `setup-veth.sh` (topology setup/teardown + safety warnings), `bench-iperf.sh`, `bench-pktgen.sh`, and `verify-build.sh` (top-level compile-level verification across all stages and exercises).
 
 ### 5.1.3 Upgrade Chapter Prose into a Complete Teaching Chapter
 
-- [ ] 重写第 17 章正文：按五层环境阐述组织开篇，按五个渐进阶段推进叙事（每阶段四段式：教师视角引入→核心代码原理讲解→学生动手→检查点自测），将骨架式"计划/建议"表述替换为基于已落地实现的陈述式讲解。
-- [ ] 为报文解析与 verifier 边界检查写逐段原理讲解：为什么每次访问前必须 `data + offset <= data_end`，verifier 如何推理路径安全。
-- [ ] 为 ACL 匹配（阶段 2：hash 精确五元组 + LPM CIDR 黑白名单）写原理讲解与查找路径可视化。
-- [ ] 为 conntrack 状态机与 LRU 回收（阶段 3）写原理讲解：正反向 key、状态迁移、超时策略、数据面/控制面分工。
-- [ ] 为 SNAT/DNAT 与校验和增量更新（阶段 4）写原理讲解：NAT 映射表设计、改写顺序、checksum 增量算法。
-- [ ] 为 Go 控制面（阶段 5）写原理讲解：cilium/ebpf 加载、map pin、原子更新、CLI 命令实现。
-- [ ] 为压测写结果解读讲解：iperf/pktgen 命令、指标口径、常见失败模式与定位方法。
+- [x] 重写第 17 章正文：按五层环境阐述组织开篇，按五个渐进阶段推进叙事（每阶段四段式：教师视角引入→核心代码原理讲解→学生动手→检查点自测），将骨架式"计划/建议"表述替换为基于已落地实现的陈述式讲解。
+- [x] 为报文解析与 verifier 边界检查写逐段原理讲解：为什么每次访问前必须 `data + offset <= data_end`，verifier 如何推理路径安全。
+- [x] 为 ACL 匹配（阶段 2：hash 精确五元组 + LPM CIDR 黑白名单）写原理讲解与查找路径可视化。
+- [x] 为 conntrack 状态机与 LRU 回收（阶段 3）写原理讲解：正反向 key、状态迁移、超时策略、数据面/控制面分工。
+- [x] 为 SNAT/DNAT 与校验和增量更新（阶段 4）写原理讲解：NAT 映射表设计、改写顺序、checksum 增量算法。
+- [x] 为 Go 控制面（阶段 5）写原理讲解：cilium/ebpf 加载、map pin、原子更新、CLI 命令实现。
+- [x] 为压测写结果解读讲解：iperf/pktgen 命令、指标口径、常见失败模式与定位方法。
 
 ### 5.1.4 Teacher-Student Dual Perspective and Post-Chapter Exercises
 
-- [ ] 每个主要小节增加教师视角内容：讲解顺序设计、类比、常见误区与"读者容易在哪里卡住"的提醒。
-- [ ] 每个主要小节增加学生视角内容：动手实践清单、阶段性检查点、自测问题与答案提示。
-- [ ] 设计章末课后扩展任务（已定 4 项：IPv6 ACL 支持、规则持久化与重启恢复、Prometheus 指标导出、按端口限速）。
-- [ ] 为每项课后任务提供完整可编译的参考实现与实现思路说明，存放于 `book/examples/chapter-17/exercises/<nn>-<name>/`，练习 README 采用防剧透结构（任务与提示在前、参考实现思路独立成节），并标注验证状态。
+- [x] 每个主要小节增加教师视角内容：讲解顺序设计、类比、常见误区与"读者容易在哪里卡住"的提醒。
+- [x] 每个主要小节增加学生视角内容：动手实践清单、阶段性检查点、自测问题与答案提示。
+- [x] 设计章末课后扩展任务（已定 4 项：IPv6 ACL 支持、规则持久化与重启恢复、Prometheus 指标导出、按端口限速）。
+- [x] 为每项课后任务提供完整可编译的参考实现与实现思路说明，存放于 `book/examples/chapter-17/exercises/<nn>-<name>/`，练习 README 采用防剧透结构（任务与提示在前、参考实现思路独立成节），并标注验证状态。
 
 ### 5.1.5 Cross-Linking, Verification, and Review
 
-- [ ] Cross-link Chapter 17 prose to the standalone `book/examples/chapter-17/` stage directories and exercise assets after they are generated.
-- [ ] Run `book/examples/chapter-17/scripts/verify-build.sh` compile-level verification locally (all stages + exercises); fix any compile failures. Verify load/runtime behavior in a privileged Linux eBPF environment or mark each component with explicit verification status and reason.
-- [ ] Main-agent review: audit Chapter 17 against the teaching completeness requirement (five-layer environments, core-code annotations, dual perspective, exercises with reference implementations).
+- [x] Cross-link Chapter 17 prose to the standalone `book/examples/chapter-17/` stage directories and exercise assets after they are generated.
+- [x] Run `book/examples/chapter-17/scripts/verify-build.sh` compile-level verification locally (all stages + exercises); fix any compile failures. Verify load/runtime behavior in a privileged Linux eBPF environment or mark each component with explicit verification status and reason.
+- [x] Main-agent review: audit Chapter 17 against the teaching completeness requirement (five-layer environments, core-code annotations, dual perspective, exercises with reference implementations).
 
 ## 6. First-Batch Verification
 
@@ -334,11 +334,11 @@
 ### Chapter 17: High-Performance eBPF Firewall
 
 - [x] Write deep architecture skeleton for datapath/control-plane split, XDP/TC choice, conntrack, ACL, NAT, checksum, control plane, and benchmarks.
-- [ ] Upgrade Chapter 17 into a complete teaching chapter per Section 5.1: five-layer environment narrative, principle-annotated core code walkthroughs, teacher-student dual perspective, and post-chapter exercises with reference implementations.
-- [ ] Generate standalone Chapter 17 firewall assets listed in Section 5.1.
-- [ ] Verify firewall examples in isolated privileged network lab or mark each component with explicit verification status.
-- [ ] Cross-link Chapter 17 prose to standalone firewall files.
-- [ ] Main-agent review for safety warnings, NAT/checksum accuracy, and benchmark interpretation.
+- [x] Upgrade Chapter 17 into a complete teaching chapter per Section 5.1: five-layer environment narrative, principle-annotated core code walkthroughs, teacher-student dual perspective, and post-chapter exercises with reference implementations.
+- [x] Generate standalone Chapter 17 firewall assets listed in Section 5.1.
+- [x] Verify firewall examples in isolated privileged network lab or mark each component with explicit verification status.
+- [x] Cross-link Chapter 17 prose to standalone firewall files.
+- [x] Main-agent review for safety warnings, NAT/checksum accuracy, and benchmark interpretation.
 
 ### Chapter 18: Cilium eBPF Networking
 
