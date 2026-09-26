@@ -18,3 +18,4 @@ book/examples/chapter-17/exercises/01-ipv6-acl/acl
 book/examples/chapter-17/exercises/04-port-rate-limit/ratelimit
 book/examples/chapter-17/exercises/02-rule-persistence/fwctl
 book/examples/chapter-17/exercises/03-prometheus-export/fwctl
+book/examples/chapter-02/01-trace-stat/trace_stat
