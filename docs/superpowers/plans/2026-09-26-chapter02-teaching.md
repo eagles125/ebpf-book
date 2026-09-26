@@ -145,7 +145,6 @@ struct sched_event {
 
 ### Task 1: 章级 README、00-env 环境自检与 .gitignore 追加
 - [x] Task 1: 章级 README、00-env 环境自检与 .gitignore 追加
-- [ ] Task 1: 章级 README、00-env 环境自检与 .gitignore 追加
 
 **tasks.md 条目**：「Create standalone Chapter 2 examples under `book/examples/chapter-02/` if runnable code is included.」（章级资产部分）
 
