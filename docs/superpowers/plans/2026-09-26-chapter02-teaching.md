@@ -250,7 +250,7 @@ git commit -m "feat(ch02): 章级 README 与 00-env 分级环境自检"
 
 ### Task 2: 01-trace-stat 集成示例（trace_stat.bpf.c + trace_stat.c + Makefile + README）
 
-- [ ] Task 2: 01-trace-stat 集成示例（trace_stat.bpf.c + trace_stat.c + Makefile + README）
+- [x] Task 2: 01-trace-stat 集成示例（trace_stat.bpf.c + trace_stat.c + Makefile + README）
 
 **tasks.md 条目**：「Include an integrated example showing a simple tracing program with map interaction.」＋「Create standalone Chapter 2 examples under `book/examples/chapter-02/` if runnable code is included.」（01-trace-stat 部分）
 
@@ -264,7 +264,7 @@ git commit -m "feat(ch02): 章级 README 与 00-env 分级环境自检"
 - Consumes: C1（map/结构/SEC/统计口径）、C4（Makefile 替换表 `<名>=trace_stat`）、C5（README 十段）、C6（验证状态）。
 - Produces: 正文 Task 5「五、实战」逐段讲解的唯一代码对象；verify-build.sh 的第一编译项。
 
-- [ ] **Step 1: 创建 `trace_stat.bpf.c`**（逐字如下，~60 行）
+- [x] **Step 1: 创建 `trace_stat.bpf.c`**（逐字如下，~60 行）
 
 ```c
 // SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause
@@ -316,7 +316,7 @@ int trace_stat(struct trace_event_raw_sched_switch *ctx)
 char LICENSE[] SEC("license") = "GPL";
 ```
 
-- [ ] **Step 2: 创建 `trace_stat.c`**（逐字如下；`struct cpu_stat`/`MAX_CPUS` 为 loader 侧重新定义，见 C1）
+- [x] **Step 2: 创建 `trace_stat.c`**（逐字如下；`struct cpu_stat`/`MAX_CPUS` 为 loader 侧重新定义，见 C1）
 
 ```c
 // SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause
@@ -400,14 +400,14 @@ int main(void)
 }
 ```
 
-- [ ] **Step 3: 创建 `Makefile`** —— 使用共享契约 C4 模板，替换 `<名>=trace_stat`、目标 `trace_stat`；`.bpf.o` 依赖仅 `trace_stat.bpf.c vmlinux.h`。
+- [x] **Step 3: 创建 `Makefile`** —— 使用共享契约 C4 模板，替换 `<名>=trace_stat`、目标 `trace_stat`；`.bpf.o` 依赖仅 `trace_stat.bpf.c vmlinux.h`。
 
-- [ ] **Step 4: 编译验证（本机真实执行，硬性）**
+- [x] **Step 4: 编译验证（本机真实执行，硬性）**
 
 Run: `make -C book/examples/chapter-02/01-trace-stat`
 Expected: 退出码 0，生成 `trace_stat`；`clang -target bpf` 与 `bpftool gen skeleton` 无 error（vmlinux.h 的 `-Wmissing-declarations` warning 属正常）。失败即设计缺陷：修代码后重跑，直至通过。
 
-- [ ] **Step 5: 创建 `README.md`** —— 按 C5 十段结构。关键口径：
+- [x] **Step 5: 创建 `README.md`** —— 按 C5 十段结构。关键口径：
   - 演示目标：第一个「加载→verifier→JIT→挂载→触发→读回」的 map 交互闭环；八要素各对应代码哪一处。
   - 文件说明表：`trace_stat.bpf.c` / `trace_stat.c` / `Makefile`。
   - 环境前提：指向 `../00-env/check-env.sh` 三档结论。
@@ -427,7 +427,7 @@ total=2221
   - 验证状态：按 C6。
   - 参考来源：内核文档 BPF/tracepoint、libbpf-bootstrap、`bpf_helpers.h`。
 
-- [ ] **Step 6: 提交**
+- [x] **Step 6: 提交**
 
 ```bash
 git add book/examples/chapter-02/01-trace-stat/
