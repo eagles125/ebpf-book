@@ -8,11 +8,11 @@ subagent_dispatch: confirmed
 tdd_mode: direct
 review_mode: thorough
 isolation: current
-verify_mode: null
+verify_mode: full
 auto_transition: true
 base_ref: 654595ee2787ff15dd5981f534b690ba269f9a01
-design_doc: docs/superpowers/specs/2026-09-20-chapter17-teaching-design.md
-plan: docs/superpowers/plans/2026-09-22-chapter17-teaching.md
+design_doc: docs/superpowers/specs/2026-09-26-chapter02-teaching-design.md
+plan: docs/superpowers/plans/2026-09-26-chapter02-teaching.md
 verify_result: pending
 verify_failures: 0
 verification_report: null
