@@ -483,7 +483,7 @@ git commit -m "docs(ch02): 学习目标/导读/架构总览/指令集基础"
 
 ### Task 4: 正文「三、映射类型全景」+「四、bpf() 系统调用与内核实现分析」
 
-- [ ] Task 4: 正文「三、映射类型全景」+「四、bpf() 系统调用与内核实现分析」
+- [x] Task 4: 正文「三、映射类型全景」+「四、bpf() 系统调用与内核实现分析」
 
 **tasks.md 条目**：「Explain map types including hash, array, LRU hash, per-CPU maps, perf event array, ring buffer, LPM trie, and sockmap where relevant.」＋「Add kernel implementation analysis for `bpf()` syscall object creation, fd ownership, reference counting, and pinning.」
 
@@ -494,7 +494,7 @@ git commit -m "docs(ch02): 学习目标/导读/架构总览/指令集基础"
 - Consumes: C7 标题；Task 3 成稿；1.7 事件通道演进线（3.5/3.6 两 card 呼应）；第 17 章（LPM）/第 19 章（sockmap）交叉引用；第 3 章（verifier）与第 5 章（子系统源码结构）交叉引用。
 - Produces: 3.9 选型决策表（正文 5.2 与排错节引用）；四节的 fd/引用计数/pin 结论（可视化节对象关系图与检查点引用）。
 
-- [ ] **Step 1: 写「三、映射类型全景」（6–8k）**——每类一个 card（`### 3.1`–`### 3.8`），每个 card 固定四要素：**语义 / 典型场景 / 容量与并发特征 / 选型理由**：
+- [x] **Step 1: 写「三、映射类型全景」（6–8k）**——每类一个 card（`### 3.1`–`### 3.8`），每个 card 固定四要素：**语义 / 典型场景 / 容量与并发特征 / 选型理由**：
   - 3.1 hash（`BPF_MAP_TYPE_HASH`）：全等 key O(1)；精确规则/流表；`max_entries` 固定、满则插入失败（与 3.3 LRU 对比伏笔）。
   - 3.2 array（`BPF_MAP_TYPE_ARRAY`）：下标 key、预分配、不可删除元素；统计下标/配置表；per-CPU 读回聚合语义预告（3.4）。
   - 3.3 LRU hash（`BPF_MAP_TYPE_LRU_HASH`）：满表**静默淘汰最久未用**、插入仍成功；观测上表现为「旧表项消失」；口径与第 17 章阶段 3 一致（交叉引用）。
@@ -504,18 +504,18 @@ git commit -m "docs(ch02): 学习目标/导读/架构总览/指令集基础"
   - 3.7 LPM trie：最长前缀匹配；`BPF_F_NO_PREALLOC` 必需；**机制细节指向第 17 章**（交叉引用，不抢戏）。
   - 3.8 sockmap：socket 域映射与消息重定向加速；**机制细节指向第 19 章**（交叉引用）；本节只给「它是什么、何时想到它」。
   - 3.9 选型决策表与 bpftool 观察（`### 3.9`）：决策表（需求→推荐类型→理由，至少覆盖：精确查找/统计计数/容量受限字典/事件流/前缀匹配/socket 加速）；`bpftool map show` / `map dump` 观察法（预期输出示例 + 运行级待验证标注）；**教师视角**段（选型误用是最常见事故源，指向排错节）+ **学生动手**段（对 8 类各写一句「若用错类型会怎样」）+ 检查点（3 问 + 提示）。
-- [ ] **Step 2: 写「四、bpf() 系统调用与内核实现分析」（5–6k）**——小节锚点 `### 4.1`–`### 4.5`；纯讲解 + 内核路径引用，不要求内核源码级调试环境；对随版本演进的函数名用保守措辞（「以具体内核版本源码为准」）：
+- [x] **Step 2: 写「四、bpf() 系统调用与内核实现分析」（5–6k）**——小节锚点 `### 4.1`–`### 4.5`；纯讲解 + 内核路径引用，不要求内核源码级调试环境；对随版本演进的函数名用保守措辞（「以具体内核版本源码为准」）：
   - 4.1 `bpf(2)` 入口与命令集概览：`include/uapi/linux/bpf.h` 的 `enum bpf_cmd`（BPF_MAP_CREATE/BPF_OBJ_PIN/BPF_OBJ_GET/BPF_PROG_LOAD/BPF_PROG_ATTACH…）；`union bpf_attr` 按命令复用；`kernel/bpf/syscall.c` 是全部命令的入口（交叉引用第 5 章）。
   - 4.2 BPF_MAP_CREATE：`kernel/bpf/syscall.c` 中 map 创建路径概览（参数校验→按 `map_type` 找到注册的 `bpf_map_ops`→分配对象→绑定 fd）；fd 所有权语义：fd 从进程视角持有对象，`struct file` 关联 `bpf_map`。
   - 4.3 BPF_PROG_LOAD：加载路径概览（license 检查→**verifier**（指向第 3 章）→JIT（架构相关，保守措辞）→`bpf_prog` 对象与 fd）；`trace_stat` 的加载即走此路径（回指）。
   - 4.4 引用计数与生命周期钩子：`bpf_map`/`bpf_prog` 的原子引用计数；`bpf_map_put`/`bpf_prog_put` 在 fd 关闭、进程退出、最后一个引用释放时触发对象回收；attach 后 link/prog/map 的引用链（谁持有谁）；呼应 01-trace-stat「Ctrl-C 退出即卸载」。
   - 4.5 pin 与 bpffs：`BPF_OBJ_PIN`/`BPF_OBJ_GET`；pin 在 bpffs（`/sys/fs/bpf`）上创建持久引用，对象跨越进程生命周期存活；对照 01-trace-stat（不 pin，随进程消失）与第 17 章阶段 5（pin map/prog/link，Go 控制面跨进程接管）两种形态；**学生动手**段（画出 trace_stat 进程退出前后的对象引用变化）+ 检查点（3 问 + 提示，含「为什么 close(fd) 不一定立刻释放对象」）。
-- [ ] **Step 3: 核对（硬性）**
+- [x] **Step 3: 核对（硬性）**
 
 Run: `grep -c "^### 3\." book/chapters/02-ebpf-architecture-and-core-concepts.md && grep -c "^### 4\." book/chapters/02-ebpf-architecture-and-core-concepts.md && wc -m book/chapters/02-ebpf-architecture-and-core-concepts.md`
 Expected: `9`、`5`；`wc -m ≥ 23000`（中段值参考）。
 
-- [ ] **Step 4: 提交**
+- [x] **Step 4: 提交**
 
 ```bash
 git add book/chapters/02-ebpf-architecture-and-core-concepts.md
