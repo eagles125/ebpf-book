@@ -438,7 +438,7 @@ git commit -m "feat(ch02): 01-trace-stat 集成示例（BPF+loader+Makefile+READ
 
 ### Task 3: 正文「学习目标/本章导读/一、架构总览/二、指令集基础」
 
-- [ ] Task 3: 正文「学习目标/本章导读/一、架构总览/二、指令集基础」
+- [x] Task 3: 正文「学习目标/本章导读/一、架构总览/二、指令集基础」
 
 **tasks.md 条目**：「Write full chapter prose explaining programs, maps, helpers, program types, attach points, context objects, event channels, and lifecycle.」（前半：程序/映射/辅助函数/程序类型/挂载点/上下文对象六要素；事件通道与生命周期后半由 Task 5 承接）＋「Explain instruction-set basics: 64-bit RISC model, registers, calling convention, and instruction encoding.」（交叉要求拆分落地）
 
@@ -449,10 +449,10 @@ git commit -m "feat(ch02): 01-trace-stat 集成示例（BPF+loader+Makefile+READ
 - Consumes: C7（标题逐字固定）；第 1 章回指锚点（现状基线表）；附录 A 路径。
 - Produces: 章节文件与前四节成稿；「一」节中 1.7/1.8 两小节只写要素讲解，其与 01-trace-stat 的具体对照由 Task 5 的 5.2 回扣（本任务先写通识形态）。
 
-- [ ] **Step 1: 写「# 第 2 章」题头、「学习目标」「本章导读」（约 1–1.5k）**
+- [x] **Step 1: 写「# 第 2 章」题头、「学习目标」「本章导读」（约 1–1.5k）**
   - 学习目标：成果导向 6–8 条（能说出八要素及其协作；能手工解码一条 `bpf_insn`；能按决策表为场景选 map 类型；能讲清 `bpf()` 对象的 fd 所有权/引用计数/pin 生命周期；能独立构建并解读 01-trace-stat 输出；能完成 2 项课后练习）。
   - 本章导读：承接第 1 章章末预告「第 2 章补齐指令集和 map」；学习路线图——先全景（一）→ 两个支柱（指令集二/映射三）→ 内核如何管理对象（四）→ 动手（五）→ 可视化/排错/课后练习；每段点明对应节号。
-- [ ] **Step 2: 写「一、eBPF 架构总览」（5–6k）**——小节锚点固定为 `### 1.1`–`### 1.9`：
+- [x] **Step 2: 写「一、eBPF 架构总览」（5–6k）**——小节锚点固定为 `### 1.1`–`### 1.9`：
   - 1.1 程序（program）：经 verifier 的受限 C 子集→字节码；**教师视角**段（类比：内核里的「外包脚手架」；误区：eBPF 不是内核模块）。
   - 1.2 映射（map）：内核态/用户态共享数据对象；第 1 章示例**没有 map**（用 `bpf_printk` 直出 trace_pipe）——明确「本章补上这块拼图」的承接点，预告 01-trace-stat 的 `sched_counts`。
   - 1.3 辅助函数（helper）：内核提供的受控能力面；`bpf_get_smp_processor_id`/`bpf_map_lookup_elem` 两例；helper 可用面由程序类型决定（为 1.4 伏笔）。
@@ -462,17 +462,17 @@ git commit -m "feat(ch02): 01-trace-stat 集成示例（BPF+loader+Makefile+READ
   - 1.7 事件通道（event channel）：演进线——`bpf_printk`→trace_pipe（第 1 章）→ 轮询 map（本章 01）→ ring buffer 推送（练习 1）；各自延迟/开销/丢失语义一句话。
   - 1.8 生命周期（lifecycle）：加载→验证→JIT→挂载→触发→卸载六步总览；fd 引用计数一句话（详析留给四节与可视化节）。
   - 1.9 八要素对照第 1 章示例：表格（要素/第 1 章 `hello_exec` 代码位置/本章扩展），落实「把概念钉在读者已见过的代码上」；**学生动手**段（重读第 1 章示例并对照表格自查）+ 检查点（3 问 + 提示：为什么第 1 章不需要 map？SEC 名如果写错会发生在编译期还是运行期？上下文字段是谁定义的？）。
-- [ ] **Step 3: 写「二、指令集基础」（5–6k）**——小节锚点固定为 `### 2.1`–`### 2.4`：
+- [x] **Step 3: 写「二、指令集基础」（5–6k）**——小节锚点固定为 `### 2.1`–`### 2.4`：
   - 2.1 64 位 RISC 模型：10 个通用寄存器 r0–r9 与调用约定（r0 返回值；r1–r5 传参，多余参数走栈；r6–r9 callee-saved）+ r10 只读栈帧指针；为什么选 RISC——指令语义有限，verifier 才能静态分析（为第 3 章伏笔）。
   - 2.2 8 字节指令编码：`struct bpf_insn`（`opcode:8`、`dst_reg:4|src_reg:4`、`off:16`、`imm:32`，`include/uapi/linux/bpf.h`）；给一个手工解码示例（`r0 = 0` 的 64 位立即数加载：opcode `0xb7`、dst=0、imm=0），逐字段说明。
   - 2.3 常见指令类别：BPF_ALU/BPF_JMP/BPF_LDX/BPF_STX/原子类概览（各 2–3 句 + 1 条编码示例）；**不展开完整 ISA 表**——指向附录 A `book/appendix/a-ebpf-instruction-set.md`。
   - 2.4 观察法：`bpftool prog dump xlated name <prog>` 与 `dump jit` 的用途与读法；本机无特权不能加载程序，示例输出标注「预期输出示例 / 运行级待验证」；讲解 xlated 与 jit 视图差异。
-- [ ] **Step 4: 核对（硬性）**
+- [x] **Step 4: 核对（硬性）**
 
 Run: `grep -c "^## " book/chapters/02-ebpf-architecture-and-core-concepts.md && grep -c "^### 1\." book/chapters/02-ebpf-architecture-and-core-concepts.md && grep -c "^### 2\." book/chapters/02-ebpf-architecture-and-core-concepts.md && wc -m book/chapters/02-ebpf-architecture-and-core-concepts.md`
 Expected: `4`（学习目标/导读/一/二）、`9`、`4`；`wc -m ≥ 12000`（本任务中段值参考；Task 8 终检 35–45k）。
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add book/chapters/02-ebpf-architecture-and-core-concepts.md
