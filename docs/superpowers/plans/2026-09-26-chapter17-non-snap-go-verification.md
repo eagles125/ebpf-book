@@ -109,20 +109,20 @@ Expected: 返回 0 并生成 `fwctl`。
 - Consumes: Task 1 的 `GO_BIN`，Task 2 的三个构建成功结果。
 - Produces: `verify-build.sh` 的完整输出、退出码和运行级限制说明。
 
-- [ ] **Step 1: 运行全部 9 个构建目标**
+- [x] **Step 1: 运行全部 9 个构建目标**
 
 Run `GO="$GO_BIN" bash book/examples/chapter-17/scripts/verify-build.sh`.
 
 Expected: BTF 前置检查通过，汇总为 `PASS=9 WARN=0 FAIL=0`，进程返回 0。
 
-- [ ] **Step 2: 写入验证报告**
+- [x] **Step 2: 写入验证报告**
 
 报告记录非 Snap `GO_BIN` 的绝对路径和 `go version`、完整汇总、命令退出码、clang/bpftool/libbpf 版本，以及运行级仍因普通用户和 `unprivileged_bpf_disabled=2` 待验证。
 
-- [ ] **Step 3: 仅在成功时同步读者文档**
+- [x] **Step 3: 仅在成功时同步读者文档**
 
 将 README 的“最近一次全量验证”日期、Go 路径类型和 9/9 结果更新为本次实际命令证据；正文仅同步不会夸大运行级验证的事实。
 
-- [ ] **Step 4: 复核并提交文档证据**
+- [x] **Step 4: 复核并提交文档证据**
 
 Run `git diff --check` and `git status --short`, then commit only report and successful-verification documentation updates with message `docs(ch17): record non-Snap Go build verification`.
