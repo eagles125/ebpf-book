@@ -1,5 +1,6 @@
 # Local editor/agent state
 .claude/settings.local.json
+book/.tools/
 
 # eBPF 示例构建产物（由各示例 Makefile 生成，不入库）
 book/examples/**/vmlinux.h
