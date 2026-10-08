@@ -28,7 +28,7 @@
 - Produces: `GO_BIN`，一个非 `/snap/` 路径、可通过 `GO_BIN version` 启动的 Go 1.22+ 二进制。
 - Consumes: `GO` Make 变量；所有受影响 Makefile 使用 `GO ?= go`。
 
-- [ ] **Step 1: 搜索现有非 Snap Go，并逐个验证**
+- [x] **Step 1: 搜索现有非 Snap Go，并逐个验证**
 
 ```bash
 for candidate in /usr/local/go/bin/go /usr/bin/go /opt/go/bin/go; do
@@ -40,7 +40,7 @@ done
 
 Expected: 找到一个返回 0 且路径不含 `/snap/` 的候选；将其绝对路径赋给 `GO_BIN`。
 
-- [ ] **Step 2: 候选缺失时安装项目局部 Go 1.27.1**
+- [x] **Step 2: 候选缺失时安装项目局部 Go 1.27.1**
 
 ```bash
 mkdir -p book/.tools
@@ -52,7 +52,7 @@ book/.tools/go-1.27.1/bin/go version
 
 Expected: `go version go1.27.1 linux/amd64`，并将 `GO_BIN` 设为 `/work/ai/ebpf-book/book/.tools/go-1.27.1/bin/go`。
 
-- [ ] **Step 3: 确认局部工具链不污染 Git 状态**
+- [x] **Step 3: 确认局部工具链不污染 Git 状态**
 
 ```bash
 git check-ignore -q book/.tools/go-1.27.1/bin/go
@@ -61,7 +61,7 @@ git status --short
 
 Expected: `git check-ignore` 返回 0；除已知 Comet 状态文件外不出现工具链文件。
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 不提交下载的工具链；如为满足忽略规则而修改 `.gitignore`，仅提交该规则。
 
