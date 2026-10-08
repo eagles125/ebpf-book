@@ -2,7 +2,9 @@
 
 > 本章规划的独立示例已全部落地到 [`book/examples/chapter-17/`](../examples/chapter-17/)，
 > 每个阶段独立成目录、独立可编译，含 BPF 源码、用户态 loader/控制面、Makefile 与 README
-> （运行说明与验证状态）；编译级验证已在编写环境全量通过（`scripts/verify-build.sh`，9/9 PASS），
+> （运行说明与验证状态）；编译级验证已于 2026-10-09 使用非 Snap Go 工具链
+> （`/work/ai/ebpf-book/book/.tools/go-1.27.1/bin/go`）全量通过
+> （`scripts/verify-build.sh`，9/9 PASS），
 > 运行级验证需特权环境，状态标注见各 README 与 1.5 节。
 
 本章把一个“麻雀虽小，五脏俱全”的 eBPF 防火墙拆成五个渐进阶段完整实现：从最小的 XDP 丢包闭环，到报文解析与 ACL、连接跟踪、TC 上的 SNAT/DNAT，最终汇合成一套带 Go 控制面的完整系统。全部示例源码与脚本位于 `book/examples/chapter-17/`，按阶段独立成目录、独立可编译；本章正文讲解的每一段代码都与该目录下的源文件一一对应，文中标注了每个代码块的出处文件。目录总览：
