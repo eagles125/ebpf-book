@@ -76,25 +76,25 @@ Expected: `git check-ignore` 返回 0；除已知 Comet 状态文件外不出现
 - Consumes: Task 1 的 `GO_BIN`。
 - Produces: 三个目录的 `fwctl` 二进制，并证明 `GO` 覆盖变量被 Makefile 接受。
 
-- [ ] **Step 1: 验证阶段 05 Go 控制面**
+- [x] **Step 1: 验证阶段 05 Go 控制面**
 
 Run `make clean all GO="$GO_BIN"` in `book/examples/chapter-17/05-firewall`.
 
 Expected: 返回 0 并生成 `fwctl`。
 
-- [ ] **Step 2: 验证规则持久化练习**
+- [x] **Step 2: 验证规则持久化练习**
 
 Run `make clean all GO="$GO_BIN"` in `book/examples/chapter-17/exercises/02-rule-persistence`.
 
 Expected: 返回 0 并生成 `fwctl`。
 
-- [ ] **Step 3: 验证 Prometheus 导出练习**
+- [x] **Step 3: 验证 Prometheus 导出练习**
 
 Run `make clean all GO="$GO_BIN"` in `book/examples/chapter-17/exercises/03-prometheus-export`.
 
 Expected: 返回 0 并生成 `fwctl`。
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 本任务不修改版本化源文件；记录命令输出到后续验证报告，不创建空提交。
 
