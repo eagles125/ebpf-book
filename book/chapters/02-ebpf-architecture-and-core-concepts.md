@@ -28,7 +28,7 @@
 
 背景问题：如何让开发者写的代码在内核里执行，又不把内核稳定性押注在作者的自制力上？内核模块的答案是「信任作者」，代价是一个空指针就可能 panic。eBPF 的答案是「限制表达力，再做加载前验证」。
 
-机制上，eBPF 程序用 C 的受限子集编写：不能有无法证明会终止的循环，不能直接解引用任意内核指针，只能调用内核以固定编号暴露的辅助函数。源文件经 `clang -target bpf` 编译为字节码，loader 经 `bpf(BPF_PROG_LOAD)` 提交内核，验证器（verifier）静态检查通过后即时编译（JIT，Just-In-Time）为本机指令。第 1 章 `hello_exec.bpf.c` 的 `handle_execve` 与本章示例的 `trace_stat` 函数都是完整程序。
+机制上，eBPF 程序用 C 的受限子集编写：不能有无法证明会终止的循环，不能直接解引用任意内核指针，只能调用内核以固定编号暴露的辅助函数。源文件经 `clang -target bpf` 编译为字节码，loader 经 `bpf(BPF_PROG_LOAD)` 提交内核，验证器（verifier）静态检查通过后，随后由 JIT（Just-In-Time，即时编译）编译为本机指令（或由内核解释器执行）。第 1 章 `hello_exec.bpf.c` 的 `handle_execve` 与本章示例的 `trace_stat` 函数都是完整程序。
 
 **教师视角**：把 eBPF 程序想象成搭在内核这栋大楼外的「外包脚手架」——由外部运入、先过安全检查（verifier）才能架设、只能在指定位置（挂载点）作业、撤走时不留残骸。最常见误区是把它当成内核模块：eBPF 没有完整内核权限，不能随意调用内核符号、不能长期持有复杂内核对象，内存访问被 verifier 事先证明安全；反过来它也做不了驱动和文件系统这类活。另一个误区是把它和 BCC、bpftrace、bpftool 混为一谈——那些是架在机制之上的前端工具，机制只有一套。
 
@@ -197,7 +197,7 @@ struct bpf_insn {
 
 四个字段恰好 1 + 1 + 2 + 4 = 8 字节。定长编码让内核能用最简单的循环逐条取指、逐条验证——依然是为 verifier 和 JIT 服务的取舍。
 
-拿一条真实指令做手工解码——对同一对象文件再跑一次 `llvm-objdump -d`，第 19 条是 `trace_stat` 防御分支 `return 0`：
+拿一条真实指令做手工解码——对同一对象文件再跑一次 `llvm-objdump -d`，第 19 条是 `trace_stat` 各 `return 0` 路径的汇合点（防御分支与 NULL 检查分支在此汇合）：
 
 ```text
       19:	b7 00 00 00 00 00 00 00	r0 = 0x0
@@ -226,13 +226,13 @@ eBPF 指令按低 3 位的类别字段分成几大类。本节给每类两三句
 
 opcode `0x07` = ALU64 + 立即数源 + ADD，dst = r1，imm = 1。
 
-**跳转类（BPF_JMP / BPF_JMP32，类别码 0x05 / 0x06）**：条件与无条件跳转（jeq/jne/jgt/ja 等），以及 call（helper 或 BPF-to-BPF 调用）与 exit（程序退出）。跳转目标是相对当前指令的带符号偏移。示例是反汇编第 5 条——`if (cpu >= MAX_CPUS)` 的防御检查，编译器把「大于等于 64」改写成「大于 63」：
+**跳转类（BPF_JMP / BPF_JMP32，类别码 0x05 / 0x06）**：条件与无条件跳转（jeq/jne/jgt/ja 等），以及 call（helper 或 BPF-to-BPF 调用）与 exit（程序退出）。跳转目标是相对**下一条指令**的带符号偏移（目标 = pc + 1 + off）。示例是反汇编第 5 条——`if (cpu >= MAX_CPUS)` 的防御检查，编译器把「大于等于 64」改写成「大于 63」：
 
 ```text
        5:	25 00 0d 00 3f 00 00 00	if r0 > 0x3f goto +0xd <LBB0_3>
 ```
 
-opcode `0x25` = JMP + 立即数源 + JGT，off = 13 表示向前跳 13 条，imm = 63 恰是 MAX_CPUS − 1。同类的还有 `85 00 00 00 08 00 00 00  call 0x8`（call，imm 8 是 helper 编号——`bpf_get_smp_processor_id`）和 `95 00 00 00 00 00 00 00  exit`。正是「跳转偏移必须落在程序内、程序必须可证明会终止」这两条，让 verifier 能排除无限循环（第 3 章）。
+opcode `0x25` = JMP + 立即数源 + JGT，off = 13 表示跳过其后 13 条指令（第 6–18 条），落在第 19 条——正是 2.2 手工解码的 `r0 = 0`；imm = 63 恰是 MAX_CPUS − 1。同类的还有 `85 00 00 00 08 00 00 00  call 0x8`（call，imm 8 是 helper 编号——`bpf_get_smp_processor_id`）和 `95 00 00 00 00 00 00 00  exit`。正是「跳转偏移必须落在程序内、程序必须可证明会终止」这两条，让 verifier 能排除无限循环（第 3 章）。
 
 **内存加载类（BPF_LDX，类别码 0x01）**：从内存读入寄存器，地址 = src_reg + off，用宽度修饰区分 1/2/4/8 字节；verifier 要求地址可证明合法（上下文、map value 或栈）。两条真实示例：第 12 条读 map value 首字段（8 字节），第 15 条读 `ctx->next_pid`（4 字节，`0x38` 是 `next_pid` 在上下文结构中的偏移）：
 
