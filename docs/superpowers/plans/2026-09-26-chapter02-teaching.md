@@ -526,7 +526,7 @@ git commit -m "docs(ch02): 映射类型全景与 bpf() 内核实现分析"
 
 ### Task 5: 正文「五、实战：第一个追踪统计示例」（五层环境紧凑版 + 代码走读 + 双视角 + 检查点）
 
-- [ ] Task 5: 正文「五、实战：第一个追踪统计示例」（五层环境紧凑版 + 代码走读 + 双视角 + 检查点）
+- [x] Task 5: 正文「五、实战：第一个追踪统计示例」（五层环境紧凑版 + 代码走读 + 双视角 + 检查点）
 
 **tasks.md 条目**：「Write full chapter prose explaining programs, maps, helpers, program types, attach points, context objects, event channels, and lifecycle.」（后半：事件通道与生命周期在实战中的落点）＋「Include an integrated example showing a simple tracing program with map interaction.」（正文呈现部分——代码块与 01-trace-stat 文件一一对应）
 
@@ -537,23 +537,23 @@ git commit -m "docs(ch02): 映射类型全景与 bpf() 内核实现分析"
 - Consumes: Task 2 的 01-trace-stat 全部文件（代码块逐字对应）；`../00-env/check-env.sh` 三档结论；C6 验证状态三条；C7 标题。
 - Produces: 5.1 的验证状态约定表（Task 8 审计依据）；「五」节末「独立示例」链接（C8）。
 
-- [ ] **Step 1: 写 `### 5.1 五层环境（紧凑版）`（3–4k）**——五层用 `#### 第一层：依赖环境` … `#### 第五层：运行效果` 定长小节，口径与第 17 章 1.1–1.5 一致但面向单机 tracepoint 场景：
+- [x] **Step 1: 写 `### 5.1 五层环境（紧凑版）`（3–4k）**——五层用 `#### 第一层：依赖环境` … `#### 第五层：运行效果` 定长小节，口径与第 17 章 1.1–1.5 一致但面向单机 tracepoint 场景：
   - 第一层 依赖环境：内核 5.10+ 与 `CONFIG_DEBUG_INFO_BTF` 要求；权限矩阵表（root / CAP_BPF+CAP_PERFMON(+CAP_SYS_ADMIN) / 非 root 三档 × 可编译/可加载/可观察三列）；工具清单与检查方法——引用 `bash book/examples/chapter-02/00-env/check-env.sh` 及其三档结论解读（本机 `unprivileged_bpf_disabled=2` 语境示例输出，标「本地验证」）。
   - 第二层 编译环境：clang/LLVM 18.x、libbpf-dev（`bpf_helpers.h`）、bpftool 7.x、make；各版本验证命令（本机实测输出标「本地验证」）；`apt install` 一行说明。
   - 第三层 部署环境：**无 veth/netns 拓扑**——单机 tracepoint，唯一前置是 tracefs 可见目标事件；**安全警告段**（全局约束 8 措辞，逐字）+ 与第 17 章「勿挂物理网卡」的差异说明（本章不存在该风险面）。
   - 第四层 运行环境：`sudo ./trace_stat` 启动、Ctrl-C 卸载；「最简控制面就是 loader 本身」——无规则下发、无 pin（对照 4.5）；`bpftool prog show` / `map dump` 观察命令（运行级待验证）。
   - 第五层 运行效果：各 CPU 计数增长、`total` 汇总、`last_next_pid` 变化的预期输出示例（标注运行级待验证）；**验证状态约定表**——C6 三条逐字引入（编译验证/待运行验证/预期输出示例的标注规则）。
-- [ ] **Step 2: 写 `### 5.2 代码走读`（6–7k）**——四段组织：
+- [x] **Step 2: 写 `### 5.2 代码走读`（6–7k）**——四段组织：
   - **教师视角引入**：为什么选 sched_switch + per-CPU array（八要素全部可见的最小闭环）；读者容易卡住的两处——「为什么读回要按槽位求和」「verifier 为什么直接放行 ctx 读取」。
   - 核心代码原理讲解：贴 `book/examples/chapter-02/01-trace-stat/trace_stat.bpf.c` 全文逐段讲解（SEC 推断、`cpu_stat` 字段语义、map 选型四问[为什么 per-CPU/为什么 array 而非 hash/为什么 key 是 CPU/容量为何 64]、`bpf_get_smp_processor_id` 选型、`MAX_CPUS` 防御定界与数组 map 运行时定界的关系、CO-RE ctx 读取）；**`bpf_probe_read_str` 语义讲解**——`prev_comm` 是定长数组可直接读，变长字符串才需要它（NUL 终止语义与截断行为，保守措辞注明版本差异）；贴 `trace_stat.c` 逐段讲解（open_and_load→attach→轮询→per-CPU 读回求和→destroy 即卸载）。
   - **学生动手**：`make`、`sudo ./trace_stat`、观察输出、Ctrl-C；`bpftool prog show` / `bpftool map dump name sched_counts`（预期输出示例 + 运行级待验证）；动手清单用 checkbox。
   - 检查点：3 问 + 提示——(1) 为什么 key 用 CPU 下标还要用 per-CPU map？（提示：两层去竞争各自挡住什么）(2) loader 读回的 `buf` 里为什么只有下标 `cpu` 的槽位非零？(3) Ctrl-C 之后程序去了哪里？（提示：link 随进程销毁、引用计数归零——衔接 4.4）。
-- [ ] **Step 3: 代码块对应关系核对（硬性）**
+- [x] **Step 3: 代码块对应关系核对（硬性）**
 
 Run: `grep -c "examples/chapter-02/01-trace-stat/" book/chapters/02-ebpf-architecture-and-core-concepts.md && grep -c "教师视角" book/chapters/02-ebpf-architecture-and-core-concepts.md && grep -c "学生动手" book/chapters/02-ebpf-architecture-and-core-concepts.md && wc -m book/chapters/02-ebpf-architecture-and-core-concepts.md`
 Expected: `≥ 2`（两份源文件路径标注各至少一次）；`≥ 3`（一/三/五三节均有）；`≥ 3`；`wc -m ≥ 31000`（中段值参考）。
 
-- [ ] **Step 4: 提交**
+- [x] **Step 4: 提交**
 
 ```bash
 git add book/chapters/02-ebpf-architecture-and-core-concepts.md
