@@ -996,7 +996,7 @@ git commit -m "docs(ch02): 交叉链接示例资产并完成全量编译级验�
 
 ### Task 9: 主审（teaching completeness）与 tasks.md 勾选（收口）
 
-- [ ] Task 9: 主审（teaching completeness）与 tasks.md 勾选（收口）
+- [x] Task 9: 主审（teaching completeness）与 tasks.md 勾选（收口）
 
 **tasks.md 条目**：「Main-agent review against style, examples, terminology, and references.」；同时统一勾选「Chapter 2」全部 9 条。
 
@@ -1004,13 +1004,13 @@ git commit -m "docs(ch02): 交叉链接示例资产并完成全量编译级验�
 - Modify: `openspec/changes/generate-ebpf-book/tasks.md`（勾选）
 - 产出：审查结论进入最终回复（不创建报告文件）
 
-- [ ] **Step 1: 逐项审计并记录结论**（发现问题回对应任务修复后复验；全绿才进入 Step 2）：
+- [x] **Step 1: 逐项审计并记录结论**（发现问题回对应任务修复后复验；全绿才进入 Step 2）：
   1. 教学完整性四条（STYLE.md 实战模板）：五层环境（5.1 五个 `####` 层，每层落到命令/脚本/表格）；核心代码原理注释（抽查 `trace_stat.bpf.c`、`trace_events.bpf.c`、`top_proc.bpf.c`：字段语义/边界检查原因/helper 选型/map 选型/失败模式五类注释在场）；双视角（一/三/五三节「教师视角」「学生动手」+ 检查点齐备）；课后练习（2 项目录、防剧透七段 README、参考实现可编译、验证状态标注）。
   2. 结构级（设计 §8）：C7 全部一级小节齐备；5.2 代码块与示例文件一一对应（抽查 3 处路径）；可视化两张 text 图均有解读段。
   3. 术语与保守措辞：映射/辅助函数/程序类型/挂载点译名一致；「英文（中文解释）」首次出现格式；5.10+/版本相关细节保守措辞；全文零「已验证通过」式运行级表述（grep 复核）。
   4. 矩阵专项核对：八要素全覆盖（一节 1.1–1.8 + 5.2 落点）；指令集四要素（RISC/寄存器/调用约定/编码，2.1–2.3）；八类映射（3.1–3.8）；集成示例 + map 交互（Task 2）；独立示例资产（chapter-02 全目录）；bpf() 内核分析四要素（对象创建/fd 所有权/引用计数/pinning，4.2–4.5）；可视化（programs/maps/hooks/loader/控制面，图 1/图 2）；排错/总结/参考（Task 6）。
-- [ ] **Step 2: 勾选 tasks.md**：将「Chapter 2: eBPF Architecture and Core Concepts」9 条全部置为 `[x]`（仅当对应交付物真实存在且验收通过）。
-- [ ] **Step 3: 最终提交与交付报告**
+- [x] **Step 2: 勾选 tasks.md**：将「Chapter 2: eBPF Architecture and Core Concepts」9 条全部置为 `[x]`（仅当对应交付物真实存在且验收通过）。
+- [x] **Step 3: 最终提交与交付报告**
 
 ```bash
 git add openspec/changes/generate-ebpf-book/tasks.md
