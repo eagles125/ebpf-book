@@ -564,7 +564,7 @@ git commit -m "docs(ch02): 五层环境紧凑版与实战代码走读"
 
 ### Task 6: 正文「可视化/常见问题与排错/课后扩展任务/总结/本章参考来源」
 
-- [ ] Task 6: 正文「可视化/常见问题与排错/课后扩展任务/总结/本章参考来源」
+- [x] Task 6: 正文「可视化/常见问题与排错/课后扩展任务/总结/本章参考来源」
 
 **tasks.md 条目**：「Add text visualization showing programs, maps, hooks, loader, and user-space control plane.」＋「Add troubleshooting, summary, and references.」
 
@@ -575,16 +575,16 @@ git commit -m "docs(ch02): 五层环境紧凑版与实战代码走读"
 - Consumes: Task 3–5 成稿；四节 fd/引用计数/pin 结论（可视化图 2 素材）；3.9 决策表与练习 1（排错节「轮询 vs 事件流」呼应）；Task 7 未落地前先写好目录约定（练习表指向 exercises/）。
 - Produces: 全部 12 个 `##` 一级小节齐备（C7 收齐）；课后任务表（Task 7 README 总览表与其逐字一致）。
 
-- [ ] **Step 1: 写「可视化：eBPF 程序生命周期与数据通路」（1.5–2.5k）**——两张 text 图（` ```text ` 代码块，格式遵循 `book/STYLE.md` 可视化节）：
+- [x] **Step 1: 写「可视化：eBPF 程序生命周期与数据通路」（1.5–2.5k）**——两张 text 图（` ```text ` 代码块，格式遵循 `book/STYLE.md` 可视化节）：
   - 图 1 生命周期全链路：loader → `bpf(BPF_PROG_LOAD)` → verifier → JIT → 挂载 tracepoint → 事件触发 → `sched_counts` 累计 → loader 每秒轮询 → Ctrl-C → 引用释放卸载（每步标注对应小节号）。
   - 图 2 对象/fd/pin 关系：`bpf_map`/`bpf_prog` 内核对象、进程 fd 表、bpffs pin 三者引用关系；非 pin 时「进程退出→引用归零→对象释放」与 pin 时「bpffs 持有活引用」两条路径（呼应 4.5 与第 17 章阶段 5）。
   - 图后各配 2–3 段「怎么读这张图」的讲解（禁止裸图）。
-- [ ] **Step 2: 写「常见问题与排错」（3–4k）**——四组，每组「现象/原因与处理」表：
+- [x] **Step 2: 写「常见问题与排错」（3–4k）**——四组，每组「现象/原因与处理」表：
   - load 失败权限表：`-EPERM`（非 root、`unprivileged_bpf_disabled=2`）、`-EACCES`（verifier 拒绝/license 不兼容）、verifier 日志读法示意（详析指向第 3 章）。
   - map 选型误用：hash 当计数器（锁竞争）、array 当字典（越界返回 NULL 被当成功）、LRU 满表静默淘汰被误解为「插入失败」、per-CPU 读回不聚合（漏算 nr-1 份）。
   - tracepoint 上下文字段版本差异：字段布局随内核版本变化、CO-RE 重定位机制、`prev_comm` 数组长度差异的保守措辞、字段缺失时的编译期表现。
   - 轮询 vs 事件流取舍：延迟/开销/丢失语义/实现复杂度四列对照表——与练习 1 呼应。
-- [ ] **Step 3: 写「课后扩展任务」（表格 + 防剧透说明段）**——固定表格（Task 7 的 exercises/README.md 总览表须与此逐字一致）：
+- [x] **Step 3: 写「课后扩展任务」（表格 + 防剧透说明段）**——固定表格（Task 7 的 exercises/README.md 总览表须与此逐字一致）：
 
 ```markdown
 | 任务 | 扩展维度 | 任务描述 | 参考实现 |
@@ -594,14 +594,14 @@ git commit -m "docs(ch02): 五层环境紧凑版与实战代码走读"
 ```
 
   加防剧透说明段：先自行实现再看参考；README 结构（任务在前、思路独立成节放后部）。
-- [ ] **Step 4: 写「总结」（0.8–1.2k）**：八要素回顾（每要素一句话 + 回指小节号）；通往第 3 章（verifier：为什么 5.2 的每条注释都在「喂」verifier）的桥。
-- [ ] **Step 5: 写「本章参考来源」**：按 `book/STYLE.md` 格式列——Linux kernel documentation（BPF subsystem / instruction set / maps / helpers / BTF）、ebpf.io、Andrii Nakryiko（BTF/CO-RE 文章）、libbpf 与 libbpf-bootstrap 文档、ebpf.top BPF 入门系列。
-- [ ] **Step 6: 结构收齐核对（硬性）**
+- [x] **Step 4: 写「总结」（0.8–1.2k）**：八要素回顾（每要素一句话 + 回指小节号）；通往第 3 章（verifier：为什么 5.2 的每条注释都在「喂」verifier）的桥。
+- [x] **Step 5: 写「本章参考来源」**：按 `book/STYLE.md` 格式列——Linux kernel documentation（BPF subsystem / instruction set / maps / helpers / BTF）、ebpf.io、Andrii Nakryiko（BTF/CO-RE 文章）、libbpf 与 libbpf-bootstrap 文档、ebpf.top BPF 入门系列。
+- [x] **Step 6: 结构收齐核对（硬性）**
 
 Run: `grep -c "^## " book/chapters/02-ebpf-architecture-and-core-concepts.md && grep -c "计划\|建议\|后续补齐\|占位" book/chapters/02-ebpf-architecture-and-core-concepts.md | cat`
 Expected: `12`（C7 全部一级小节齐备）；占位式表述 0 命中（「预期输出」含「预期」不算——grep 词表不含「预期」）。
 
-- [ ] **Step 7: 提交**
+- [x] **Step 7: 提交**
 
 ```bash
 git add book/chapters/02-ebpf-architecture-and-core-concepts.md
