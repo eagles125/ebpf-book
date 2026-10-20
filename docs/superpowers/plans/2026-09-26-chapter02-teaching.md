@@ -612,7 +612,7 @@ git commit -m "docs(ch02): 可视化/排错/课后任务/总结/参考来源"
 
 ### Task 7: 练习参考实现（01-ringbuf-events、02-lru-top-proc）与 exercises 总览
 
-- [ ] Task 7: 练习参考实现（01-ringbuf-events、02-lru-top-proc）与 exercises 总览
+- [x] Task 7: 练习参考实现（01-ringbuf-events、02-lru-top-proc）与 exercises 总览
 
 **tasks.md 条目**：「Create standalone Chapter 2 examples under `book/examples/chapter-02/` if runnable code is included.」（exercises 部分）；同时落实 `book/STYLE.md` 实战模板规则 4（完整可编译参考实现 + 防剧透 README + 验证状态标注）。
 
@@ -632,7 +632,7 @@ git commit -m "docs(ch02): 可视化/排错/课后任务/总结/参考来源"
 - Consumes: C2/C3 契约；C4 Makefile 替换表（`trace_events`/`top_proc`）；C5 练习 README 防剧透七段；C6 验证状态；Task 6 课后任务表（总览表逐字一致）。
 - Produces: verify-build.sh 的两个练习编译项；练习 README 的「参考实现思路」节与正文排错节「轮询 vs 事件流」呼应。
 
-- [ ] **Step 1: 创建 `exercises/01-ringbuf-events/trace_events.bpf.c`**（逐字如下）
+- [x] **Step 1: 创建 `exercises/01-ringbuf-events/trace_events.bpf.c`**（逐字如下）
 
 ```c
 // SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause
@@ -678,7 +678,7 @@ int trace_events(struct trace_event_raw_sched_switch *ctx)
 char LICENSE[] SEC("license") = "GPL";
 ```
 
-- [ ] **Step 2: 创建 `exercises/01-ringbuf-events/trace_events.c`**（逐字如下；`struct sched_event` 为 loader 侧重新定义，见 C2）
+- [x] **Step 2: 创建 `exercises/01-ringbuf-events/trace_events.c`**（逐字如下；`struct sched_event` 为 loader 侧重新定义，见 C2）
 
 ```c
 // SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause
@@ -756,7 +756,7 @@ int main(int argc, char **argv)
 }
 ```
 
-- [ ] **Step 3: 创建 `exercises/02-lru-top-proc/top_proc.bpf.c`**（逐字如下）
+- [x] **Step 3: 创建 `exercises/02-lru-top-proc/top_proc.bpf.c`**（逐字如下）
 
 ```c
 // SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause
@@ -800,7 +800,7 @@ int top_proc(struct trace_event_raw_sched_switch *ctx)
 char LICENSE[] SEC("license") = "GPL";
 ```
 
-- [ ] **Step 4: 创建 `exercises/02-lru-top-proc/top_proc.c`**（逐字如下）
+- [x] **Step 4: 创建 `exercises/02-lru-top-proc/top_proc.c`**（逐字如下）
 
 ```c
 // SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause
@@ -884,21 +884,21 @@ int main(int argc, char **argv)
 }
 ```
 
-- [ ] **Step 5: 创建两个 `Makefile`** —— C4 模板替换：练习 1 `<名>=trace_events`、目标 `trace_events`；练习 2 `<名>=top_proc`、目标 `top_proc`；`.bpf.o` 依赖均仅 `<名>.bpf.c vmlinux.h`。
+- [x] **Step 5: 创建两个 `Makefile`** —— C4 模板替换：练习 1 `<名>=trace_events`、目标 `trace_events`；练习 2 `<名>=top_proc`、目标 `top_proc`；`.bpf.o` 依赖均仅 `<名>.bpf.c vmlinux.h`。
 
-- [ ] **Step 6: 创建两个练习 `README.md`** —— 按 C5 防剧透七段结构。关键口径：
+- [x] **Step 6: 创建两个练习 `README.md`** —— 按 C5 防剧透七段结构。关键口径：
   - 练习 1 `## 提示`：涉及 `BPF_MAP_TYPE_RINGBUF`、`bpf_ringbuf_reserve`/`bpf_ringbuf_submit`、`ring_buffer__new`/`ring_buffer__poll`；事件结构 8 字节对齐；满表丢弃语义。`## 任务` 验收标准：加载后能看到带 CPU 号/时间戳/pid 对的事件流；能说明与轮询的取舍。`## 参考实现思路`（分界线后）：reserve→填字段→submit 三步、`ring_buffer__poll` 超时轮询保证 Ctrl-C、与 01-trace-stat 的差异点对照表。
   - 练习 2 `## 提示`：涉及 `BPF_MAP_TYPE_LRU_HASH`、`bpf_map_get_next_key` 遍历、`qsort`；LRU 静默淘汰；pid 0 过滤。`## 任务` 验收标准：top-N 榜单随系统负载变化；能解释「旧 pid 从榜单消失」的两种可能（进程退出 / LRU 淘汰）。`## 参考实现思路`：先查后插与 `-EEXIST` 竞争近似、弱遍历语义、`PROC_MAX` 调小的观察实验设计。
   - 两者 `## 预期输出示例`（运行级待验证）：练习 1 `cpu0  123456789 ns: prev=1823 next=910`；练习 2 榜单 `910 5231` / `1823 3120` 等。`## 验证状态` 按 C6。
 
-- [ ] **Step 7: 创建 `exercises/README.md`**：两项任务总览表（与 Task 6 章末表格逐字一致）+ 防剧透阅读法（先做后看、思路节在分界线后）+ 各练习构建命令（各目录 `make`）+ 验证状态汇总表（编译级/运行级，按 C6）。
+- [x] **Step 7: 创建 `exercises/README.md`**：两项任务总览表（与 Task 6 章末表格逐字一致）+ 防剧透阅读法（先做后看、思路节在分界线后）+ 各练习构建命令（各目录 `make`）+ 验证状态汇总表（编译级/运行级，按 C6）。
 
-- [ ] **Step 8: 编译验证（本机真实执行，硬性）**
+- [x] **Step 8: 编译验证（本机真实执行，硬性）**
 
 Run: `make -C book/examples/chapter-02/exercises/01-ringbuf-events && make -C book/examples/chapter-02/exercises/02-lru-top-proc`
 Expected: 两个目录退出码均 0，生成 `trace_events` 与 `top_proc`。失败即设计缺陷：修代码后重跑，直至通过。
 
-- [ ] **Step 9: 追加 `.gitignore` 并提交**
+- [x] **Step 9: 追加 `.gitignore` 并提交**
 
 ```bash
 printf '%s\n' 'book/examples/chapter-02/exercises/01-ringbuf-events/trace_events' \
