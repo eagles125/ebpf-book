@@ -749,3 +749,145 @@ map dump 逐 CPU 列出 key 0 的槽位：**只有 cpu 0 非零**——loader �
 47 行内核态加 79 行用户态，八要素全部落到行上。「每条指令长什么样」2.2/2.3 已拆开，第 3 章将重读同一程序的另一端——verifier 如何证明它安全；注释里点名的失败模式，排错节收成对照表。
 
 **独立示例**：[`book/examples/chapter-02/01-trace-stat/`](../examples/chapter-02/01-trace-stat/)——BPF 侧、loader、Makefile 与 README 全套，快速上手指引见其 README。
+
+## 可视化：eBPF 程序生命周期与数据通路
+
+本节把五节拆开的八要素拼回两张全链路图：程序、映射、挂载点、loader 与用户态控制面在一次完整生命周期里各站在哪、谁与谁说话。图 1 沿时间轴展开 1.8 六步，图 2 沿引用回答「对象归谁持有」。
+
+**图 1：生命周期与数据通路全链路**（每步标注对应小节）：
+
+```text
+   用户态 loader（trace_stat.c）            内核（bpf() 入口 kernel/bpf/syscall.c，4.1）
+──────────────────────────      ─────────────────────────────────────────────
+open_and_load()
+ ├─ bpf(BPF_MAP_CREATE) ────►  创建 sched_counts（per-CPU 数组映射，4.2）
+ └─ bpf(BPF_PROG_LOAD) ─────►  license 检查（4.3）
+                                  └► verifier 静态验证（第 3 章）通过
+                                     → JIT 编译为本机指令（2.4）→ 返回 prog fd
+attach()（SEC 名推断，1.5）─►  创建 bpf_link，挂载 tracepoint（4.4）
+
+sched_switch 触发（1.5）──► trace_stat 执行（5.2）：读 ctx->next_pid（1.6）、
+                            sched_counts[cpu] 累计（3.4）
+每秒轮询 while(!exiting) ◄─ bpf(BPF_MAP_LOOKUP_ELEM)：读回槽位求和打印（1.7/5.2）
+Ctrl-C ── destroy() ───────►  关闭 prog/map/link fd，引用逐级归零（4.4）：
+                              link 销毁 → prog 回收 → 释放 map 引用 → map 回收
+```
+
+怎么读图 1：左列是 loader 里依次执行的 libbpf 调用，右列是内核里的对应路径，横向箭头就是 4.1 的「命令边界」：一次 `open_and_load` 背后是两条 `bpf()` 命令（先建映射、再载程序，4.3），`attach` 是第三条；自上而下即 1.8 六步的时间顺序。
+
+中段只属于内核的区域是数据面：挂载后 loader 退居二线，事件触发与计数累计在内核自发持续；两个世界直到「每秒轮询」才经 `BPF_MAP_LOOKUP_ELEM` 再握手——1.7 第二代通道「数据面零开销、新鲜度等于轮询周期」的图形版。末尾归零有依赖顺序（4.4），前提是没人 pin 过——引出图 2。
+
+**图 2：对象、fd 与 pin 的三方引用关系**（fd 表 / 内核对象 / bpffs 节点，呼应 4.5）：
+
+```text
+  loader 进程（fd 表）       内核对象                    bpffs（/sys/fs/bpf）
+┌─────────────┐
+│ prog fd ────┼──► struct bpf_prog ◄──────┐
+│ map  fd ────┼──► struct bpf_map  ◄──┐   │ link 持有 prog 的引用
+│ link fd ────┼──► struct bpf_link ───┼───┘ prog 持有 map 的引用
+└─────────────┘          ▲            │
+                         │（每条边 = 一份引用，被指对象引用计数 +1）
+                bpffs 文件节点 ── 可选边：对象被 pin（BPF_OBJ_PIN，4.5）才有，节点持有活引用
+
+路径 A（不 pin，01-trace-stat）：进程退出 → 三个 fd 全关 → 引用归零 → 对象全部回收
+路径 B（pin，第 17 章阶段 5）：bpffs 节点的边不随进程消失 → 被 pin 的对象存活，
+                              直到 unpin，或接管方经 BPF_OBJ_GET 取回新 fd
+```
+
+怎么读图 2：每条边都是一份引用，来源共三种：fd 表的三条边随进程生灭（dup/fork 只是多拿句柄，4.2）；link→prog、prog→map 两条边由内核在验证与挂载时建立（4.4）；bpffs 节点的边只在显式 pin 之后存在（4.5）。对象消失只有一个条件：没有任何边再指向它。
+
+路径 A 与 B 的差别就在那条「不受进程约束」的边：01-trace-stat 一条 pin 边都没有，Ctrl-C 即左列擦除、右侧逐级熄灭；第 17 章阶段 5 的 Go 控制面把 map/prog/link 钉到 `/sys/fs/bpf/fw17` 后退出，后续进程经 `BPF_OBJ_GET` 接回 fd 接管。两图合起来就是 4.5 的结论：没有「卸载命令」，只有引用计数；检查残留用 `bpftool prog show`/`map show`。
+
+## 常见问题与排错
+
+本节把前文散落的失败模式收成四组「现象/原因与处理」表。共性：编译期零警告不等于运行期正确——排错第一步是分清所在层（编译级查工具链与 BTF，加载级查权限与 verifier，运行级查数据语义）。
+
+**第一组：load 失败与权限。** `open_and_load` 返回 NULL 时先看错误码（libbpf 日志默认输出到 stderr，含义以所用版本为准）：
+
+| 现象 | 原因与处理 |
+|---|---|
+| `-EPERM` | 非 root 且 `unprivileged_bpf_disabled=2`（5.1 权限矩阵第三行，本机即此档）：不能加载任何 BPF 对象。以 root 或 `CAP_BPF`+`CAP_PERFMON` 档位运行；先跑 `book/examples/chapter-02/00-env/check-env.sh` 确认档位 |
+| `-EPERM`/`-ENOMEM`（已 root 仍失败） | 内核 5.11 前按 `RLIMIT_MEMLOCK` 计费，程序或映射过大撞上限即失败；5.11+ 持 `CAP_BPF` 后不再计提（本机 7.0 属此列）。libbpf 默认先尝试抬高该上限，仍失败再查 `ulimit -l` |
+| `-EACCES`（verifier 拒绝） | 静态验证未通过：越界访存、无法证明会终止、调用了本类型不可用的 helper（1.3/1.6 失败点）。日志逐行是「指令号 + 执行后的寄存器状态」：找到最后一个正常推进的指令号，其后第一条就是被拒位置；结尾 `processed N insns ... OK` 是通过标志（示意见下；精读是第 3 章正题） |
+| `-EACCES`（license 不兼容） | 调用了仅 GPL 兼容 license 可用的 helper，而程序未声明或声明了不兼容 license。补 `char LICENSE[] SEC("license") = "GPL";`（01-trace-stat 末行即为此，4.3 第一道检查） |
+| attach 失败 | 挂载目标不存在或无权限：SEC 名拼错（1.5，运行期才暴露的典型）、tracefs 不可见（5.1 第一层 WARN 的回扣）、非 root。核对 SEC 名与 `sudo`，按 check-env.sh 分级定位 |
+
+verifier 日志读法示意（格式随内核与 libbpf 版本不同；示例取 2.3 的同一条防御分支）：
+
+```text
+（预期输出示例 / 运行级待验证——需在可加载环境中触发一次拒绝）
+0: R1_w=ctx(off=0,imm=0) R10=fp0
+; if (cpu >= MAX_CPUS)
+5: (25) if r0 > 0x3f goto pc+13
+...
+19: (95) exit
+processed 21 insns (limit 1000000) ... OK
+```
+
+**第二组：映射选型误用**（3.9 教师视角点名的事故源，逐条对回决策表）：
+
+| 现象 | 原因与处理 |
+|---|---|
+| 普通 hash 做高频计数，计数悄悄偏少 | 多 CPU 先查后写同一 key，后写覆盖前写（3.1）。计数场景改 per-CPU 变体，或让 key 含 CPU 维度（3.4） |
+| array 当字典，「查不到」被当成功 | 数组合法下标必命中、没有「key 不存在」状态——零值副本被当成有效数据；越界下标返回 NULL，不检查则加载都过不了（3.2）。需要增删与不存在语义就选 hash（3.9 第一行） |
+| LRU 满表旧表项消失，被误判「插入失败」 | 满表静默淘汰最久未用项、插入仍成功，调用方拿不到错误码（3.3）。接受「观测宁丢旧不丢新」语义，靠遍历观察淘汰；把 `max_entries` 调小可复现（练习 2 的观察实验） |
+| per-CPU 读回不聚合，总数只占零头 | 读回拿到按 CPU 序排列的全部副本，不聚合只读第一份、漏算 nr−1 份（3.4）。读回缓冲开成「单份 × CPU 数」并对槽位求和——5.2 的求和循环是标准写法 |
+| `BPF_NOEXIST` 插入偶发 `-EEXIST` | 先查后插两步之间另一 CPU 已插入同 key（练习 2 注释的竞争近似）：按「本事件不计数」处理，属设计内竞争而非故障；消除竞争回到 per-CPU 选型 |
+
+**第三组：tracepoint 上下文的版本差异**：
+
+| 现象 | 原因与处理 |
+|---|---|
+| 换内核后字段读到错位数据 | 字段布局随内核版本增删调序，按固定偏移硬读会读错位置（1.6）。坚持 vmlinux.h + CO-RE 工作流，加载时由 libbpf 依据目标内核 BTF 重定位字段偏移（机制第 8 章） |
+| `prev_comm` 之类字符数组长度对不上 | 本机 BTF 实测 16 字节定长，其他版本或配置可能不同。长度以 vmlinux.h 类型定义为准（`sizeof(ctx->prev_comm)`），不硬编码；定长数组直接读不越界，`__data_loc` 变长字段才需要 `bpf_probe_read_str`（5.2 口诀） |
+| 字段在编译期不存在 | BPF 侧类型来自本机 BTF 生成的 vmlinux.h：目标内核没有该字段，clang 直接报「无此成员」——编译期暴露，与 SEC 名写错（运行期）方向相反（1.6 失败点）。要「编译一次、多内核运行」时，用 CO-RE 的字段存在性查询构造兼容分支（第 8 章） |
+
+**第四组：轮询与事件流的取舍**——先自问「要的是最新状态，还是每一件事」，再看 1.7 三代通道的收口对照（perf event array 的历史位置见 3.5）：
+
+| 维度 | 轮询 map（01-trace-stat） | ring buffer 事件流（练习 1） |
+|---|---|---|
+| 延迟 | 新鲜度 = 轮询周期（本例 1 秒），中间变化不可见 | 每事件可见，poll 唤醒、延迟低 |
+| 开销 | 数据面约等于零，代价集中在读回侧，与事件速率无关 | 每事件一次 reserve/submit，随事件速率线性增长 |
+| 丢失语义 | 无「丢失」概念，只有「最新状态快照」 | 缓冲满则 reserve 返回 NULL、新事件静默丢弃——BPF 侧可当场计数（与 3.5 静默丢弃的决定性差异，3.6） |
+| 实现复杂度 | 最低：lookup + 求和打印 | 中等：事件结构 8 字节对齐、回调函数、poll 超时与 Ctrl-C 协作 |
+
+选型口诀（1.7 完整版）：要「最新状态」选轮询，要「每一件事」选事件流；选了事件流，要管理的就是丢失——加大缓冲、在 BPF 侧对丢弃计数。练习 1 正是把 01-trace-stat 改成事件流的动手对照。
+
+## 课后扩展任务
+
+正文五节走完一条最小闭环，两项课后扩展任务把它向两个方向各推一步：事件通道换形态（练习 1）、映射类型换选型（练习 2）——都基于 01-trace-stat 改动，先自行实现再看参考：
+
+| 任务 | 扩展维度 | 任务描述 | 参考实现 |
+|---|---|---|---|
+| 1 | 事件通道 | 把 01-trace-stat 的轮询改为 ring buffer 事件流（reserve/submit + `ring_buffer__poll`） | `book/examples/chapter-02/exercises/01-ringbuf-events/` |
+| 2 | 映射类型 | 用 LRU hash 记录每进程被调度次数并打印 top-N（体验容量与静默淘汰） | `book/examples/chapter-02/exercises/02-lru-top-proc/` |
+
+验收标准（与各 README「任务」节同口径）：练习 1 加载后能看到带 CPU 号、时间戳与 pid 对的事件流，并能说明它与轮询的取舍；练习 2 的 top-N 榜单随系统负载变化，且能解释「旧 pid 从榜单消失」的两种可能——进程退出，或 LRU 满表静默淘汰。
+
+参考实现随目录提供，构建与主示例同构（各目录 `make`，工具链与权限前提同 5.1）。验证状态标注为「编译级待验证、运行级待验证」——本章编写环境为非 root（`unprivileged_bpf_disabled=2`），未执行加载与运行，各练习 README 的「预期输出」均为教学示例（规则见 5.1 约定表）。
+
+**防剧透约定**：每项练习的 README 按「任务在前、参考实现思路独立成节放在后部」的结构组织——先只读任务描述与提示自行实现，卡住再回 1.7、3.3、3.6 补课；实现并观察过现象之后，才翻到分界线之后的「参考实现思路」对照。总览与各目录入口见 [`book/examples/chapter-02/exercises/`](../examples/chapter-02/exercises/)。
+
+## 总结
+
+八要素各收成一句话：
+
+- **程序**（1.1、二节）：经 verifier 验证的受限 C 子集——编译通过不等于能加载，静态验证才是准入关卡。
+- **映射**（1.2、三节）：内核态与用户态共享状态的对象，选型回答 key、容量、写者、读回四问（3.9）。
+- **辅助函数**（1.3）：内核以稳定编号暴露的受控能力面，可用面随程序类型裁剪。
+- **程序类型**（1.4）：上下文结构、helper 集合与返回值语义的总开关。
+- **挂载点**（1.5）：决定触发时机与频率；tracepoint 可从 SEC 名完整推断。
+- **上下文对象**（1.6）：事件现场的结构化视图，跨版本一致性由 CO-RE 重定位保证。
+- **事件通道**（1.7）：从 trace_pipe 到轮询 map 再到 ring buffer 的三代演进，取舍在延迟、开销与丢失语义。
+- **生命周期**（1.8、四节）：没有卸载命令，只有引用计数归零；pin 是加一条不受进程约束的引用。
+
+八要素在 01-trace-stat 里各落一行，可视化节把它们装回全链路图，排错节把失败模式收成对照表；而把它们黏合在一起的那道工序还没有展开——加载路径上的 verifier。回头看 5.2 的每条注释，其实都在回答 verifier 将要提出的问题：`if (cpu >= MAX_CPUS)` 让它证明访存有界，`if (!p)` 让它证明指针非空，SEC 与 license 声明让它核对类型与权限边界，「为什么敢直接读 `ctx->next_pid`」靠「程序类型登记过上下文结构」作答。第 3 章进入 `kernel/bpf/verifier.c`，看静态验证如何逐指令做出「安全的证明」——同一份 trace_stat，从「写它的人」视角换到「审它的机器」视角；读本章示例时养成的注释习惯（解释字段语义、边界、选型与失败模式），到那里会变成生存技能。
+
+## 本章参考来源
+
+- Linux kernel documentation：BPF subsystem（`Documentation/bpf/`）、instruction set（`Documentation/bpf/instruction-set.rst`）、maps（`Documentation/bpf/maps.rst`）、helpers（`include/uapi/linux/bpf.h` 内 helper 注释）、BTF（`Documentation/bpf/btf.rst`）。
+- ebpf.io：What is eBPF? 与子系统生态总览。
+- Andrii Nakryiko：BTF 与 CO-RE 系列文章（vmlinux.h 工作流与重定位机制的原始阐述）。
+- libbpf 文档：skeleton 生成与 `open_and_load`/`attach` API、per-CPU 映射读回语义、ring buffer（`ring_buffer__new`/`ring_buffer__poll`）。
+- libbpf-bootstrap：本章示例依循的「vmlinux.h → `.bpf.o` → skeleton → loader」构建模式。
+- ebpf.top：BPF 入门系列相关文章（tracepoint、映射与事件通道的中文讲解）。
