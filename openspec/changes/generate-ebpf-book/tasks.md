@@ -166,15 +166,15 @@
 
 ### Chapter 2: eBPF Architecture and Core Concepts
 
-- [ ] Write full chapter prose explaining programs, maps, helpers, program types, attach points, context objects, event channels, and lifecycle.
-- [ ] Explain instruction-set basics: 64-bit RISC model, registers, calling convention, and instruction encoding.
-- [ ] Explain map types including hash, array, LRU hash, per-CPU maps, perf event array, ring buffer, LPM trie, and sockmap where relevant.
-- [ ] Include an integrated example showing a simple tracing program with map interaction.
-- [ ] Create standalone Chapter 2 examples under `book/examples/chapter-02/` if runnable code is included.
-- [ ] Add kernel implementation analysis for `bpf()` syscall object creation, fd ownership, reference counting, and pinning.
-- [ ] Add text visualization showing programs, maps, hooks, loader, and user-space control plane.
-- [ ] Add troubleshooting, summary, and references.
-- [ ] Main-agent review against style, examples, terminology, and references.
+- [x] Write full chapter prose explaining programs, maps, helpers, program types, attach points, context objects, event channels, and lifecycle.
+- [x] Explain instruction-set basics: 64-bit RISC model, registers, calling convention, and instruction encoding.
+- [x] Explain map types including hash, array, LRU hash, per-CPU maps, perf event array, ring buffer, LPM trie, and sockmap where relevant.
+- [x] Include an integrated example showing a simple tracing program with map interaction.
+- [x] Create standalone Chapter 2 examples under `book/examples/chapter-02/` if runnable code is included.
+- [x] Add kernel implementation analysis for `bpf()` syscall object creation, fd ownership, reference counting, and pinning.
+- [x] Add text visualization showing programs, maps, hooks, loader, and user-space control plane.
+- [x] Add troubleshooting, summary, and references.
+- [x] Main-agent review against style, examples, terminology, and references.
 
 ### Chapter 3: Verifier and Safety Guarantees
 
