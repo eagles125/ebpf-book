@@ -128,7 +128,7 @@ struct trace_event_raw_sched_switch {
 bpf(PROG_LOAD) -> verifier 检查 -> 编译为本机码 -> attach 挂载点 -> 事件到达时执行 -> 最后一个引用释放，对象回收
 ```
 
-六步各一句话：加载由 loader 发起，走 `bpf(BPF_PROG_LOAD)` 路径（四节 4.3）；验证是第 3 章主题；JIT 编译为本机指令，架构相关（第 5–7 章）；挂载见 1.5；触发是数据面——事件到达、程序执行、读写 map；卸载由引用计数决定：fd 关闭、进程退出、link 销毁都在减少引用，最后一个引用释放时内核回收对象。一句话版本：01-trace-stat 的「Ctrl-C 退出即卸载」成立，是因为 skeleton 管理的全部引用都随进程消失——fd 引用计数完整机制留给 4.4 与可视化节。
+六步各一句话：加载由 loader 发起，走 `bpf(BPF_PROG_LOAD)` 路径（四节 4.3）；验证是第 3 章主题；JIT 编译为本机指令，架构相关（第 6 章，源码地图见第 5 章）；挂载见 1.5；触发是数据面——事件到达、程序执行、读写 map；卸载由引用计数决定：fd 关闭、进程退出、link 销毁都在减少引用，最后一个引用释放时内核回收对象。一句话版本：01-trace-stat 的「Ctrl-C 退出即卸载」成立，是因为 skeleton 管理的全部引用都随进程消失——fd 引用计数完整机制留给 4.4 与可视化节。
 
 ### 1.9 八要素对照第 1 章示例
 
@@ -286,7 +286,7 @@ $ sudo bpftool prog dump xlated name trace_stat
 
 ## 三、映射类型全景
 
-1.2 建立了直觉：映射是内核分配、两个世界共同访问的数据对象。但「映射」是一个类型族——内核 UAPI 实际注册的类型远不止几种（本机 `/usr/include/linux/bpf.h` 的 `enum bpf_map_type` 实测 40 余个成员，随内核版本只增不减）。本节选出覆盖绝大多数观测与网络场景的八类，每类一张卡片、固定四要素：**语义 / 典型场景 / 容量与并发特征 / 选型理由**。选型不靠背 API，靠回答四个问题：key 长什么样、容量怎么定、谁在写、读回要付出什么代价。机制深挖不属于本节——LPM 与 sockmap 的机制与实战分别是第 17 章、第 19 章的专题，映射在内核里的实现结构是第 5 章的内容。
+1.2 建立了直觉：映射是内核分配、两个世界共同访问的数据对象。但「映射」是一个类型族——内核 UAPI 实际注册的类型远不止几种（本机 `/usr/include/linux/bpf.h` 的 `enum bpf_map_type` 实测 35 个成员，随内核版本只增不减）。本节选出覆盖绝大多数观测与网络场景的八类，每类一张卡片、固定四要素：**语义 / 典型场景 / 容量与并发特征 / 选型理由**。选型不靠背 API，靠回答四个问题：key 长什么样、容量怎么定、谁在写、读回要付出什么代价。机制深挖不属于本节——LPM 与 sockmap 的机制与实战分别是第 17 章、第 19 章的专题，映射在内核里的实现结构是第 5 章的内容。
 
 ### 3.1 哈希映射（hash）：全等 key 的字典
 
@@ -441,7 +441,7 @@ fd 所有权语义：**fd 是进程视角的句柄，不是对象本身**。进�
 
 1. **license 检查**：程序声明的 license（`trace_stat.bpf.c` 末行的 `char LICENSE[] SEC("license") = "GPL"`）在此参与检查——内核把部分辅助函数标记为仅 GPL 兼容 license 可用，license 决定程序能看到的辅助函数面（1.3「受控」的延伸）。
 2. **verifier 静态验证**：逐指令模拟执行，证明内存安全、可终止、权限合法；拒绝时返回 `-EACCES` 并给出日志。这是第 3 章整章的主题，此处只需知道它发生在加载路径的哪一步。
-3. **JIT 编译**：验证通过后，eBPF 指令被编译为宿主架构机器码（本机 x86-64）；JIT 实现按架构分布在 `arch/*/net/` 一类路径下，随内核版本演进（第 5–7 章按架构展开）。
+3. **JIT 编译**：验证通过后，eBPF 指令被编译为宿主架构机器码（本机 x86-64）；JIT 实现按架构分布在 `arch/*/net/` 一类路径下，随内核版本演进（第 6 章按架构展开）。
 4. **组装与 fd**：构造 `struct bpf_prog`（含验证与 JIT 产物的程序对象），绑定 fd 返回——与 map 同构的对象诞生方式。
 
 回指：01-trace-stat 的 `trace_stat_bpf__open_and_load()` 一次完成上述两条命令——libbpf 先以 `BPF_MAP_CREATE` 创建全部映射（2.2 提到的 ld_imm64 重定位此刻才拿到真实 map fd 并改写进指令），再以 `BPF_PROG_LOAD` 提交程序；open 阶段只解析 ELF，真正的内核对象创建全部发生在 load 阶段。
@@ -816,7 +816,7 @@ Ctrl-C ── destroy() ───────►  关闭 prog/map/link fd，引�
 | 现象 | 原因与处理 |
 |---|---|
 | `-EPERM` | 非 root 且 `unprivileged_bpf_disabled=2`（5.1 权限矩阵第三行，本机即此档）：不能加载任何 BPF 对象。以 root 或 `CAP_BPF`+`CAP_PERFMON` 档位运行；先跑 `book/examples/chapter-02/00-env/check-env.sh` 确认档位 |
-| `-EPERM`/`-ENOMEM`（已 root 仍失败） | 内核 5.11 前按 `RLIMIT_MEMLOCK` 计费，程序或映射过大撞上限即失败；5.11+ 持 `CAP_BPF` 后不再计提（本机 7.0 属此列）。libbpf 默认先尝试抬高该上限，仍失败再查 `ulimit -l` |
+| `-EPERM`/`-ENOMEM`（已 root 仍失败） | 内核 5.11 前按 `RLIMIT_MEMLOCK` 计费，程序或映射过大撞上限即失败；5.11+ 持 `CAP_BPF` 后不再计提（本机 7.0 属此列）。libbpf 1.0+ 默认不自动抬升：需自行 `setrlimit` 或用 5.11+ `CAP_BPF` 免计费，仍失败再查 `ulimit -l` |
 | `-EACCES`（verifier 拒绝） | 静态验证未通过：越界访存（1.6 失败点）、无法证明会终止（1.1/2.3）、调用了本类型不可用的 helper（1.3 失败点）。日志逐行是「指令号 + 执行后的寄存器状态」：找到最后一个正常推进的指令号，其后第一条就是被拒位置；结尾 `processed N insns ... OK` 是通过标志（示意见下；精读是第 3 章正题） |
 | `-EACCES`（license 不兼容） | 调用了仅 GPL 兼容 license 可用的 helper，而程序未声明或声明了不兼容 license。补 `char LICENSE[] SEC("license") = "GPL";`（01-trace-stat 末行即为此，4.3 第一道检查） |
 | attach 失败 | 挂载目标不存在或无权限：SEC 名拼错（1.5，运行期才暴露的典型）、tracefs 不可见（5.1 第一层 WARN 的回扣）、非 root。核对 SEC 名与 `sudo`，按 check-env.sh 分级定位 |
