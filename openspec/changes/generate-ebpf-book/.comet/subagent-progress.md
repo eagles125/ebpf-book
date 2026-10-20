@@ -1,26 +1,33 @@
 # Comet Subagent 进度检查点 — generate-ebpf-book
 
 - plan: docs/superpowers/plans/2026-09-26-chapter02-teaching.md（9 任务）
-- review_mode: thorough（每任务 reviewer spec+quality，审查-修复最多 2 轮；最终完整审查 1 次，修复+复查最多 2 轮）
-- tdd_mode: direct（无 RED/GREEN 要求）；isolation: current（master）
-- 当前 OpenSpec tasks.md 勾选：按计划全局约束 10，由 Task 9 统一勾选 Chapter 2 的 9 条
-- 背景：第 17 章 plan 已完成（15/15，终审通过，见 git 历史）；本检查点切换为第 2 章 plan
+- review_mode: thorough；tdd_mode: direct；isolation: current（master）
+- **停靠（2026-09-26，第 2 章 plan 全部完成，终审通过；全书 change 的 guard 仍按设计阻塞）**
 
-## 当前任务
+## 当前状态
 
-- task: Task 5 — 正文「五、实战：第一个追踪统计示例」（五层环境紧凑版 + 代码走读四段式）
-  - plan task 唯一文本：`Task 5: 正文「五、实战：第一个追踪统计示例」（五层环境紧凑版 + 代码走读 + 双视角 + 检查点）`
-  - 阶段：**implementing**（implementer 后台运行中，会自行提交；2026-09-26 用户请求暂存）
-  - BASE：`7249590`
-  - implementer agent：agent_0017549b-9fd2-4878-abb3-7919ef8b11d0（后台）
-  - 交接产物：brief `task-5-brief.md`、report `task-5-report.md`
-  - 派发提示：正文代码块与 01-trace-stat 源文件逐字一致（硬性）；check-env 本机实际口径（OK bounding set + WARN tracefs）已告知；篇幅 5.1 3–4k、5.2 6–7k
-  - 审查轮次：0/2
-  - **恢复指引（2026-09-26 停靠）**：恢复时先 `git log --oneline 7249590..HEAD`——若已有 Task 5 提交（信息 `docs(ch02): 实战节...`或以 docs(ch02) 开头且含五节内容），对照 git 生成 review-package（BASE=7249590 → 该提交）直接走 task-review；若提交不存在或工作区有未提交残迹，按 dirty-worktree 协议归因后重新派发 implementer（brief/report 路径同上）
+- 第 2 章 plan 的 9 个任务全部实现、逐任务审查通过并勾选（终审修复波 8a7d973 后无遗留开放项）
+- 最终完整审查（5f5bda5..8a7d973，32 提交）：0 Critical / 1 Important 已修（libbpf memlock 句）+ 2 项 fix-before-delivery 已修（枚举计数 35、第 6 章引用）——scoped 复审 3/3 ADDRESSED
+- 硬性验收记录：verify-build.sh 单章版 PASS=4 FAIL=0（Task 8/9 真实运行，记录在 book/examples/chapter-02/README.md）；正文 wc -m=47971（裁定口径 35–48k，余量 29——后续触碰正文须等量对冲压缩）
+- tasks.md：Chapter 2 九条已统一勾选（281f1ee）；全书 change 累计 107/296
+- **`comet guard build --apply` 按设计 BLOCKED**：tasks.md 全部勾选条件未满足——全书 Batch 2/4/6/7/8 等其余章节未开工。build→verify 须等全书完成或用户改变 change 组织方式
+- SDD 工作区 .superpowers/sdd/2026-09-26-chapter02-teaching/ 已按 Finish 删除（git 历史为记录）
+- 延后项登记（未来批次/统稿）：枚举计数类「实测 N 个」声明机械核对；跨章引用「第 N 章」自动比对；图 2 ASCII 观感；1.8 JIT 措辞；章末「与各 README」措辞对齐
 
-## 已完成任务
+## 已完成任务（第 2 章 plan）
 
-- ch02 Task 4 — 映射全景与 bpf() 分析（`7a4e0f9`+修复 `db9f4d1`；勾选 `7249590`；修复轮 1 通过；Important=第 17 章阶段 5 加载方归属）
-- ch02 Task 3 — 正文前半（`bbfd64f`+修复 `56a8dee`；勾选 `9c9ada6`；修复轮 1 通过）
-- ch02 Task 2 — 01-trace-stat 集成示例（`8c8277a`；勾选 `ac5587f`；Approved）
-- ch02 Task 1 — 章级 README、00-env 与 .gitignore（`ba7895e`；勾选 `a6094bd`；Approved）
+- Task 9 主审与 tasks.md 勾选（`281f1ee`；勾选 `a08a296`；Approved）
+- Task 8 verify-build 与交叉链接（`145f227`；勾选 `9ac87d6`；Approved；PASS=4 FAIL=0）
+- Task 7 练习参考实现与总览（`2605b47`；勾选 `38561f8`；Approved）
+- Task 6 正文收尾五节（`14c02f4`+修复 `2bcf1b6`；勾选 `65a75c8`；修复轮 1 通过）
+- Task 5 实战节（`e05d847`；勾选 `dbe8c2b`；Approved）
+- Task 4 映射全景与 bpf() 分析（`7a4e0f9`+修复 `db9f4d1`；勾选 `7249590`；修复轮 1 通过）
+- Task 3 正文前半（`bbfd64f`+修复 `56a8dee`；勾选 `9c9ada6`；修复轮 1 通过）
+- Task 2 01-trace-stat 集成示例（`8c8277a`；勾选 `ac5587f`；Approved）
+- Task 1 章级 README、00-env 与 .gitignore（`ba7895e`；勾选 `a6094bd`；Approved）
+- 控制器裁定：篇幅上限 48k（3d148e6）；5.2 超量接受；终审 memlock/计数/章号三处措辞校准（8a7d973）
+
+## 恢复指引
+
+1. 用户决策下一章/下一批次（Batch 2/4/6/7/8 任一），为该章走 design → plan → build（同第 2/17 章模式）
+2. 全书 tasks.md 勾满后：`comet guard build --apply` → verify → archive
