@@ -768,7 +768,7 @@ attach()（SEC 名推断，1.5）─►  创建 bpf_link，挂载 tracepoint（4
 
 sched_switch 触发（1.5）──► trace_stat 执行（5.2）：读 ctx->next_pid（1.6）、
                             sched_counts[cpu] 累计（3.4）
-每秒轮询 while(!exiting) ◄─ bpf(BPF_MAP_LOOKUP_ELEM)：读回槽位求和打印（1.7/5.2）
+每秒轮询 while(!exiting) ──► bpf(BPF_MAP_LOOKUP_ELEM)：读回槽位求和打印（1.7/5.2）
 Ctrl-C ── destroy() ───────►  关闭 prog/map/link fd，引用逐级归零（4.4）：
                               link 销毁 → prog 回收 → 释放 map 引用 → map 回收
 ```
@@ -780,13 +780,16 @@ Ctrl-C ── destroy() ───────►  关闭 prog/map/link fd，引�
 **图 2：对象、fd 与 pin 的三方引用关系**（fd 表 / 内核对象 / bpffs 节点，呼应 4.5）：
 
 ```text
-  loader 进程（fd 表）       内核对象                    bpffs（/sys/fs/bpf）
+  loader 进程（fd 表）        内核对象                     bpffs（/sys/fs/bpf）
 ┌─────────────┐
-│ prog fd ────┼──► struct bpf_prog ◄──────┐
-│ map  fd ────┼──► struct bpf_map  ◄──┐   │ link 持有 prog 的引用
-│ link fd ────┼──► struct bpf_link ───┼───┘ prog 持有 map 的引用
-└─────────────┘          ▲            │
-                         │（每条边 = 一份引用，被指对象引用计数 +1）
+│ prog fd ────┼──► struct bpf_prog ──┬──◄────┐
+│             │                      │       │
+│ map  fd ────┼──► struct bpf_map ◄──┘       │
+│             │                              │
+│ link fd ────┼──► struct bpf_link ──────────┘
+└─────────────┘   引用边：prog→map、link→prog（每条边 = 一份引用，箭头指向被持有的对象）
+                         ▲
+                         │
                 bpffs 文件节点 ── 可选边：对象被 pin（BPF_OBJ_PIN，4.5）才有，节点持有活引用
 
 路径 A（不 pin，01-trace-stat）：进程退出 → 三个 fd 全关 → 引用归零 → 对象全部回收
@@ -808,7 +811,7 @@ Ctrl-C ── destroy() ───────►  关闭 prog/map/link fd，引�
 |---|---|
 | `-EPERM` | 非 root 且 `unprivileged_bpf_disabled=2`（5.1 权限矩阵第三行，本机即此档）：不能加载任何 BPF 对象。以 root 或 `CAP_BPF`+`CAP_PERFMON` 档位运行；先跑 `book/examples/chapter-02/00-env/check-env.sh` 确认档位 |
 | `-EPERM`/`-ENOMEM`（已 root 仍失败） | 内核 5.11 前按 `RLIMIT_MEMLOCK` 计费，程序或映射过大撞上限即失败；5.11+ 持 `CAP_BPF` 后不再计提（本机 7.0 属此列）。libbpf 默认先尝试抬高该上限，仍失败再查 `ulimit -l` |
-| `-EACCES`（verifier 拒绝） | 静态验证未通过：越界访存、无法证明会终止、调用了本类型不可用的 helper（1.3/1.6 失败点）。日志逐行是「指令号 + 执行后的寄存器状态」：找到最后一个正常推进的指令号，其后第一条就是被拒位置；结尾 `processed N insns ... OK` 是通过标志（示意见下；精读是第 3 章正题） |
+| `-EACCES`（verifier 拒绝） | 静态验证未通过：越界访存（1.6 失败点）、无法证明会终止（1.1/2.3）、调用了本类型不可用的 helper（1.3 失败点）。日志逐行是「指令号 + 执行后的寄存器状态」：找到最后一个正常推进的指令号，其后第一条就是被拒位置；结尾 `processed N insns ... OK` 是通过标志（示意见下；精读是第 3 章正题） |
 | `-EACCES`（license 不兼容） | 调用了仅 GPL 兼容 license 可用的 helper，而程序未声明或声明了不兼容 license。补 `char LICENSE[] SEC("license") = "GPL";`（01-trace-stat 末行即为此，4.3 第一道检查） |
 | attach 失败 | 挂载目标不存在或无权限：SEC 名拼错（1.5，运行期才暴露的典型）、tracefs 不可见（5.1 第一层 WARN 的回扣）、非 root。核对 SEC 名与 `sudo`，按 check-env.sh 分级定位 |
 
@@ -820,7 +823,8 @@ verifier 日志读法示意（格式随内核与 libbpf 版本不同；示例取
 ; if (cpu >= MAX_CPUS)
 5: (25) if r0 > 0x3f goto pc+13
 ...
-19: (95) exit
+19: (b7) r0 = 0
+20: (95) exit
 processed 21 insns (limit 1000000) ... OK
 ```
 
