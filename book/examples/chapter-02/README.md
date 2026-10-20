@@ -55,7 +55,10 @@ vmlinux.h（bpftool 由 /sys/kernel/btf/vmlinux 生成） -> *.bpf.o（clang -ta
 - **编译验证**：已在编写环境（x86_64、内核 7.0、clang 18、bpftool 7.7、libbpf 1.3）`make` 通过。
 - **待运行验证**：编写环境为非 root（`unprivileged_bpf_disabled=2`），未执行加载与运行；
   各 README 中「预期输出」均为教学示例。
-- 全量编译结果由 `scripts/verify-build.sh` 生成，摘要见 Task 8 回填。
+- 全量编译结果由 `scripts/verify-build.sh` 生成：2026-10-20 本地全量运行——BTF 前置 OK，
+  `00-env` 自检、`01-trace-stat`、`exercises/01-ringbuf-events`、`exercises/02-lru-top-proc`
+  共 4/4 PASS、FAIL=0（退出码 0）；工具链：clang 18.1.3、bpftool 7.7.0、libbpf-dev 1.3.0
+  （内核 7.0.0-31）。
 
 ## 参考来源
 
