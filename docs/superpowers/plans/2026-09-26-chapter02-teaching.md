@@ -8,7 +8,7 @@ base-ref: 5f5bda5a0a24d93eec9c5e40c57d6b41995a8bba
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**目标:** 将第 2 章《eBPF 架构与核心概念》从零写为 35–45k 字符的完整教学章节（概念章 + 完整实战化），并落地 `book/examples/chapter-02/` 全部独立示例资产（00-env + 01-trace-stat 集成示例 + scripts 编译级验证）与 2 项课后练习的完整可编译参考实现（含防剧透 README）。
+**目标:** 将第 2 章《eBPF 架构与核心概念》从零写为 35–48k 字符的完整教学章节（概念章 + 完整实战化），并落地 `book/examples/chapter-02/` 全部独立示例资产（00-env + 01-trace-stat 集成示例 + scripts 编译级验证）与 2 项课后练习的完整可编译参考实现（含防剧透 README）。
 
 **架构:** 单一集成示例 01-trace-stat（sched_switch tracepoint + per-CPU array 统计，libbpf-bootstrap C loader 模式）贯穿八要素教学；正文按「完整章节模板」组织为 总览→指令集→映射全景→bpf() 内核分析→实战 五段，双视角落总览/映射/实战三节；课后练习（ringbuf 事件流、LRU top 进程）各带完整参考实现；`scripts/verify-build.sh` 做单章编译级汇总验证。
 
@@ -29,7 +29,7 @@ base-ref: 5f5bda5a0a24d93eec9c5e40c57d6b41995a8bba
 1. **语言**：全书与全部代码注释使用中文（`Language: zh-CN`）；术语遵循 `book/STYLE.md`（map=映射、helper=辅助函数、program type=程序类型、attachment point=挂载点）；术语首次出现用「英文（中文解释）」或「中文（English）」格式。
 2. **验证策略（硬性验收）**：编译级真实验证在本机执行——clang 18.1.3、bpftool 7.7.0（libbpf 1.3 系统头）、gcc、BTF（`/sys/kernel/btf/vmlinux` 存在）齐备，本章无 Go、无网络依赖；**无 root，`kernel.unprivileged_bpf_disabled=2`**。凡涉及加载/运行的效果一律写「预期输出示例」并标注「运行级待验证」，不得写成「已验证通过」。
 3. **运行级验证**：只允许出现「预期输出示例 / 运行级待验证」标注；如未来在有特权环境验证，才可改为实测记录。
-4. **篇幅**：章节正文目标 35–45k 字符（`wc -m` 口径）；分节预算按设计 §3.3：总览 5–6k、指令集 5–6k、映射类型 6–8k、bpf() 内核分析 5–6k、实战（含五层）9–11k、可视化 1.5–2.5k、排错 3–4k、课后任务与总结/参考 3–4k（学习目标/导读约 1–1.5k 计入总预算，不单独设上限）。
+4. **篇幅**：章节正文目标 35–48k 字符（`wc -m` 口径；2026-09-26 控制裁定上调上限，原 45k——Task 3/5 的计划强制要素[八要素表、BTF 实测块、五层阐述、五段逐字代码块]自然落点约 40–48k，设计文档 §3.3 同步修订）；分节预算按设计 §3.3：总览 5–6k、指令集 5–6k、映射类型 6–8k、bpf() 内核分析 5–6k、实战（含五层）9–11k、可视化 1.5–2.5k、排错 3–4k、课后任务与总结/参考 3–4k（学习目标/导读约 1–1.5k 计入总预算，不单独设上限）。
 5. **叙事**：双视角落「总览（一）、映射类型（三）、实战（五）」三节——各节内用「**教师视角**」「**学生动手**」加粗引导段，检查点用编号列表（2–4 个自测问题 + 答案提示）。本章非渐进阶段章节，「四段式阶段教学节奏」不约束一/二/三/四节；「五、实战」5.2 内以教师视角引入/核心代码原理讲解/学生动手/检查点四段组织（设计 §3.2）。
 6. **代码注释**：所有 `.bpf.c` 与 loader C 源文件中文注释，覆盖五类要点：数据结构字段语义、verifier 边界检查原因、helper 选型原因、map 类型选型原因、失败模式。
 7. **内核兼容**：helper/特性保守选择，5.10+ 兼容优先；版本相关细节用保守措辞并注明（本机内核 7.0.0-31）。
@@ -470,7 +470,7 @@ git commit -m "feat(ch02): 01-trace-stat 集成示例（BPF+loader+Makefile+READ
 - [x] **Step 4: 核对（硬性）**
 
 Run: `grep -c "^## " book/chapters/02-ebpf-architecture-and-core-concepts.md && grep -c "^### 1\." book/chapters/02-ebpf-architecture-and-core-concepts.md && grep -c "^### 2\." book/chapters/02-ebpf-architecture-and-core-concepts.md && wc -m book/chapters/02-ebpf-architecture-and-core-concepts.md`
-Expected: `4`（学习目标/导读/一/二）、`9`、`4`；`wc -m ≥ 12000`（本任务中段值参考；Task 8 终检 35–45k）。
+Expected: `4`（学习目标/导读/一/二）、`9`、`4`；`wc -m ≥ 12000`（本任务中段值参考；Task 8 终检 35–48k）。
 
 - [x] **Step 5: 提交**
 
@@ -983,7 +983,7 @@ Expected: `≥ 5`（01-trace-stat + exercises 两目录 + exercises README + 顶
 - [ ] **Step 5: 篇幅终检（硬性）**
 
 Run: `wc -m book/chapters/02-ebpf-architecture-and-core-concepts.md`
-Expected: 35000–45000。低于下限：优先补原理讲解而非注水（写作纪律——每个概念钉回读者已见过的示例）；高于上限：压缩重复叙述，不删原理。
+Expected: 35000–48000（2026-09-26 控制裁定上调上限，原 35000–45000）。低于下限：优先补原理讲解而非注水（写作纪律——每个概念钉回读者已见过的示例）；高于上限：压缩重复叙述，不删原理。
 
 - [ ] **Step 6: 提交**
 
