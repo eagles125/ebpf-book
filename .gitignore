@@ -22,3 +22,4 @@ book/examples/chapter-17/exercises/03-prometheus-export/fwctl
 book/examples/chapter-02/01-trace-stat/trace_stat
 book/examples/chapter-02/exercises/01-ringbuf-events/trace_events
 book/examples/chapter-02/exercises/02-lru-top-proc/top_proc
+book/examples/chapter-03/01-pkt-parse/pkt_parse
