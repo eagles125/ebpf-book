@@ -297,6 +297,8 @@ git commit -m "feat(ch03): 章级 README 与 00-env 分级环境自检"
 
 ### Task 2: 01-pkt-parse 正面锚点示例（pkt_parse.bpf.c + pkt_parse.c + Makefile + README）
 
+- [x] Task 2: 01-pkt-parse 正面锚点示例（pkt_parse.bpf.c + pkt_parse.c + Makefile + README）
+
 **tasks.md 条目**：「Create standalone Chapter 3 verifier examples under `book/examples/chapter-03/`.」（锚点部分）
 
 **Files:**
@@ -309,7 +311,7 @@ git commit -m "feat(ch03): 章级 README 与 00-env 分级环境自检"
 - Consumes: C1（map/程序/SEC/loader 契约）、C4（全链 Makefile 模板）、C5（README 十段）、C6（验证状态）、全局约束 8（安全警告）。
 - Produces: 正文 Task 7「四、实战」5.2 走读的唯一「通过路径」代码对象；verify-build.sh 的全链编译项。
 
-- [ ] **Step 1: 创建 `pkt_parse.bpf.c`**（逐字如下，冒烟测试已验证编译）
+- [x] **Step 1: 创建 `pkt_parse.bpf.c`**（逐字如下，冒烟测试已验证编译）
 
 ```c
 // SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause
@@ -373,7 +375,7 @@ int pkt_parse(struct xdp_md *ctx)
 char LICENSE[] SEC("license") = "GPL";
 ```
 
-- [ ] **Step 2: 创建 `pkt_parse.c`**（逐字如下；`<net/if.h>` 与 `<bpf/bpf.h>` 为冒烟测试结论⑤的必需头文件）
+- [x] **Step 2: 创建 `pkt_parse.c`**（逐字如下；`<net/if.h>` 与 `<bpf/bpf.h>` 为冒烟测试结论⑤的必需头文件）
 
 ```c
 // SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause
@@ -442,14 +444,14 @@ int main(int argc, char **argv)
 }
 ```
 
-- [ ] **Step 3: 创建 `Makefile`** —— 使用 C4 全链模板，目标 `pkt_parse`；`.bpf.o` 依赖 `pkt_parse.bpf.c vmlinux.h`。
+- [x] **Step 3: 创建 `Makefile`** —— 使用 C4 全链模板，目标 `pkt_parse`；`.bpf.o` 依赖 `pkt_parse.bpf.c vmlinux.h`。
 
-- [ ] **Step 4: 编译验证（本机真实执行，硬性）**
+- [x] **Step 4: 编译验证（本机真实执行，硬性）**
 
 Run: `make -C book/examples/chapter-03/01-pkt-parse`
 Expected: 退出码 0，生成 `pkt_parse`；`clang -target bpf` 与 `bpftool gen skeleton` 无 error（vmlinux.h 的 `-Wmissing-declarations` warning 属正常）。失败即设计缺陷：修代码后重跑，直至通过。
 
-- [ ] **Step 5: 创建 `README.md`** —— 按 C5 十段结构。关键口径：
+- [x] **Step 5: 创建 `README.md`** —— 按 C5 十段结构。关键口径：
   - 演示目标：「验证通过」路径的实物——报文解析三层边界检查 + map 计数最小闭环；与画廊 bad 程序的对照关系。
   - 文件说明表：`pkt_parse.bpf.c` / `pkt_parse.c` / `Makefile`。
   - 环境前提：指向 `../00-env/check-env.sh` 三档结论。
@@ -467,7 +469,7 @@ udp_packets=57
   - 验证状态：按 C6。
   - 参考来源：内核文档 XDP、libbpf-bootstrap、`bpf_helpers.h`。
 
-- [ ] **Step 6: 提交**
+- [x] **Step 6: 提交**
 
 ```bash
 git add book/examples/chapter-03/01-pkt-parse/
