@@ -190,6 +190,8 @@ clean:
 
 ### Task 1: 章级 README、00-env 环境自检与 .gitignore 追加
 
+- [x] Task 1: 章级 README、00-env 环境自检与 .gitignore 追加
+
 **tasks.md 条目**：「Create standalone Chapter 3 verifier examples under `book/examples/chapter-03/`.」（章级资产部分）
 
 **Files:**
@@ -201,7 +203,7 @@ clean:
 - Consumes: C5（章级 README 十段）、C6（验证状态约定）、全局约束 3/8（bad 编译口径与 XDP 安全警告措辞）。
 - Produces: `check-env.sh` 三档结论（编译级/加载级/运行级），供 01-pkt-parse README「环境前提」与正文 5.1 第一层引用；章级 README 的示例总览表（Task 3/4/9 的目录命名依据）；`00-env/` 无 Makefile（纯脚本）。
 
-- [ ] **Step 1: 创建 `book/examples/chapter-03/README.md`**（十段结构，内容口径如下）
+- [x] **Step 1: 创建 `book/examples/chapter-03/README.md`**（十段结构，内容口径如下）
 
 标题「# 第 3 章独立示例资产」+ 定位句（对应正文「三、失败画廊」与「四、实战」）。目录结构表：
 
@@ -215,7 +217,7 @@ clean:
 
 其余段落：演示目标（正反两条路径各自落到哪个文件）；学习路径（check-env → 01-pkt-parse → 画廊逐对 → 练习）；**安全警告**（全局约束 8 措辞，逐字）；统一构建模式（C2 compile-only + C4 全链两种，说明「画廊与练习只编译、锚点全链」的原因=全局约束 3）；验证状态说明（C6 三条 + 「全量编译结果由 `scripts/verify-build.sh` 生成，摘要见 Task 10 回填」占位句——Task 10 会替换为实际摘要）。
 
-- [ ] **Step 2: 创建 `book/examples/chapter-03/00-env/check-env.sh`**（完整内容如下——以第 2 章已验证脚本为基底，改章号注释并追加 XDP 挂载目标检查）
+- [x] **Step 2: 创建 `book/examples/chapter-03/00-env/check-env.sh`**（完整内容如下——以第 2 章已验证脚本为基底，改章号注释并追加 XDP 挂载目标检查）
 
 ```bash
 #!/usr/bin/env bash
@@ -278,12 +280,12 @@ fi
 exit "$fail"
 ```
 
-- [ ] **Step 3: 本机验证（无特权可执行）**
+- [x] **Step 3: 本机验证（无特权可执行）**
 
 Run: `chmod +x book/examples/chapter-03/00-env/check-env.sh && bash book/examples/chapter-03/00-env/check-env.sh`
 Expected: 退出码 0；工具链各行 OK；权限分级输出 WARN 段（本机非 root）并明示「可以完成编译级验证」；lo 接口行 OK。
 
-- [ ] **Step 4: 追加 `.gitignore` 并提交**
+- [x] **Step 4: 追加 `.gitignore` 并提交**
 
 ```bash
 printf '%s\n' 'book/examples/chapter-03/01-pkt-parse/pkt_parse' >> .gitignore
