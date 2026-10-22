@@ -135,8 +135,8 @@ clean:
 | 01-map-null | `bpf_map_lookup_elem` 返回值未检查即 `*v += 1`（map_value_or_null 直接解引用） | 增加 `if (!v) return XDP_PASS;` | `invalid mem access 'map_value_or_null'` |
 | 02-pkt-bounds | eth/ip 指针推进后无任何 `data_end` 检查就读字段（首个越界读在 `eth->h_proto`） | 两层各加 `(void *)(指针 + 1) > data_end` 检查 | `R2 offset is outside of the packet`（或 `invalid packet access`） |
 | 03-ptr-math | 对 pkt_end 指针做算术且结果可观测（防 clang 死代码消除）：`data_end += 4` 后参与 `data > data_end` 比较——两侧偏移 0 对 4 不等，编译器无法折叠公共偏移（`data + 4 > data_end` 形态会被 InstCombine 折叠掉算术指令，实测教训） | 去掉对 pkt_end 的算术，比较只保留 `data + 4 > data_end`（算术放在 packet 指针上） | `R2 pointer arithmetic on pkt_end PROHIBITED` |
-| 04-stack-uninit | `__u64 verdict;` 仅在 `if (v)` 分支赋值，分支外条件使用 | 声明即初始化 `__u64 verdict = 0;` | `R2 !read_ok`（或 `invalid read from stack ...`） |
-| 05-loop | 循环上界 `n` 直接取自报文且无掩码（不可证明终止） | `n & 0xF` 掩码定界（上界变常数 16） | `back-edge from insn ... to ...`（或 `infinite loop detected`） |
+| 04-stack-uninit | `volatile __u64 verdict;` 仅在 `if (v)` 分支赋值，分支外条件使用（volatile 使未初始化栈槽读取落到真实指令——裸形式会被 clang -O2 UB 折叠消除，实测教训） | 声明即初始化 `volatile __u64 verdict = 0;`（两侧同带 volatile，diff 仅剩 `= 0` 一处） | `R2 !read_ok`（或 `invalid read from stack ...`） |
+| 05-loop | 循环上界 `n` 直接取自报文且无掩码（不可证明终止）；累加用 `sum ^= i`（线性 `sum += i` 会被 -indvars 折叠成闭式、循环整条消除，实测教训） | `n & 0xF` 掩码定界（上界变常数 16）；两侧同用 `sum ^= i`，diff 仅剩掩码一处 | `back-edge from insn ... to ...`（或 `infinite loop detected`） |
 | 06-helper-misuse | XDP 程序调用 `bpf_get_current_pid_tgid()`（tracing 类专用，不在 XDP 白名单） | 改用 `bpf_get_smp_processor_id()` | `program of this type cannot use helper`（或 `func ... not allowed for program type ...`） |
 | 07-kernel-ptr | tracepoint 程序把 ctx 标量字段强转指针直接解引用：`char *fn = (char *)ctx->args[1]; fn[0]` | `bpf_probe_read_user_str()` 读入栈缓冲后再判读（5.5+；旧版 `bpf_probe_read_str` 兼容行为注明） | `invalid mem access 'scalar'` |
 
@@ -638,7 +638,7 @@ SEC("xdp")
 int probe_bad(struct xdp_md *ctx)
 {
     __u32 key = 0;
-    __u64 verdict;                 /* 预期被拒：仅在 if (v) 分支赋值，分支外使用可能未初始化 */
+    volatile __u64 verdict;        /* 预期被拒：仅在 if (v) 分支赋值，分支外使用可能未初始化（volatile 抑制编译器 UB 折叠，见头注释） */
     __u64 *v = bpf_map_lookup_elem(&stats, &key);
     if (v)
         verdict = *v;
@@ -648,14 +648,14 @@ int probe_bad(struct xdp_md *ctx)
 }
 ```
 
-fixed 函数体（逐字，仅初始化一处）：
+fixed 函数体（逐字，仅初始化一处；两侧同带 volatile——那是可观测性手段而非修复内容，diff 仅剩 `= 0`）：
 
 ```c
 SEC("xdp")
 int probe_fixed(struct xdp_md *ctx)
 {
     __u32 key = 0;
-    __u64 verdict = 0;             /* 修复：声明即初始化，所有路径上都有确定值 */
+    volatile __u64 verdict = 0;    /* 修复：声明即初始化，所有路径上都有确定值 */
     __u64 *v = bpf_map_lookup_elem(&stats, &key);
     if (v)
         verdict = *v;
@@ -680,14 +680,14 @@ int probe_bad(struct xdp_md *ctx)
     __u32 n = *(__u32 *)data;      /* 预期被拒：上界取自报文且无掩码，迭代次数不可证明 */
     __u64 sum = 0;
     for (__u32 i = 0; i < n; i++)
-        sum += i;
+        sum ^= i;                  /* XOR 而非 +=：线性递推会被 -indvars 折叠成闭式、循环整条消除（见头注释可观测性说明） */
     if (sum == 0xdeadbeef)         /* 消费 sum，防止被优化删除 */
         return XDP_DROP;
     return XDP_PASS;
 }
 ```
 
-fixed 函数体（逐字，仅掩码一处）：
+fixed 函数体（逐字，仅掩码一处；两侧同用 `sum ^= i`——那是可观测性手段而非修复内容，diff 仅剩掩码）：
 
 ```c
 SEC("xdp")
@@ -700,7 +700,7 @@ int probe_fixed(struct xdp_md *ctx)
     __u32 n = *(__u32 *)data & 0xF;   /* 修复：掩码定界，上界变为常数 16，循环可证明终止 */
     __u64 sum = 0;
     for (__u32 i = 0; i < n; i++)
-        sum += i;
+        sum ^= i;                  /* 与 bad 相同：XOR 防止归纳变量优化把循环折叠成闭式 */
     if (sum == 0xdeadbeef)
         return XDP_DROP;
     return XDP_PASS;
