@@ -99,7 +99,9 @@ char LICENSE[] SEC("license") = "GPL";
 ```make
 # 第 3 章「失败画廊」编译脚本（compile-only：拒绝发生在加载期，clang 层面必须全部通过）
 BPF_SRCS := <SRCS>
-BPF_OBJS := $(BPF_SRCS:.c=.bpf.o)
+# 目标名替换用 .c=.o：源文件名已是 *.bpf.c，直接得到 *.bpf.o
+# （用 .c=.bpf.o 会产生 bad.bpf.bpf.o 双重扩展名——Task 3 实现期实测修正）
+BPF_OBJS := $(BPF_SRCS:.c=.o)
 
 all: $(BPF_OBJS)
 
@@ -131,7 +133,7 @@ clean:
 |---|---|---|---|
 | 01-map-null | `bpf_map_lookup_elem` 返回值未检查即 `*v += 1`（map_value_or_null 直接解引用） | 增加 `if (!v) return XDP_PASS;` | `invalid mem access 'map_value_or_null'` |
 | 02-pkt-bounds | eth/ip 指针推进后无任何 `data_end` 检查就读字段（首个越界读在 `eth->h_proto`） | 两层各加 `(void *)(指针 + 1) > data_end` 检查 | `R2 offset is outside of the packet`（或 `invalid packet access`） |
-| 03-ptr-math | 对 pkt_end 指针做算术：`data_end += 4` | 算术移到 packet 指针上且先检查：`if (data + 4 > data_end)` | `R2 pointer arithmetic on pkt_end PROHIBITED` |
+| 03-ptr-math | 对 pkt_end 指针做算术且结果可观测（防 clang 死代码消除）：`data_end += 4` 后参与 `data > data_end` 比较——两侧偏移 0 对 4 不等，编译器无法折叠公共偏移（`data + 4 > data_end` 形态会被 InstCombine 折叠掉算术指令，实测教训） | 去掉对 pkt_end 的算术，比较只保留 `data + 4 > data_end`（算术放在 packet 指针上） | `R2 pointer arithmetic on pkt_end PROHIBITED` |
 | 04-stack-uninit | `__u64 verdict;` 仅在 `if (v)` 分支赋值，分支外条件使用 | 声明即初始化 `__u64 verdict = 0;` | `R2 !read_ok`（或 `invalid read from stack ...`） |
 | 05-loop | 循环上界 `n` 直接取自报文且无掩码（不可证明终止） | `n & 0xF` 掩码定界（上界变常数 16） | `back-edge from insn ... to ...`（或 `infinite loop detected`） |
 | 06-helper-misuse | XDP 程序调用 `bpf_get_current_pid_tgid()`（tracing 类专用，不在 XDP 白名单） | 改用 `bpf_get_smp_processor_id()` | `program of this type cannot use helper`（或 `func ... not allowed for program type ...`） |
@@ -566,8 +568,13 @@ bad 函数体（逐字）：
 SEC("xdp")
 int probe_bad(struct xdp_md *ctx)
 {
+    void *data = (void *)(long)ctx->data;
     void *data_end = (void *)(long)ctx->data_end;
     data_end += 4;                 /* 预期被拒：pkt_end 指针禁止算术（内核以此保住报文尾界的可信性） */
+    if (data > data_end)           /* 算术结果参与比较：防止 clang -O2 死代码消除掉 offending 指令；
+                                    * 写 data > data_end（0 对 4 偏移不等）而非 data + 4 > data_end，
+                                    * 后者会被 InstCombine 折叠公共偏移、算术指令被消除（实测教训） */
+        return XDP_DROP;
     return XDP_PASS;
 }
 ```
