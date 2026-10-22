@@ -136,7 +136,7 @@ clean:
 | 02-pkt-bounds | eth/ip 指针推进后无任何 `data_end` 检查就读字段（首个越界读在 `eth->h_proto`） | 两层各加 `(void *)(指针 + 1) > data_end` 检查 | `R2 offset is outside of the packet`（或 `invalid packet access`） |
 | 03-ptr-math | 对 pkt_end 指针做算术且结果可观测（防 clang 死代码消除）：`data_end += 4` 后参与 `data > data_end` 比较——两侧偏移 0 对 4 不等，编译器无法折叠公共偏移（`data + 4 > data_end` 形态会被 InstCombine 折叠掉算术指令，实测教训） | 去掉对 pkt_end 的算术，比较只保留 `data + 4 > data_end`（算术放在 packet 指针上） | `R2 pointer arithmetic on pkt_end PROHIBITED` |
 | 04-stack-uninit | `volatile __u64 verdict;` 仅在 `if (v)` 分支赋值，分支外条件使用（volatile 使未初始化栈槽读取落到真实指令——裸形式会被 clang -O2 UB 折叠消除，实测教训） | 声明即初始化 `volatile __u64 verdict = 0;`（两侧同带 volatile，diff 仅剩 `= 0` 一处） | `R2 !read_ok`（真实形态两种：针对 NOT_INIT 寄存器的 `R%d !read_ok` 与无寄存器号的 `invalid read from stack off %d+%d size %d`，无任何版本打印拼接形态；**特权 CAP_PERFMON 加载放行未初始化栈读**——「预期被拒」仅在允许非特权 BPF 的配置成立，README 必须带豁免说明） |
-| 05-loop | 循环上界 `n` 直接取自报文且无掩码（不可证明终止）；累加用 `sum ^= i`（线性 `sum += i` 会被 -indvars 折叠成闭式、循环整条消除，实测教训） | `n & 0xF` 掩码定界（上界变常数 16）；两侧同用 `sum ^= i`，diff 仅剩掩码一处 | `infinite loop detected at insn ...`（特权路径主形态——5.10+ 特权加载容忍回边、拒绝来自状态探索不收敛；`back-edge from insn ... to ...` 为非特权路径形态） |
+| 05-loop | 循环上界 `n` 直接取自报文且无掩码（不可证明终止）；累加用 `sum ^= i`（线性 `sum += i` 会被 -indvars 折叠成闭式、循环整条消除，实测教训） | `n & 0xF` 掩码定界（n 收窄到 [0, 15]，迭代至多 15 次）；两侧同用 `sum ^= i`，diff 仅剩掩码一处 | `infinite loop detected at insn ...`（特权路径主形态——5.10+ 特权加载容忍回边、拒绝来自状态探索不收敛；`back-edge from insn ... to ...` 为非特权路径形态） |
 | 06-helper-misuse | XDP 程序调用 `bpf_get_current_pid_tgid()`（tracing 类专用，不在 XDP 白名单） | 改用 `bpf_get_smp_processor_id()` | `unknown func bpf_get_current_pid_tgid#14`（5.10+ 白名单 miss 的真实形态——旧「cannot use helper」/「not allowed for program type」措辞已不存在于内核源码） |
 | 07-kernel-ptr | tracepoint 程序把 ctx 标量字段强转指针直接解引用：`char *fn = (char *)ctx->args[1]; fn[0]` | `bpf_probe_read_user_str()` 读入栈缓冲后再判读（5.5+；旧版 `bpf_probe_read_str` 兼容行为注明） | `invalid mem access 'scalar'` |
 
@@ -616,6 +616,8 @@ git commit -m "feat(ch03): 失败画廊前三对（map-null/pkt-bounds/ptr-math�
 
 ### Task 4: 失败画廊后四对（04-stack-uninit、05-loop、06-helper-misuse、07-kernel-ptr）与画廊总览 README
 
+- [x] Task 4: 失败画廊后四对（04-stack-uninit、05-loop、06-helper-misuse、07-kernel-ptr）与画廊总览 README
+
 **tasks.md 条目**：「Include integrated examples that intentionally fail verification, then show corrected versions.」（后四对）＋「Explain common errors involving unchecked map lookup, packet bounds, invalid pointer arithmetic, stack initialization, loops, and helper misuse.」（后三类）
 
 **Files:**
@@ -629,7 +631,7 @@ git commit -m "feat(ch03): 失败画廊前三对（map-null/pkt-bounds/ptr-math�
 - Consumes: C2/C3/C5/C6（同 Task 3）；Task 3 三对（总览表前七行合并）。
 - Produces: 正文 Task 6 四个 card 的走读对象；`02-fail-gallery/README.md` 总览表（七对全量，正文三节引用）；verify-build.sh 的四个编译项。
 
-- [ ] **Step 1: 创建 `04-stack-uninit/`**（C3 第 4 行；含 C2 stats map 块）
+- [x] **Step 1: 创建 `04-stack-uninit/`**（C3 第 4 行；含 C2 stats map 块）
 
 bad 函数体（逐字）：
 
@@ -665,7 +667,7 @@ int probe_fixed(struct xdp_md *ctx)
 }
 ```
 
-- [ ] **Step 2: 创建 `05-loop/`**（C3 第 5 行）
+- [x] **Step 2: 创建 `05-loop/`**（C3 第 5 行）
 
 bad 函数体（逐字）：
 
@@ -697,7 +699,7 @@ int probe_fixed(struct xdp_md *ctx)
     void *data_end = (void *)(long)ctx->data_end;
     if (data + 4 > data_end)
         return XDP_PASS;
-    __u32 n = *(__u32 *)data & 0xF;   /* 修复：掩码定界，上界变为常数 16，循环可证明终止 */
+    __u32 n = *(__u32 *)data & 0xF;   /* 修复：掩码定界，上界收窄到 [0, 15]（迭代至多 15 次），循环可证明终止 */
     __u64 sum = 0;
     for (__u32 i = 0; i < n; i++)
         sum ^= i;                  /* 与 bad 相同：XOR 防止归纳变量优化把循环折叠成闭式 */
@@ -707,7 +709,7 @@ int probe_fixed(struct xdp_md *ctx)
 }
 ```
 
-- [ ] **Step 3: 创建 `06-helper-misuse/`**（C3 第 6 行；无 map 块）
+- [x] **Step 3: 创建 `06-helper-misuse/`**（C3 第 6 行；无 map 块）
 
 bad 函数体（逐字）：
 
@@ -735,7 +737,7 @@ int probe_fixed(struct xdp_md *ctx)
 }
 ```
 
-- [ ] **Step 4: 创建 `07-kernel-ptr/`**（C3 第 7 行；tracepoint 类型，无 map 块）
+- [x] **Step 4: 创建 `07-kernel-ptr/`**（C3 第 7 行；tracepoint 类型，无 map 块）
 
 bad 函数体（逐字）：
 
@@ -764,16 +766,16 @@ int probe_fixed(struct trace_event_raw_sys_enter *ctx)
 }
 ```
 
-- [ ] **Step 5: 为四对各创建 `Makefile`（C2 模板）与 `README.md`（C5 画廊六段）**
+- [x] **Step 5: 为四对各创建 `Makefile`（C2 模板）与 `README.md`（C5 画廊六段）**
 
-- [ ] **Step 6: 创建 `02-fail-gallery/README.md`**：画廊总览——学习路径（建议按 01→07 顺序逐对 diff）；七对总览表（列：目录 / 失败信号 / 预期日志关键行 / 修复原则一句话，与 C3 表一致）；「bad 也必须编译通过」的验证口径说明（全局约束 3 + C6 本章补充条）；安全警告（本画廊只编译不加载）。
+- [x] **Step 6: 创建 `02-fail-gallery/README.md`**：画廊总览——学习路径（建议按 01→07 顺序逐对 diff）；七对总览表（列：目录 / 失败信号 / 预期日志关键行 / 修复原则一句话，与 C3 表一致）；「bad 也必须编译通过」的验证口径说明（全局约束 3 + C6 本章补充条）；安全警告（本画廊只编译不加载）。
 
-- [ ] **Step 7: 编译验证（本机真实执行，硬性）**
+- [x] **Step 7: 编译验证（本机真实执行，硬性）**
 
 Run: `for d in 04-stack-uninit 05-loop 06-helper-misuse 07-kernel-ptr; do make -C book/examples/chapter-03/02-fail-gallery/$d || break; done`
 Expected: 四个目录退出码均 0，各生成两个 `.bpf.o`。失败即设计缺陷：修代码后重跑，直至通过。
 
-- [ ] **Step 8: 提交**
+- [x] **Step 8: 提交**
 
 ```bash
 git add book/examples/chapter-03/02-fail-gallery/
