@@ -34,13 +34,19 @@ diff bad.bpf.c fixed.bpf.c   # 亲眼确认：只差一个 helper 换名
 （预期输出示例 / 运行级待验证；日志行随内核版本略有差异，以 5.10+ 稳定措辞为基准）
 
 ```text
-program of this type cannot use helper bpf_get_current_pid_tgid#14
+unknown func bpf_get_current_pid_tgid#14
 ```
 
-关键行指认「helper id 14 不允许用于本程序类型」——指认点就是那条
-`call 0xe` 指令（`llvm-objdump -S` 可核验）；较新内核亦报等价措辞
-`func bpf_get_current_pid_tgid#14 not allowed for program type xdp`。
-注意它不是 `unknown func`——helper id 本身存在，错在「程序类型不适用」。
+关键行指认「id 14 这个辅助函数不允许用于本程序类型」——指认点就是那条
+`call 0xe` 指令（`llvm-objdump -S` 可核验）。5.10+ 内核源码中，白名单 miss 的
+唯一输出形态就是 `unknown func <名字>#<id>`：验证器按程序类型查不到该辅助函数
+的函数原型，即按「未知函数」报错。**初学者最容易在这里误判为「helper 不存在」**
+——`bpf_get_current_pid_tgid` 当然存在，它只是不在 XDP 的白名单里；「unknown」
+修饰的是「对本程序类型不可用」，不是「内核没有这个函数」。排查这类拒绝时先查
+辅助函数的程序类型适用面（`include/uapi/linux/bpf.h` 注释或
+`bpftool feature probe`），不要先怀疑内核版本。早期教学材料流传的
+`program of this type cannot use helper` / `func ... not allowed for program
+type ...` 措辞已不存在于内核源码，本 README 不采用。
 
 ## 为什么拒绝
 
@@ -66,8 +72,8 @@ helper 白名单（每种类型一套 verifier_ops，见正文 2.7）。白名�
   换同程序类型白名单内的等价能力（本例：按 pid 聚合换不成，就按 CPU 聚合）。
 - 「等价能力」是语义替换，不是绕过：验证器没有「豁免机制」，任何想通过
   直接改 helper id 绕白名单的做法都会在原型检查（参数类型不符）处再次被拒。
-- 同型错误：在 XDP/TC 里调用 `bpf_probe_read_kernel`（ tracing 专用，除非
-  程序声明对应能力）、在没有锁能力的映射类型上用自旋锁 helper 等——
+- 同型错误：在 XDP/TC 里调用 `bpf_probe_read_kernel`（tracing 专用，除非
+  程序声明对应能力）、在没有锁能力的映射类型上用自旋锁辅助函数等——
   都是「程序类型 × helper 适用面」不匹配的同一类拒绝。
 
 ## 验证状态
