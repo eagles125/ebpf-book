@@ -786,6 +786,8 @@ git commit -m "feat(ch03): 失败画廊后四对与画廊总览（stack/loop/hel
 
 ### Task 5: 正文「学习目标/本章导读/一、验证器的目标与安全模型/二、验证流水线内核实现分析」
 
+- [x] Task 5: 正文「学习目标/本章导读/一、验证器的目标与安全模型/二、验证流水线内核实现分析」
+
 **tasks.md 条目**：「Write full chapter prose explaining verifier goals, control-flow graph construction, state exploration, state pruning, pointer types, bounds checks, stack limits, and helper constraints.」（一节 + 二节的概念部分）＋「Analyze `kernel/bpf/verifier.c`, `bpf_verifier_env`, `bpf_reg_state`, and the high-level verification pipeline.」
 
 **Files:**
@@ -795,15 +797,15 @@ git commit -m "feat(ch03): 失败画廊后四对与画廊总览（stack/loop/hel
 - Consumes: C7（标题逐字固定）；第 2 章预告回收清单（现状基线表①③④⑤⑥⑦⑧⑨）；附录 B/C 路径。
 - Produces: 章节文件与前四节成稿；「二」节的验证流水线框架（Task 6 画廊 card 与 Task 7 实战的引用锚点）。
 
-- [ ] **Step 1: 写「# 第 3 章」题头、「学习目标」「本章导读」（约 2–2.5k）**
+- [x] **Step 1: 写「# 第 3 章」题头、「学习目标」「本章导读」（约 2–2.5k）**
   - 学习目标：成果导向 6–8 条（能说出 verifier 的三类安全保证及其在加载路径的位置；能解释状态探索与剪枝为什么既安全又高效；能读懂 `bpf_reg_state` 指针状态族的含义；能独立跑通画廊七对的 bad/fixed 对照并预期拒绝结果；能逐行解读一条真实 verifier 拒绝日志；能完成 2 项课后练习）。
   - 本章导读：回收第 2 章预告（八处预告以列表呈现，逐条注明本章兑现小节）；学习路线图——先安全模型（一）→ 再内核流水线（二）→ 再失败画廊（三）→ 最后实战读日志（四）。
-- [ ] **Step 2: 写「一、验证器的目标与安全模型」（3.5–4.5k）**——小节锚点固定为 `### 1.1`–`### 1.4`：
+- [x] **Step 2: 写「一、验证器的目标与安全模型」（3.5–4.5k）**——小节锚点固定为 `### 1.1`–`### 1.4`：
   - 1.1 为什么内核不能直接执行任意 C：内核态内存安全/可终止/权限最小化三类保证；与内核模块的对照（第 1 章对比的深化回指）；**教师视角**段（类比：verifier 是「入境安检」——不是不让进，而是只放行能证明自己行为有界的访客；误区：verifier 不是运行时检查器）。
   - 1.2 静态验证与运行时定界的分工：第 2 章 3.2 的「数组 map 越界 helper 内返回 NULL」回指展开——verifier 证明不了的交给运行时兜底，两层防线的成本权衡。
   - 1.3 验证发生在哪一步：加载路径回指（第 2 章 4.3）——`BPF_PROG_LOAD` → license 检查 → **verifier** → JIT；拒绝时返回 `-EACCES` 并给出日志（预告⑥⑧回收）；「编译成功≠能加载」正式展开（预告①回收）。
   - 1.4 安全模型的边界：verifier 证明的是「这一版程序在这类输入下安全」，不含逻辑正确性；保守性取舍（合法程序也可能被拒）——为三节画廊「为什么我的对程序也被拒」伏笔；**学生动手**段（列出自己预见的三种「合法但难证明」的写法）+ 检查点（3 问 + 提示）。
-- [ ] **Step 3: 写「二、验证流水线内核实现分析」（8–11k）**——小节锚点固定为 `### 2.1`–`### 2.7`；纯讲解 + 内核路径引用（`kernel/bpf/verifier.c`），对随版本演进的函数名/结构体字段用保守措辞（「以所用内核源码为准」）：
+- [x] **Step 3: 写「二、验证流水线内核实现分析」（8–11k）**——小节锚点固定为 `### 2.1`–`### 2.7`；纯讲解 + 内核路径引用（`kernel/bpf/verifier.c`），对随版本演进的函数名/结构体字段用保守措辞（「以所用内核源码为准」）：
   - 2.1 验证入口与总体管线：`bpf_check()` 在 `BPF_PROG_LOAD` 中的位置；`bpf_verifier_env`（验证环境：程序、日志缓冲、严格级别）与 `bpf_verifier_state`（探索中的机器状态）两个核心结构的角色（预告⑥回收主线）。
   - 2.2 指令级模拟执行：逐条指令推进的抽象解释（非真实执行）；寄存器/栈/映射值的抽象取值域；为什么「模拟」就能保证「真实执行」安全（过近似 safety 论证，通俗讲法）。
   - 2.3 寄存器状态族 `bpf_reg_state`：标量、`PTR_TO_CTX`、`PTR_TO_MAP_VALUE`、`PTR_TO_PACKET`/`PTR_TO_PACKET_END`、`PTR_TO_STACK`、`PTR_TO_BTF_ID`、`SCALAR_VALUE` 等主要指针类型的语义表；每种类型「允许什么算术、要求什么检查」；ch02 预告⑦回收——ctx 申报访问与任意内核指针 probe 界限的类型学解释。
@@ -811,12 +813,12 @@ git commit -m "feat(ch03): 失败画廊后四对与画廊总览（stack/loop/hel
   - 2.5 边界推导：标量范围跟踪（`& 0xF` 后上界变 16 的例子，为画廊 card ⑤ 伏笔）；packet 指针比较建立 `data`/`data_end` 关系（为 card ② 伏笔）；有符号/无符号与掩码修正（为练习 2 伏笔）。
   - 2.6 栈模型与终止性：512 字节栈限、栈槽初始化跟踪（为 card ④ 伏笔）；「跳转偏移必须落在程序内 + 有界循环」的可终止性（预告⑤回收；5.3 前后差异一句话，保守措辞）。
   - 2.7 helper 约束与白名单：按程序类型登记的 `bpf_verifier_ops`/helper 可用面（预告②⑦回收）；参数原型 `bpf_func_proto` 的类型检查（`ARG_PTR_TO_MAP_KEY` 等）；日志如何产生与详细度控制（`verbose`、log_level 档位，指向四节实战）；**教师视角**段（讲解顺序设计说明：为什么先类型后流程再边界）+ **学生动手**段（在本机内核源码或 docs 中定位 `bpf_reg_state` 定义并核对本节表）+ 检查点（4 问 + 提示）。
-- [ ] **Step 4: 核对（硬性）**
+- [x] **Step 4: 核对（硬性）**
 
 Run: `grep -c "^## " book/chapters/03-verifier-and-safety-guarantees.md && grep -c "^### 1\." book/chapters/03-verifier-and-safety-guarantees.md && grep -c "^### 2\." book/chapters/03-verifier-and-safety-guarantees.md && wc -m book/chapters/03-verifier-and-safety-guarantees.md`
 Expected: `4`（学习目标/导读/一/二）、`4`、`7`；`wc -m ≥ 14000`（本任务中段值参考；Task 10 终检 35–48k）。
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add book/chapters/03-verifier-and-safety-guarantees.md
