@@ -98,6 +98,7 @@ char LICENSE[] SEC("license") = "GPL";
 
 ```make
 # 第 3 章「失败画廊」编译脚本（compile-only：拒绝发生在加载期，clang 层面必须全部通过）
+# 安全警告：本脚本只编译不加载（无 XDP 挂载风险）——bad 产物预期在加载期被验证器拒绝
 BPF_SRCS := <SRCS>
 # 目标名替换用 .c=.o：源文件名已是 *.bpf.c，直接得到 *.bpf.o
 # （用 .c=.bpf.o 会产生 bad.bpf.bpf.o 双重扩展名——Task 3 实现期实测修正）
@@ -482,6 +483,8 @@ git commit -m "feat(ch03): 01-pkt-parse 正面锚点示例（BPF+loader+Makefile
 
 ### Task 3: 失败画廊前三对（01-map-null、02-pkt-bounds、03-ptr-math）
 
+- [x] Task 3: 失败画廊前三对（01-map-null、02-pkt-bounds、03-ptr-math）
+
 **tasks.md 条目**：「Include integrated examples that intentionally fail verification, then show corrected versions.」（前三对）＋「Explain common errors involving unchecked map lookup, packet bounds, invalid pointer arithmetic, stack initialization, loops, and helper misuse.」（前三类）
 
 **Files:**
@@ -493,7 +496,7 @@ git commit -m "feat(ch03): 01-pkt-parse 正面锚点示例（BPF+loader+Makefile
 - Consumes: C2（公共骨架 + compile-only Makefile + `<SRCS>` 替换表）、C3（三对契约）、C5（画廊 README 六段）、C6（含本章补充条）。
 - Produces: 正文 Task 6 三个 card 的走读对象；gallery 总览表前三行（Task 4 汇总）；verify-build.sh 的三个编译项。
 
-- [ ] **Step 1: 创建 `01-map-null/`**（bad 与 fixed 按 C3 第 1 行，骨架按 C2 组装；bad 头部注释含「预期被拒：map_value_or_null 直接解引用」）
+- [x] **Step 1: 创建 `01-map-null/`**（bad 与 fixed 按 C3 第 1 行，骨架按 C2 组装；bad 头部注释含「预期被拒：map_value_or_null 直接解引用」）
 
 bad 函数体（逐字）：
 
@@ -523,7 +526,7 @@ int probe_fixed(struct xdp_md *ctx)
 }
 ```
 
-- [ ] **Step 2: 创建 `02-pkt-bounds/`**（bad 与 fixed 按 C3 第 2 行；XDP 类文件头需 C2 include 块 + `ETH_P_IP`/`IPPROTO_UDP` 常量定义）
+- [x] **Step 2: 创建 `02-pkt-bounds/`**（bad 与 fixed 按 C3 第 2 行；XDP 类文件头需 C2 include 块 + `ETH_P_IP`/`IPPROTO_UDP` 常量定义）
 
 bad 函数体（逐字）：
 
@@ -560,7 +563,7 @@ int probe_fixed(struct xdp_md *ctx)
 
 fixed 的 `ip_check` 不引入新函数——按锚点 C1 的两层平铺检查展开（实现者把 `ip_check(...)` 替换为「`struct iphdr *ip = data + sizeof(*eth); if ((void *)(ip + 1) > data_end) return XDP_PASS; if (ip->protocol == IPPROTO_UDP)`」的三行平铺形式；fixed 最终代码形态与 `01-pkt-parse/pkt_parse.bpf.c` 一、二层一致，仅返回值保留 `XDP_DROP`）。
 
-- [ ] **Step 3: 创建 `03-ptr-math/`**（bad 与 fixed 按 C3 第 3 行）
+- [x] **Step 3: 创建 `03-ptr-math/`**（bad 与 fixed 按 C3 第 3 行）
 
 bad 函数体（逐字）：
 
@@ -593,14 +596,14 @@ int probe_fixed(struct xdp_md *ctx)
 }
 ```
 
-- [ ] **Step 4: 为三对各创建 `Makefile`（C2 模板，`<SRCS>` 按替换表）与 `README.md`（C5 画廊六段结构，C3 表的「为什么拒绝/修复原则」展开为完整段落）**
+- [x] **Step 4: 为三对各创建 `Makefile`（C2 模板，`<SRCS>` 按替换表）与 `README.md`（C5 画廊六段结构，C3 表的「为什么拒绝/修复原则」展开为完整段落）**
 
-- [ ] **Step 5: 编译验证（本机真实执行，硬性）**
+- [x] **Step 5: 编译验证（本机真实执行，硬性）**
 
 Run: `for d in 01-map-null 02-pkt-bounds 03-ptr-math; do make -C book/examples/chapter-03/02-fail-gallery/$d || break; done`
 Expected: 三个目录退出码均 0，各生成 `bad.bpf.o` 与 `fixed.bpf.o`（全局约束 3：bad 也必须编译通过）。失败即设计缺陷：修代码后重跑，直至通过。
 
-- [ ] **Step 6: 提交**
+- [x] **Step 6: 提交**
 
 ```bash
 git add book/examples/chapter-03/02-fail-gallery/01-map-null/ \
