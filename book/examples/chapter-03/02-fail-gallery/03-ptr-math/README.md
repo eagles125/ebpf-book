@@ -12,17 +12,23 @@ skeleton、不加载——bad 与 fixed 在 clang 层面都编译通过，差异
 
 ## bad 与 fixed 差异
 
-仅一处语义差异：bad 把 `+4` 加在尾界 `data_end` 上且无任何收口；fixed 把同一偏移
-运算放在 packet 指针 `data` 上、并立刻与 `data_end` 比较收口。SEC、license、返回
-动作完全一致；函数名按画廊约定固定为 `probe_bad` / `probe_fixed`。
+仅一处语义错误：bad 对尾界做算术 `data_end += 4`（把界标挪动 4 字节）；fixed 不触碰
+尾界，同一偏移运算直接放在 packet 指针上并立刻界检查收口。SEC、license 完全一致；
+函数名按画廊约定固定为 `probe_bad` / `probe_fixed`（bad 命中分支返回 `XDP_DROP`、
+fixed 一律返回 `XDP_PASS`）。
+
+bad 中紧随算术的比较**不是修复**：它消费算术结果，防止 clang `-O2` 把未被使用的
+`data_end += 4` 当死代码消除（消除后产物里没有这条 offending 指令、加载期也就看不到
+拒绝）；比较行写作 `data > data_end`——与算术行偏移不等（0 对 4），编译器无法折叠
+公共偏移，offending 指令得以保留。被拒的仍是对尾界算术这一条。
 
 ```bash
-diff bad.bpf.c fixed.bpf.c   # 亲眼确认：算术对象与收口方式这一处差异
+diff bad.bpf.c fixed.bpf.c   # 亲眼确认：只差对尾界的那一条算术
 ```
 
 | 文件 | 关键形态 | 结果 |
 |---|---|---|
-| `bad.bpf.c` | `data_end += 4;`——对 pkt_end 指针做算术 | 编译通过；加载期预期被拒 |
+| `bad.bpf.c` | `data_end += 4;`——对 pkt_end 指针做算术（结果参与比较防优化消除） | 编译通过；加载期预期被拒 |
 | `fixed.bpf.c` | `if (data + 4 > data_end)`——算术在 packet 指针上，立即界检查 | 编译通过；加载期预期放行 |
 
 ## 预期 verifier 日志关键行

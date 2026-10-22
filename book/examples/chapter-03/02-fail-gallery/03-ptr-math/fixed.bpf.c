@@ -8,8 +8,10 @@
  *   算术，但要求算术结果的后续访问仍被界检查约束；尾界 data_end 本身保持只读，
  *   信任模型不被破坏。
  *
- * 与 bad.bpf.c 的 diff 仅此一处语义差异：算术对象从尾界换到 packet 指针、并立刻
- * 用界检查收口（函数名 probe_fixed 与头部注释除外）。
+ * 与 bad.bpf.c 的 diff 仅一处语义错误：bad 对尾界做算术 data_end += 4（其算术结果
+ *   参与比较只为防编译器死代码消除，见 bad 头注释）；fixed 不触碰尾界——同一偏移
+ *   运算直接放在 packet 指针上并用界检查收口（bad 命中分支返回 XDP_DROP、fixed
+ *   一律返回 XDP_PASS；函数名与头部注释亦不同）。
  */
 #include "vmlinux.h"
 #include <bpf/bpf_helpers.h>
