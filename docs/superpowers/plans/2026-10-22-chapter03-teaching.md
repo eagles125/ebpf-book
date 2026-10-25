@@ -942,6 +942,8 @@ git commit -m "docs(ch03): 可视化/排错/课后任务/总结/参考来源"
 
 ### Task 9: 练习参考实现（01-fix-challenge、02-log-diagnosis）与 exercises 总览
 
+- [x] Task 9: 练习参考实现（01-fix-challenge、02-log-diagnosis）与 exercises 总览
+
 **tasks.md 条目**：「Create standalone Chapter 3 verifier examples under `book/examples/chapter-03/`.」（exercises 部分）；同时落实 `book/STYLE.md` 实战模板规则 4（完整可编译参考实现 + 防剧透 README + 验证状态标注）。
 
 **Files:**
@@ -958,7 +960,7 @@ git commit -m "docs(ch03): 可视化/排错/课后任务/总结/参考来源"
 - Consumes: C2（compile-only Makefile，`<SRCS>` 替换表）、C3 公共骨架、C5 练习防剧透七段、C6（含本章补充条）、Task 8 课后任务表（C9 总览表逐字一致）。
 - Produces: verify-build.sh 的两个练习编译项；练习 README 的「参考实现思路」节与正文排错节日志速查表呼应。
 
-- [ ] **Step 1: 创建 `exercises/01-fix-challenge/broken.bpf.c`**（逐字如下——含三处组合错误的独立坏程序，冒烟测试已验证编译；bad 口径同全局约束 3）
+- [x] **Step 1: 创建 `exercises/01-fix-challenge/broken.bpf.c`**（逐字如下——含三处组合错误的独立坏程序，冒烟测试已验证编译；bad 口径同全局约束 3）
 
 ```c
 // SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause
@@ -1002,7 +1004,7 @@ int challenge(struct xdp_md *ctx)
 char LICENSE[] SEC("license") = "GPL";
 ```
 
-- [ ] **Step 2: 创建 `exercises/01-fix-challenge/fixed.bpf.c`**（逐字如下——参考实现，冒烟测试已验证编译）
+- [x] **Step 2: 创建 `exercises/01-fix-challenge/fixed.bpf.c`**（逐字如下——参考实现，冒烟测试已验证编译）
 
 ```c
 // SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause
@@ -1047,7 +1049,7 @@ int challenge(struct xdp_md *ctx)
 char LICENSE[] SEC("license") = "GPL";
 ```
 
-- [ ] **Step 3: 创建 `exercises/02-log-diagnosis/reproduce.bpf.c`**（逐字如下——复现「R2 min value is negative」日志的程序，冒烟测试已验证编译）
+- [x] **Step 3: 创建 `exercises/02-log-diagnosis/reproduce.bpf.c`**（逐字如下——复现「R2 min value is negative」日志的程序，冒烟测试已验证编译）
 
 ```c
 // SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause
@@ -1078,20 +1080,20 @@ int reproduce(struct xdp_md *ctx)
 char LICENSE[] SEC("license") = "GPL";
 ```
 
-- [ ] **Step 4: 创建两个 `Makefile`** —— C2 模板替换：练习 1 `<SRCS> := broken.bpf.c fixed.bpf.c`；练习 2 `<SRCS> := reproduce.bpf.c`。
+- [x] **Step 4: 创建两个 `Makefile`** —— C2 模板替换：练习 1 `<SRCS> := broken.bpf.c fixed.bpf.c`；练习 2 `<SRCS> := reproduce.bpf.c`。
 
-- [ ] **Step 5: 创建两个练习 `README.md`** —— 按 C5 防剧透七段结构。关键口径：
+- [x] **Step 5: 创建两个练习 `README.md`** —— 按 C5 防剧透七段结构。关键口径：
   - 练习 1 `## 提示`：三类信号（报文边界/map_value_or_null/未初始化栈）；「从日志第一处报错入手逐个修」的方法；`## 任务` 验收标准：修到编译通过 + 能说明三处错误各自的 verifier 拒绝理由；满足权限时 `bpftool prog load` 加载成功（运行级待验证）。`## 参考实现思路`（分界线后）：三处修复与画廊对照表、连带危险（`*v` 在 NULL 检查外）说明。
   - 练习 2 `## 提示`：有符号标量的 smin/smax 跟踪（正文 2.5）；修复两方向（无符号/掩码）；`## 任务` 验收标准：写出复现程序 + 逐行解读预期日志 + 给出两种修复。`## 参考实现思路`：复现程序讲解、预期日志逐行解读（`R2` 对应 `off`）、与画廊 03 的类型学区分。
   - 两者 `## 预期输出示例`（运行级待验证）：练习 1 给「加载成功 + `bpftool prog show` 可见」的预期输出；练习 2 给完整预期拒绝日志（标注版本差异）。`## 验证状态` 按 C6（含本章补充条）。
-- [ ] **Step 6: 创建 `exercises/README.md`**：两项任务总览表（C9 逐字一致）+ 防剧透阅读法（先做后看、思路节在分界线后）+ 各练习构建命令（各目录 `make`）+ 验证状态汇总表（编译级/运行级，按 C6）。
+- [x] **Step 6: 创建 `exercises/README.md`**：两项任务总览表（C9 逐字一致）+ 防剧透阅读法（先做后看、思路节在分界线后）+ 各练习构建命令（各目录 `make`）+ 验证状态汇总表（编译级/运行级，按 C6）。
 
-- [ ] **Step 7: 编译验证（本机真实执行，硬性）**
+- [x] **Step 7: 编译验证（本机真实执行，硬性）**
 
 Run: `make -C book/examples/chapter-03/exercises/01-fix-challenge && make -C book/examples/chapter-03/exercises/02-log-diagnosis`
 Expected: 两个目录退出码均 0（练习 1 生成 `broken.bpf.o` 与 `fixed.bpf.o`——broken 也必须编译通过；练习 2 生成 `reproduce.bpf.o`）。失败即设计缺陷：修代码后重跑，直至通过。
 
-- [ ] **Step 8: 提交**
+- [x] **Step 8: 提交**
 
 ```bash
 git add book/examples/chapter-03/exercises/
