@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause
 /* 类型画廊⑧：netfilter——6.6+ 的新程序类型（本机 7.0 满足；预期加载前提：root）。
- * ctx 是 struct bpf_nf_ctx：{ state, in, out }——netfilter 钩子点的报文与状态。
+ * ctx 是 struct bpf_nf_ctx：{ state, skb }——netfilter 钩子状态与报文（本机 BTF 实证）。
  * 返回值语义：NF_ACCEPT/NF_DROP（uapi netfilter.h #define，不在 BTF——冒烟结论④）。
  * 完整可运行示例（Go 控制面 + 规则表）见第 9 章 09-netfilter-go/。 */
 #include "vmlinux.h"
