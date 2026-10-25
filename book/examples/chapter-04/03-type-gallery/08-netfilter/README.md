@@ -19,8 +19,8 @@ BPF 写。完整可运行示例（Go 控制面 + 规则表）见第 9 章 `09-ne
 - **ctx 形状**：`struct bpf_nf_ctx`——netfilter 钩子点的报文与状态；本机（内核
   7.0）BTF 实证成员为 `state`（钩子状态）与 `skb`（当前报文），同第 9 章
   `09-netfilter-go/` 口径（其 README 即按 `ctx->skb`/`ctx->state` 讲解）。本程序
-  头注沿计划口径写作 `{ state, in, out }`，与编写环境 BTF 不符——以
-  `bpftool btf dump` 复核为准（章级 README「常见失败点」同款口径）。
+  头注已按本机 BTF 实证写作 `{ state, skb }`；换内核时仍以 `bpftool btf dump`
+  复核为准（章级 README「常见失败点」同款口径）。
 - **map 选型**：单 key ARRAY（`nf_seen`）——报文计数；`__sync_fetch_and_add`
   原子递增。
 - **失败分支必检**：`if (!v) return NF_ACCEPT`——lookup 检查不可省（第 3 章
