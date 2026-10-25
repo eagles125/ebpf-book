@@ -36,7 +36,7 @@ diff bad.bpf.c fixed.bpf.c   # 亲眼确认：只差对尾界的那一条算术
 （预期输出示例 / 运行级待验证；日志行随内核版本略有差异，以 5.10+ 稳定措辞为基准）
 
 ```text
-R2 pointer arithmetic on pkt_end PROHIBITED
+R2 pointer arithmetic on pkt_end prohibited
 ```
 
 关键行指认「对 pkt_end（报文尾界）指针做算术被禁止」——这是少数直接在寄存器类型

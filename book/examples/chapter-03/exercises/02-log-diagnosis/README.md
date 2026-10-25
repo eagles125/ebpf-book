@@ -136,7 +136,7 @@ if (data + off > data_end)        /* 预期被拒：负偏移指针算术 */
 
 | | 画廊 3.3（03-ptr-math） | 本练习 |
 |---|---|---|
-| 信号 | `R2 pointer arithmetic on pkt_end PROHIBITED` | `R2 min value is negative, either use unsigned or 'var &= const'` |
+| 信号 | `R2 pointer arithmetic on pkt_end prohibited` | `R2 min value is negative, either use unsigned or 'var &= const'` |
 | 层面 | 寄存器**类型**禁令：尾界（pkt_end）类型 `PTR_TO_PACKET_END` 不可参与算术——结构性不可证明 | 边界**推导**禁令：报文指针允许算术，但偏移取值域必须可证明非负——范围不可证明 |
 | 修复 | 算术挪到报文指针上、`data_end` 全程只作比较 | 改无符号对齐两套界，或掩码收窄到非负 |
 

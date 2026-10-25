@@ -12,7 +12,7 @@
  *
  * 本文件在 clang 层面完全合法（编译通过）——C 的强制转换随便写，寄存器类型的
  *   核对发生在加载期。本对为 tracepoint 程序类型（无 XDP 挂载风险），画廊骨架中
- *   的 uapi 常量块按 C2 说明不加。修复形态见同目录 fixed.bpf.c——probe 系 helper
+ *   的 uapi 常量块按画廊骨架约定不加。修复形态见同目录 fixed.bpf.c——probe 系 helper
  *   受控读取；卡片讲解见本目录 README.md。
  */
 #include "vmlinux.h"
