@@ -39,7 +39,7 @@ make
 sudo ./pkt_parse lo    # 建议挂 lo 或 veth；Ctrl-C 退出即卸载
 ```
 
-触发：另开终端执行 `ping 127.0.0.1`，或任意本机 UDP 流量（DNS 查询等）都会让计数增长；
+触发：另开终端制造本机 UDP 流量（如 DNS 查询、`nc -u` 发包等）都会让计数增长；
 本程序只观测不干预，一律返回 `XDP_PASS`（放行）。
 
 挂载模式：`flags=0` 挂载时若驱动不支持原生 XDP，内核一般会自动回退到 generic（SKB）模式——

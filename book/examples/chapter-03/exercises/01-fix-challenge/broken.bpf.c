@@ -17,6 +17,7 @@
 #include "vmlinux.h"
 #include <bpf/bpf_helpers.h>
 
+/* map 选型：ARRAY——单 key 全局计数，教学聚焦验证器行为而非 map 选型 */
 struct {
     __uint(type, BPF_MAP_TYPE_ARRAY);
     __uint(max_entries, 1);

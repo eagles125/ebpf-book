@@ -117,7 +117,8 @@ CAP_PERFMON 档加载放行未初始化栈读，见画廊 3.4 README 特权豁�
 ## 验证状态
 
 - 编译级：broken 与 fixed 均已在编写环境（x86_64、内核 7.0、clang 18、
-  bpftool 7.7、libbpf 1.3）`make` 通过。broken 按 C6 本章补充条为双状态：
+  bpftool 7.7、libbpf 1.3）`make` 通过。broken 按章级『验证状态』约定（见
+  [`../../README.md`](../../README.md)）的本章补充条为双状态：
   **编译级已通过（预期如此——拒绝发生在加载期）；加载级『预期被拒』待特权
   环境验证**。broken 产物经 `llvm-objdump -S` 核验，三处 offending 指令真实
   存在：无界报文读 `r1 = *(u8 *)(r1 + 0xe)`（错误 1）；未初始化栈槽读

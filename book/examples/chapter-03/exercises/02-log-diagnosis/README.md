@@ -81,8 +81,9 @@ R2 min value is negative, either use unsigned or 'var &= const'
 
 - `R2` 是**教学示例口径**（与正文 2.5、排错速查表、章末任务表一致）；实际日志
   的寄存器号随代码生成而异——本目录 `reproduce.bpf.o` 实测肇事算术为
-  `9: (0f) r1 += r3`，偏移标量落在 R3。你自己的复现程序看到 R2、R3 或其他
-  编号都属同一信号。
+  `9: (0f) r1 += r3`，偏移标量落在 R3。真实日志中，消息里的寄存器号与肇事
+  指令的操作数一致；本示例消息按正文口径写作 R2、与产物实测的 R3 不一致——
+  认措辞主体不认寄存器编号，你的复现程序看到 R2、R3 或其他编号都属同一信号。
 - 稳定不变的认法是措辞主体 `min value is negative, either use unsigned or
   'var &= const'`：前半句指出「该寄存器的有符号最小值为负」，后半句给出两条
   修复方向。
@@ -145,7 +146,8 @@ if (data + off > data_end)        /* 预期被拒：负偏移指针算术 */
 ## 验证状态
 
 - 编译级：reproduce 已在编写环境（x86_64、内核 7.0、clang 18、bpftool 7.7、
-  libbpf 1.3）`make` 通过。reproduce 按 C6 本章补充条（与 broken 练习同口径）
+  libbpf 1.3）`make` 通过。reproduce 按章级『验证状态』约定（见
+  [`../../README.md`](../../README.md)）的本章补充条（与 broken 练习同口径）
   为双状态：**编译级已通过（预期如此——拒绝发生在加载期）；加载级『预期被拒』
   待特权环境验证**。reproduce 产物经 `llvm-objdump -S` 核验，负偏移指针算术
   真实存在：`9: r1 += r3`（紧随符号扩展 `r3 s>>= 0x20` 之后，偏移标量的

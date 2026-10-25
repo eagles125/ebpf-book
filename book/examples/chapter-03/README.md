@@ -54,12 +54,15 @@ vmlinux.h（bpftool 由 /sys/kernel/btf/vmlinux 生成） -> pkt_parse.bpf.o（c
 
 遵循 `book/STYLE.md` 约定：
 
-- **编译验证**：已在编写环境（x86_64、内核 7.0、clang 18、bpftool 7.7、libbpf 1.3）`make` 通过。
+- **编译验证**：已在编写环境（x86_64、内核 7.0.0-38、clang 18.1.3、bpftool 7.7.0、
+  libbpf 1.3）`make` 通过。全量编译由 `scripts/verify-build.sh` 汇总：**PASS=11 FAIL=0**
+  （00-env 自检、01-pkt-parse 全链、画廊七对 bad/fixed、exercises 两目录；2026-10-25
+  实测，退出码 0；版本号为本机实测——`clang --version`、`bpftool version`、
+  libbpf-dev 头文件 `libbpf_version.h`）。
 - **待运行验证**：编写环境为非 root（`unprivileged_bpf_disabled=2`），未执行加载与运行；
   各 README 中「预期输出」均为教学示例。
 - **本章补充**：bad 程序与 broken 练习的验证状态为「编译级已通过（预期如此——拒绝发生在加载期）；
   加载级『预期被拒』待特权环境验证」。
-- 全量编译结果由 `scripts/verify-build.sh` 生成，摘要见 Task 10 回填。
 
 ## 参考来源
 
