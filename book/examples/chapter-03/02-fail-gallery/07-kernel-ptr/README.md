@@ -17,7 +17,7 @@ skeleton、不加载——bad 与 fixed 在 clang 层面都编译通过，差异
 fixed 换成 `bpf_probe_read_user_str()` 受控读取到 64 字节栈缓冲、在「读取成功」
 分支内判读；其余（SEC、返回值 1/0、license）完全一致；函数名按画廊约定固定为
 `probe_bad` / `probe_fixed`。本对为 tracepoint 程序类型（program type，syscalls
-跟踪点，无 XDP 挂载风险），骨架按 C2 不带 uapi 常量块与映射。
+跟踪点，无 XDP 挂载风险），骨架按画廊公共骨架约定不带 uapi 常量块与映射。
 
 ```bash
 diff bad.bpf.c fixed.bpf.c   # 亲眼确认：只差「强转解引用 → helper 受控读取」
