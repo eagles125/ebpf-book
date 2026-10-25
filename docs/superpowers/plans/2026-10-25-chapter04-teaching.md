@@ -731,6 +731,8 @@ git commit -m "feat(ch04): 02-xdp-tc 同一报文两种 ctx（网络类集成锚
 
 ### Task 4: 类型画廊前四类（kretprobe/uprobe/cgroup-skb/socket-filter）与总览
 
+- [x] Task 4: 类型画廊前四类（kretprobe/uprobe/cgroup-skb/socket-filter）与总览
+
 **tasks.md 条目**：「Write full chapter prose covering kprobe, kretprobe, tracepoint, raw tracepoint, fentry/fexit, uprobe, XDP, TC, cgroup skb, socket filter, sockops, sk_msg, LSM, and Netfilter where relevant.」（示例资产部分·前半）＋「Create standalone Chapter 4 examples under `book/examples/chapter-04/`.」。
 
 **Files:**
@@ -740,7 +742,7 @@ git commit -m "feat(ch04): 02-xdp-tc 同一报文两种 ctx（网络类集成锚
 - Create: `book/examples/chapter-04/03-type-gallery/03-cgroup-skb/{cgroup_skb.bpf.c,Makefile,README.md}`
 - Create: `book/examples/chapter-04/03-type-gallery/04-socket-filter/{socket_filter.bpf.c,Makefile,README.md}`
 
-- [ ] **Step 1: 创建 `01-kretprobe/kretprobe.bpf.c`**（逐字如下；骨架按 C2 公共块）
+- [x] **Step 1: 创建 `01-kretprobe/kretprobe.bpf.c`**（逐字如下；骨架按 C2 公共块）
 
 ```c
 // SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause
@@ -774,7 +776,7 @@ int BPF_KRETPROBE(krp, int ret)
 char LICENSE[] SEC("license") = "GPL";
 ```
 
-- [ ] **Step 2: 创建 `02-uprobe/uprobe.bpf.c`**（逐字如下）
+- [x] **Step 2: 创建 `02-uprobe/uprobe.bpf.c`**（逐字如下）
 
 ```c
 // SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause
@@ -807,7 +809,7 @@ int up(struct pt_regs *ctx)
 char LICENSE[] SEC("license") = "GPL";
 ```
 
-- [ ] **Step 3: 创建 `03-cgroup-skb/cgroup_skb.bpf.c`**（逐字如下）
+- [x] **Step 3: 创建 `03-cgroup-skb/cgroup_skb.bpf.c`**（逐字如下）
 
 ```c
 // SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause
@@ -845,7 +847,7 @@ int cg(struct __sk_buff *skb)
 char LICENSE[] SEC("license") = "GPL";
 ```
 
-- [ ] **Step 4: 创建 `04-socket-filter/socket_filter.bpf.c`**（逐字如下）
+- [x] **Step 4: 创建 `04-socket-filter/socket_filter.bpf.c`**（逐字如下）
 
 ```c
 // SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause
@@ -877,14 +879,14 @@ int sf(struct __sk_buff *skb)
 char LICENSE[] SEC("license") = "GPL";
 ```
 
-- [ ] **Step 5: 为四目录各创建 `Makefile`**（C2 模板，`<SRCS>` 按 C2 替换表）。
-- [ ] **Step 6: 创建 `03-type-gallery/README.md`**——画廊总览：8 类总览表（C3 表的目录/prog_type/SEC/ctx/返回值语义五列逐字一致，关键教学点列展开为一段）；阅读顺序建议（与正文三节 3.8–3.14 对应）；「compile-only 口径」与安全警告；验证状态汇总表（按 C6）。
-- [ ] **Step 7: 为四目录各创建 `README.md`**——按 C5 画廊六段结构（C3 表「关键教学点」展开为代码走读段；挂载方式与前提段含预期加载前提；预期输出示例标注「运行级待验证」）。
-- [ ] **Step 8: 编译验证（本机真实执行，硬性）**
+- [x] **Step 5: 为四目录各创建 `Makefile`**（C2 模板，`<SRCS>` 按 C2 替换表）。
+- [x] **Step 6: 创建 `03-type-gallery/README.md`**——画廊总览：8 类总览表（C3 表的目录/prog_type/SEC/ctx/返回值语义五列逐字一致，关键教学点列展开为一段）；阅读顺序建议（与正文三节 3.8–3.14 对应）；「compile-only 口径」与安全警告；验证状态汇总表（按 C6）。
+- [x] **Step 7: 为四目录各创建 `README.md`**——按 C5 画廊六段结构（C3 表「关键教学点」展开为代码走读段；挂载方式与前提段含预期加载前提；预期输出示例标注「运行级待验证」）。
+- [x] **Step 8: 编译验证（本机真实执行，硬性）**
 
 Run: `for d in 01-kretprobe 02-uprobe 03-cgroup-skb 04-socket-filter; do make -C book/examples/chapter-04/03-type-gallery/$d || exit 1; done`
 Expected: 四目录退出码均 0。失败即修代码重跑。
-- [ ] **Step 9: 提交**
+- [x] **Step 9: 提交**
 
 ```bash
 git add book/examples/chapter-04/03-type-gallery/
