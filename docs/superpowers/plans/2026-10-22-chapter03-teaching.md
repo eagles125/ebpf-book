@@ -991,7 +991,7 @@ int challenge(struct xdp_md *ctx)
 
     __u32 key = 0;
     __u64 *v = bpf_map_lookup_elem(&stats, &key);   /* 错误(2)：未检查 NULL */
-    __u64 verdict;                            /* 错误(3)：仅条件赋值 */
+    volatile __u64 verdict;                   /* 错误(3)：仅条件赋值（volatile 为可观测性装置而非错误本身——裸形式的栈槽读会被 clang -O2 寄存器分配消除，实测教训） */
     if (v)
         verdict = *v;
     if (verdict > 0)
