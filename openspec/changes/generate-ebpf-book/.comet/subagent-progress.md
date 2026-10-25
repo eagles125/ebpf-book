@@ -1,18 +1,19 @@
 # Comet Subagent 进度检查点 — generate-ebpf-book
 
-- plan: docs/superpowers/plans/2026-10-22-chapter03-teaching.md（11 任务，第 3 章《验证器与安全保障》）
-- design-doc: docs/superpowers/specs/2026-10-22-chapter03-teaching-design.md（ff88829；三项章级分叉按推荐项采用，待用户复核）
+- plan: docs/superpowers/plans/2026-10-22-chapter03-teaching.md（11 任务，第 3 章《验证器与安全保障》）— **全部完成并停靠**
+- design-doc: docs/superpowers/specs/2026-10-22-chapter03-teaching-design.md（ff88829；篇幅口径 35–63k 由裁定 83e13d2 同步）
 - review_mode: thorough；tdd_mode: direct；isolation: current（master）
-- 上一章检查点（第 2 章，2026-09-26 停靠）见 git 历史：34efa8d Park ch02 build session
+- 上一章检查点：第 2 章 34efa8d；第 3 章过程停靠 adec2ce（Task 9 review in flight，已在本会话解除）
 - ⚠️ 编排文件保护：本文件与 `.comet/**`、plan checkbox 为控制器专管——subagent 不得触碰，不得对其执行 git restore/checkout/stash
 
 ## 当前状态
 
-- **停靠（2026-10-22，用户请求暂存）**：Task 1–8 已收口（实现+审查+勾选）；**Task 9 实现 b9a057c 已提交、计划回写 02eb94a 已提交，处于 task-review 阶段（reviewer 已派发一次、被暂存停止，未返回结论——恢复时用现成材料重新派发全新 reviewer，不得重复派发 implementer）**
-- 恢复方式：Task 9 reviewer 重派（三路径材料已在磁盘：task-9-brief.md / task-9-report.md / review-38beeee..02eb94a.diff，BASE=38beeee HEAD=02eb94a）→ 通过后勾选 Task 9 → Task 10（verify-build/交叉链接/篇幅终检+控制器上限裁定+终检清单清扫）→ Task 11（主审+tasks.md 勾选）→ 最终完整审查 → 停靠
-- SDD 台账权威文件：`.superpowers/sdd/2026-10-22-chapter03-teaching/progress.md`
+- **停靠（2026-10-25）：第 3 章 build 全部收口**——11 任务实现+逐任务审查+勾选全毕；最终完整审查（With fixes）→ 修复波 1（03b0de0+bc3ea19）→ scoped 复审全 ADDRESSED → 微修复 ab8c75c → scoped 复审 clean，**无开放项**
+- HEAD = ab8c75c；tasks.md「Chapter 3」8/8 已勾选（7334f4d）；全书 change 仍未勾满，`comet guard build --apply` 按设计阻塞（同第 2 章）
+- 硬性验收终值：`verify-build.sh` PASS=11 FAIL=0（03b0de0 修复波复跑；微修复仅涉 README 未触代码）；章正文 `wc -m`=62341 ∈ [35000, 63000]（裁定 83e13d2，计划/设计已同步）；交叉链接 grep 23/1；预期被拒标注 8/8；章↔示例 15 处引文逐字节一致
+- SDD 工作区 `.superpowers/sdd/2026-10-22-chapter03-teaching/` 已按 Finish 删除（本检查点 + git 历史为记录）
 
-## 第 3 章任务台账
+## 第 3 章任务台账（全部 done）
 
 - Task 1 章级 README、00-env、.gitignore — done（8c8ba39 / 勾选 6b5b69a）
 - Task 2 01-pkt-parse 正面锚点示例 — done（fef465c / 勾选 33edc7f）
@@ -22,38 +23,38 @@
 - Task 6 正文 三、失败画廊走读 — done（145716e / 勾选 40bd080）
 - Task 7 正文 四、实战 — done（dfe7edf+07487fb / 勾选 621baa6）
 - Task 8 正文 可视化/排错/课后/总结/参考 — done（1d3d242 / 勾选 38beeee）
-- Task 9 练习参考实现与 exercises 总览 — **task-review 阶段**（实现 b9a057c：broken volatile 适配[预授权,三处 offending 指令 objdump 证实存活]+fixed/reproduce 逐字+防剧透七段 README+C9 总览；计划回写 02eb94a）
-- Task 10 verify-build/交叉链接/篇幅终检 — pending
-- Task 11 主审与 tasks.md 勾选（收口）— pending
-- 最终完整审查 — pending
+- Task 9 练习参考实现与 exercises 总览 — done（b9a057c+计划回写 02eb94a / 审查通过 / 勾选 28677d6）——broken 补 volatile 偏离经 reviewer 技术裁定成立
+- Task 10 verify-build/交叉链接/篇幅终检 — done（0b37165 / 审查通过 / 勾选 fe94a8a）——含控制器清扫 13 项（终检清单 11 项中 5 项已同步关闭、1 项裁定不动，余全落地）
+- Task 11 主审与 tasks.md 勾选 — done（7334f4d / 审查通过 / 勾选 dfce129）——四组审计全绿，8/8 勾选
+- 最终完整审查 — done（With fixes → 修复波 03b0de0+bc3ea19 → 复审 ADDRESSED → 微修复 ab8c75c → 复审 clean）
 
-## Task 10 终检清单（控制器裁定与清扫项，来自各任务延后 Minor）
+## 延后项登记（移交全书批次/统稿，非第 3 章开放项）
 
-1. **篇幅上限裁定**：章当前 61073 字符 vs 终检口径 35–48k——超长主因计划强制的逐字代码贴入（三节 23.6k/四节 10.5k,结构性低估），按 ch02 先例（45k→48k 控制裁定 3d148e6）由控制器裁定新上限并同步计划/设计,或压缩重复叙述不删原理
-2. 01-pkt-parse/README.md:42 同源 ping 措辞手术（Task 7 裁定遗留,README 属 Task 2 资产）
-3. 学生动手「逐个加载 bad」对 3.4 补特权豁免括注（Task 6 Minor 1）
-4. 2.6「CAP_BPF 一类」与 3.4「CAP_PERFMON 一类」统一（Task 6 Minor 2,2.6 宜补 perfmon 档）
-5. 「最坏 40 亿次」与 README 05「近 43 亿」口径同步（Task 6 Minor 4,可选）
-6. 图 1 解读「探索步数省一半」→「省去臂 2 在 J 之后的整段重复探索」（Task 8 Minor 1）
-7. 排错②「2.7 预告的 log_level 细目」出处改 5.2（Task 8 Minor 2）
-8. XDP gloss 归位至章内首现导读（Task 7 Minor ②）
-9. 学习目标首条全角括号嵌套排版（Task 5 Minor,可选）
-10. 972 行深一层日志保真（寄存器状态行 off= 语义/基址 r1 实测首行 R1）——「认措辞不认编号」对冲已并存,终检酌定（Task 7 re-review 移交）
-11. 交叉链接核对后回填章级 README 验证摘要（Task 10 Step 2 自带）
+1. **章 1.3 四步矩阵 code block step ②「拒绝：返回 -EACCES」**——计划逐字块；紧邻对冲句已纠正（-EACCES/-EINVAL 三分类），矩阵块本身留统稿轮与 ch02 预告⑥同源措辞一并校准
+2. check-env「具备 CAP_BPF」capsh bounding-set 误报——5.1 已解读兜底；未来章节脚本可改判 effective set
+3. 章 :1017 附近「整段免验，省去…整段重复探索」语义重复（裁定措辞残留）——统稿轮可修剪前半句
+4. 01-pkt-parse/README.md「…都会让计数增长」的「都」失去旧主语——微瑕
+5. reproduce.bpf.c:20「有符号字段」措辞（描述 __s32 转换本身，reviewer 判可留）
+6. C4 模板 `.DELETE_ON_ERROR`、-Wall、ARCH sed 覆盖面——未来章节统一升级
+7. 「最坏 40 亿次」与 2^32−1≈43 亿的取整口径——两处已一致（40 亿），统稿轮酌定精确化
+8. 教学简化记录：锚点未校验 ip->ihl；signal() 而非 sigaction——plan-mandated，保持
+9. ch02 :894「if (!p) 让它证明指针非空」与 ch02 5.2 防御式框架轻微张力——ch02 范围，统稿轮勘酌
 
-## Task 11 顺带核对项
+## 流程建议（来自终审，供未来章节采用）
 
-- 全书台账:全章 wc -m 终值与裁定口径记录入 book/examples/chapter-03/README.md;tasks.md「Chapter 3」8 条统一勾选;预告⑨勾稽表兑现确认（Task 8 已落）
+- 按内核源码校正预期日志/errno 的 gate 必须覆盖**每一条**契约日志行与每一个 errno/行为断言，而非只查被点名的（本次 03 大小写与 errno 三分类恰是漏网项）
+- 终检加入常规项：`grep -rn "C[1-9]"`（plan 内部契约编号不得泄漏到学生可见文本；vmlinux.h 生成物排除）
 
 ## 已确认决策（不得重新询问）
 
 - 四项工作方式（2026-09-25）：isolation=current（master）、build_mode=subagent-driven-development（subagent_dispatch=confirmed）、tdd_mode=direct、review_mode=thorough
 - 验证策略：编译级真实验证 + 运行效果「预期输出示例」+「运行级待验证」（无 root，unprivileged_bpf_disabled=2）
-- 第 3 章特有（2026-10-22）：画廊 bad/fixed 与练习 broken 必须 clang 编译通过；预期 verifier 日志按 5.10+ 内核源码校正基准（04 特权豁免/05 主形态 infinite loop detected/06 unknown func）+ 版本差异口径
-- 检查点第 1 问修正版保留（第三层检查后无解引用,实测裁定）;实战节动手观察用 UDP 流量（ping 是 ICMP 不计数）
+- 第 3 章特有：画廊 bad/fixed 与练习 broken 必须 clang 编译通过；预期 verifier 日志按 5.10+ 内核源码校正基准 + 版本差异口径；**04 特权豁免带版本限定（6.3+ 放行栈读；5.10–6.2 一律拒绝）**；03 关键行小写 prohibited；errno 三分类（-EACCES/-EINVAL，判别以有无 verifier 日志为准）
+- 篇幅：第 3 章 35–63k（裁定 83e13d2，ch02 先例同型）；分节预算按讲解文字口径，不含逐字代码贴入体量
+- 检查点第 1 问修正版保留；实战节动手观察用 UDP 流量（ping 是 ICMP 不计数）
 - 本平台 Agent 工具无 model 参数，按可用工具派发（先例：ch02 会话）
 
 ## 恢复指引
 
-1. 读本检查点 + SDD 台账，对照 plan 未勾选任务与 git log 恢复；检查点若与台账不一致，以 git log + plan checkbox + 台账为准重写本文件
-2. 全部任务完成 + 最终完整审查通过后：停靠（全书 tasks.md 未勾满，`comet guard build --apply` 按设计阻塞，同第 2 章）
+1. 用户决策下一章/下一批次（Batch 2/4/6/8 等任一），为该章走 design → plan → build（同第 2/3 章模式）；上述「延后项登记」中标注「未来章节/统稿」的项在该章或统稿批次处理
+2. 全书 tasks.md 勾满后：`comet guard build --apply` → verify → archive
