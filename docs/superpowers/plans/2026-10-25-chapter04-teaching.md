@@ -200,20 +200,22 @@ clean:
 
 ### Task 1: 章级 README、00-env 环境自检与构建基座
 
+- [x] Task 1: 章级 README、00-env 环境自检与构建基座
+
 **tasks.md 条目**：「Create standalone Chapter 4 examples under `book/examples/chapter-04/`.」（环境与总览部分）。
 
 **Files:**
 - Create: `book/examples/chapter-04/README.md`
 - Create: `book/examples/chapter-04/00-env/check-env.sh`
 
-- [ ] **Step 1: 创建 `book/examples/chapter-04/README.md`**——按 C5 十段结构（章级版）。关键口径：示例总览表（2 锚点全链 + 画廊 8 目录 compile-only + 2 练习）；「同一事件多副眼镜」导读；构建模式（锚点全链 make / 画廊逐目录 make / `scripts/verify-build.sh` 汇总）；验证状态约定区（含 C6 本章补充条与「画廊 compile-only 口径」，占位句「全量编译结果由 `scripts/verify-build.sh` 生成（摘要见 Task 11 回填）」）；安全警告统一措辞（全局约束 8）。
-- [ ] **Step 2: 创建 `00-env/check-env.sh`**——以 `book/examples/chapter-03/00-env/check-env.sh` 为基底（读该文件后改写）：章号注释改第 4 章；追加两项 ch04 特有检查：tracefs 在场性（`[ -d /sys/kernel/tracing/events ]`→OK；`[ -r /sys/kernel/tracing/events/syscalls ]`→OK，不可读→WARN「tracefs 需 root 读取，加载级验证时使用」）；`CONFIG_BPF_LSM`（`/boot/config-$(uname -r)` 或 `/proc/config.gz` grep `CONFIG_BPF_LSM=y`→OK「LSM 类型运行前提在内核侧满足（还需 lsm=bpf 启动参数与 root）」，缺失→WARN「LSM 画廊条目仅编译级可玩」）；`grep -qw bpf /proc/cmdline`→OK「已启用 lsm=bpf」否则 INFO 级提示（不置 fail）。
-- [ ] **Step 3: 本机验证（无特权可执行，硬性）**
+- [x] **Step 1: 创建 `book/examples/chapter-04/README.md`**——按 C5 十段结构（章级版）。关键口径：示例总览表（2 锚点全链 + 画廊 8 目录 compile-only + 2 练习）；「同一事件多副眼镜」导读；构建模式（锚点全链 make / 画廊逐目录 make / `scripts/verify-build.sh` 汇总）；验证状态约定区（含 C6 本章补充条与「画廊 compile-only 口径」，占位句「全量编译结果由 `scripts/verify-build.sh` 生成（摘要见 Task 11 回填）」）；安全警告统一措辞（全局约束 8）。
+- [x] **Step 2: 创建 `00-env/check-env.sh`**——以 `book/examples/chapter-03/00-env/check-env.sh` 为基底（读该文件后改写）：章号注释改第 4 章；追加两项 ch04 特有检查：tracefs 在场性（`[ -d /sys/kernel/tracing/events ]`→OK；`[ -r /sys/kernel/tracing/events/syscalls ]`→OK，不可读→WARN「tracefs 需 root 读取，加载级验证时使用」）；`CONFIG_BPF_LSM`（`/boot/config-$(uname -r)` 或 `/proc/config.gz` grep `CONFIG_BPF_LSM=y`→OK「LSM 类型运行前提在内核侧满足（还需 lsm=bpf 启动参数与 root）」，缺失→WARN「LSM 画廊条目仅编译级可玩」）；`grep -qw bpf /proc/cmdline`→OK「已启用 lsm=bpf」否则 INFO 级提示（不置 fail）。
+- [x] **Step 3: 本机验证（无特权可执行，硬性）**
 
 Run: `bash book/examples/chapter-04/00-env/check-env.sh`
 Expected: 退出码 0；BTF/工具链各行 OK；权限分级输出 WARN 档（非 root）。
-- [ ] **Step 4: `.gitignore` 检查**——确认全局规则已覆盖 `book/examples/**/vmlinux.h`、`*.skel.h`、`*.o`；无需追加则不动（如锚点可执行物需追加 `book/examples/chapter-04/**/multi_observe`、`xdp_tc` 条目则追加）。
-- [ ] **Step 5: 提交**
+- [x] **Step 4: `.gitignore` 检查**——确认全局规则已覆盖 `book/examples/**/vmlinux.h`、`*.skel.h`、`*.o`；无需追加则不动（如锚点可执行物需追加 `book/examples/chapter-04/**/multi_observe`、`xdp_tc` 条目则追加）。
+- [x] **Step 5: 提交**
 
 ```bash
 git add book/examples/chapter-04/ .gitignore
