@@ -103,7 +103,11 @@ out:
     {
         LIBBPF_OPTS(bpf_tc_hook, hook, .ifindex = ifindex,
                     .attach_point = BPF_TC_INGRESS);
-        bpf_tc_detach(&hook, NULL);   /* 清理 TC filter（qdisc 留置无害） */
+        LIBBPF_OPTS(bpf_tc_opts, detach_opts, .handle = 1, .priority = 1);
+        /* best-effort detach filter：须传填充 opts（NULL 会被 libbpf 拒绝，-EINVAL 静默 no-op），
+         * handle/priority 与 attach 时一致（沿 ch17 04-nat-tc 先例）；filter 不在时 -ENOENT 属正常，
+         * 返回值忽略；qdisc 留置无害 */
+        bpf_tc_detach(&hook, &detach_opts);
     }
     bpf_link__destroy(xdp_link);
     xdp_count_bpf__destroy(xdp);
