@@ -1,60 +1,51 @@
 # Comet Subagent 进度检查点 — generate-ebpf-book
 
-- plan: docs/superpowers/plans/2026-10-22-chapter03-teaching.md（11 任务，第 3 章《验证器与安全保障》）— **全部完成并停靠**
-- design-doc: docs/superpowers/specs/2026-10-22-chapter03-teaching-design.md（ff88829；篇幅口径 35–63k 由裁定 83e13d2 同步）
-- review_mode: thorough；tdd_mode: direct；isolation: current（master）
-- 上一章检查点：第 2 章 34efa8d；第 3 章过程停靠 adec2ce（Task 9 review in flight，已在本会话解除）
+- plan: docs/superpowers/plans/2026-10-25-chapter04-teaching.md（12 任务，第 4 章《eBPF 程序类型与钩子点深入》，Batch 2 收官章）— **build 进行中，停靠（2026-10-26，用户请求休息）**
+- design-doc: docs/superpowers/specs/2026-10-25-chapter04-teaching-design.md（c9ae92e；章级分叉按推荐项采用，待用户复核）
+- 上一章检查点：第 3 章全部收口（见 git 历史 a9a4a84 Park ch03 build session 与其后任务提交）
 - ⚠️ 编排文件保护：本文件与 `.comet/**`、plan checkbox 为控制器专管——subagent 不得触碰，不得对其执行 git restore/checkout/stash
 
 ## 当前状态
 
-- **停靠（2026-10-25）：第 3 章 build 全部收口**——11 任务实现+逐任务审查+勾选全毕；最终完整审查（With fixes）→ 修复波 1（03b0de0+bc3ea19）→ scoped 复审全 ADDRESSED → 微修复 ab8c75c → scoped 复审 clean，**无开放项**
-- HEAD = ab8c75c；tasks.md「Chapter 3」8/8 已勾选（7334f4d）；全书 change 仍未勾满，`comet guard build --apply` 按设计阻塞（同第 2 章）
-- 硬性验收终值：`verify-build.sh` PASS=11 FAIL=0（03b0de0 修复波复跑；微修复仅涉 README 未触代码）；章正文 `wc -m`=62341 ∈ [35000, 63000]（裁定 83e13d2，计划/设计已同步）；交叉链接 grep 23/1；预期被拒标注 8/8；章↔示例 15 处引文逐字节一致
-- SDD 工作区 `.superpowers/sdd/2026-10-22-chapter03-teaching/` 已按 Finish 删除（本检查点 + git 历史为记录）
+- **停靠（2026-10-26）**：第 4 章 12 任务中 **Task 1–5 已收口**（实现+逐任务审查+计划勾选），全部审查通过；**Task 6 已提取 brief（`.superpowers/sdd/2026-10-25-chapter04-teaching/task-6-brief.md`），implementer 派发在启动前被取消——未产生任何改动**；Task 7–12 与终审未动
+- HEAD = ab7119d；工作树干净
+- SDD 台账权威文件：`.superpowers/sdd/2026-10-25-chapter04-teaching/progress.md`（Task 1–5 完成线、修复轮、回写、延后 Minor 全记录）
+- 恢复方式：Task 6 重派**全新 implementer**（brief 已就绪；正文任务派发要点见台账与 ch03 会话先例——需给实现者 ch03/ch02 正文做文风先例、第 4 章 C7 标题逐字、机器实证事实清单）→ Task 7/8/9 → Task 10 exercises → Task 11 verify-build/交叉链接/篇幅终检（35–52k）→ Task 12 主审+tasks.md 勾选（Chapter 4 七条，Batch 2 随之收官）→ 最终完整审查 → 停靠
 
-## 第 3 章任务台账（全部 done）
+## 第 4 章任务台账
 
-- Task 1 章级 README、00-env、.gitignore — done（8c8ba39 / 勾选 6b5b69a）
-- Task 2 01-pkt-parse 正面锚点示例 — done（fef465c / 勾选 33edc7f）
-- Task 3 画廊前三对 — done（1a120e3+c8e8fa8 / 勾选 ba95f0d）
-- Task 4 画廊后四对与总览 — done（7adb1e5+5e8a450 / 勾选 882390c）
-- Task 5 正文 目标/导读/一/二 — done（c162f24+567bc4e / 勾选 80d8382）
-- Task 6 正文 三、失败画廊走读 — done（145716e / 勾选 40bd080）
-- Task 7 正文 四、实战 — done（dfe7edf+07487fb / 勾选 621baa6）
-- Task 8 正文 可视化/排错/课后/总结/参考 — done（1d3d242 / 勾选 38beeee）
-- Task 9 练习参考实现与 exercises 总览 — done（b9a057c+计划回写 02eb94a / 审查通过 / 勾选 28677d6）——broken 补 volatile 偏离经 reviewer 技术裁定成立
-- Task 10 verify-build/交叉链接/篇幅终检 — done（0b37165 / 审查通过 / 勾选 fe94a8a）——含控制器清扫 13 项（终检清单 11 项中 5 项已同步关闭、1 项裁定不动，余全落地）
-- Task 11 主审与 tasks.md 勾选 — done（7334f4d / 审查通过 / 勾选 dfce129）——四组审计全绿，8/8 勾选
-- 最终完整审查 — done（With fixes → 修复波 03b0de0+bc3ea19 → 复审 ADDRESSED → 微修复 ab8c75c → 复审 clean）
+- Task 1 章级 README、00-env、.gitignore — done（8aa0600 + 修复轮 1 fc37d8b / 勾选 4766eaa）——修复项：check-env 权限分级改判 effective set（ch03 同款遗留问题的 ch04 侧修正）
+- Task 2 01-multi-observe 同一事件五副眼镜 — done（c1db3f3 / 勾选 683299b）——2 处 loader 偏差获 reviewer 实证（skeleton 前缀 multi_observe_bpf、libbpf_set_print 回调形态），计划回写 8a2fd0b
+- Task 3 02-xdp-tc 同一报文两种 ctx — done（ac73189 + 修复轮 1 ecfc807 / 勾选后 d5e77e3 前）——修复项：bpf_tc_detach 传填充 opts（NULL 是静默 no-op）；计划回写已同步
+- Task 4 画廊前四类与总览 — done（5b65477 / 勾选后 d5e77e3 前）——Approved 0 修复
+- Task 5 画廊后四类 — done（0d0d4c4 + 修复轮 1 d7cf474/3587c90 / 勾选 ab7119d）——实现者实证 bpf_nf_ctx{state, skb}（计划原文误写 in/out），计划回写 e27dcc2
+- Task 6 正文 目标/导读/一/二 — **brief 已就绪，待重派**（实现被取消，零改动）
+- Task 7 正文 三、类型画廊走读 — pending
+- Task 8 正文 四、实战 — pending
+- Task 9 正文 可视化/排错/课后/总结/参考 — pending
+- Task 10 exercises 两项（01-type-selection、02-type-mismatch）— pending
+- Task 11 verify-build.sh/全量编译/交叉链接/篇幅终检（35–52k）— pending
+- Task 12 主审 + tasks.md「Chapter 4」七条勾选（Batch 2 收官）— pending
+- 最终完整审查 — pending
 
-## 延后项登记（移交全书批次/统稿，非第 3 章开放项）
+## Task 11 顺带核对项（各任务延后 Minor 清扫，来自台账）
 
-1. **章 1.3 四步矩阵 code block step ②「拒绝：返回 -EACCES」**——计划逐字块；紧邻对冲句已纠正（-EACCES/-EINVAL 三分类），矩阵块本身留统稿轮与 ch02 预告⑥同源措辞一并校准
-2. check-env「具备 CAP_BPF」capsh bounding-set 误报——5.1 已解读兜底；未来章节脚本可改判 effective set
-3. 章 :1017 附近「整段免验，省去…整段重复探索」语义重复（裁定措辞残留）——统稿轮可修剪前半句
-4. 01-pkt-parse/README.md「…都会让计数增长」的「都」失去旧主语——微瑕
-5. reproduce.bpf.c:20「有符号字段」措辞（描述 __s32 转换本身，reviewer 判可留）
-6. C4 模板 `.DELETE_ON_ERROR`、-Wall、ARCH sed 覆盖面——未来章节统一升级
-7. 「最坏 40 亿次」与 2^32−1≈43 亿的取整口径——两处已一致（40 亿），统稿轮酌定精确化
-8. 教学简化记录：锚点未校验 ip->ihl；signal() 而非 sigaction——plan-mandated，保持
-9. ch02 :894「if (!p) 让它证明指针非空」与 ch02 5.2 防御式框架轻微张力——ch02 范围，统稿轮勘酌
-
-## 流程建议（来自终审，供未来章节采用）
-
-- 按内核源码校正预期日志/errno 的 gate 必须覆盖**每一条**契约日志行与每一个 errno/行为断言，而非只查被点名的（本次 03 大小写与 errno 三分类恰是漏网项）
-- 终检加入常规项：`grep -rn "C[1-9]"`（plan 内部契约编号不得泄漏到学生可见文本；vmlinux.h 生成物排除）
+1. Task 3 Minors：xdp_tc.c 缺 `<errno.h>`（传递包含）；SIGTERM 未注册（仅 SIGINT）
+2. Task 4 Minors：总览表「8 目录统一编译级已通过」瞬时超前（Task 5 落地后应已为真——核实即可）；uprobe README「偏移取符号地址」宜改「文件偏移（PIE/共享库下与虚拟地址不同）」；目录列反引号渲染（纯排版，可不改）
+3. Task 5 Minors：07-lsm README「load 后即进入裁决链」宜补「（skeleton attach 自动）」限定；sockops key 未初始化声明（brief 逐字，逻辑安全，不改）
+4. Task 11 自带：章级 README 验证摘要回填（实测工具版本 + PASS/FAIL）
 
 ## 已确认决策（不得重新询问）
 
 - 四项工作方式（2026-09-25）：isolation=current（master）、build_mode=subagent-driven-development（subagent_dispatch=confirmed）、tdd_mode=direct、review_mode=thorough
-- 验证策略：编译级真实验证 + 运行效果「预期输出示例」+「运行级待验证」（无 root，unprivileged_bpf_disabled=2）
-- 第 3 章特有：画廊 bad/fixed 与练习 broken 必须 clang 编译通过；预期 verifier 日志按 5.10+ 内核源码校正基准 + 版本差异口径；**04 特权豁免带版本限定（6.3+ 放行栈读；5.10–6.2 一律拒绝）**；03 关键行小写 prohibited；errno 三分类（-EACCES/-EINVAL，判别以有无 verifier 日志为准）
-- 篇幅：第 3 章 35–63k（裁定 83e13d2，ch02 先例同型）；分节预算按讲解文字口径，不含逐字代码贴入体量
-- 检查点第 1 问修正版保留；实战节动手观察用 UDP 流量（ping 是 ICMP 不计数）
-- 本平台 Agent 工具无 model 参数，按可用工具派发（先例：ch02 会话）
+- 验证策略：编译级真实验证 + 运行级一律「预期输出示例 / 运行级待验证」（无 root，unprivileged_bpf_disabled=2）
+- 第 4 章特有：画廊 8 类与练习程序必须 clang 编译通过（compile-only）；两锚点全链；fentry/kprobe 签名以本机 BTF 解析为准（do_sys_openat2 实证签名；do_unlinkat 本机内联缺席；vfs_unlink 签名漂移实证进教学）；BPF_PROG/BPF_KPROBE/BPF_KRETPROBE 在 bpf_tracing.h；TC_ACT_OK/NF_ACCEPT 需手工 define；bpf_nf_ctx{state, skb}（BTF 实证）；raw_tp syscall 类形状 (regs, id) 以内核源码为准
+- 篇幅：第 4 章 35–52k（设计 §3.3 分节预算）
+- 计划回写先例：Task 2/3/5 的计划笔误均按「回写对齐落地形态 + 留痕」处理（8a2fd0b / e27dcc2 等）
+- 本平台 Agent 工具无 model 参数，按可用工具派发（先例：ch02/ch03 会话）
 
 ## 恢复指引
 
-1. 用户决策下一章/下一批次（Batch 2/4/6/8 等任一），为该章走 design → plan → build（同第 2/3 章模式）；上述「延后项登记」中标注「未来章节/统稿」的项在该章或统稿批次处理
-2. 全书 tasks.md 勾满后：`comet guard build --apply` → verify → archive
+1. 读本检查点 + SDD 台账，对照 plan 未勾选任务与 git log 恢复；以 git log + plan checkbox + 台账为准
+2. Task 6 重派全新 implementer（brief 已就绪）后按任务序推进至 Task 12 + 终审
+3. 全部完成 + 终审通过后：停靠（全书 tasks.md 未勾满，`comet guard build --apply` 按设计阻塞，同第 2/3 章）
