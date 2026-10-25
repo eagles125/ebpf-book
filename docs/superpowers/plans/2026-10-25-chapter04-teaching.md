@@ -110,7 +110,7 @@ clean:
 | 05-sockops | SOCK_OPS | `SEC("sockops")` | `int so(struct bpf_sock_ops *ops)` | 1=已处理 / 0 透传 | TCP 连接生命周期回调（`ops->op` 判 `BPF_SOCK_OPS_PASSIVE/ACTIVE_ESTABLISHED_CB`）；socket 级状态可见（XDP/TC 没有的视角） |
 | 06-sk-msg | SK_MSG | `SEC("sk_msg")` | `int sm(struct sk_msg_md *msg)` | `__SK_PASS` / `__SK_DROP` | sockmap 重定向判决；与 sockops 配对构建 sockmap 体系（深入留第 22/23 章交叉引用） |
 | 07-lsm | LSM | `SEC("lsm/file_open")` | `int BPF_PROG(lf, struct file *file)` | **0 允许 / 非 0 阻断**（裁决语义以所用内核源码 `include/linux/lsm_hook_defs.h` 为准） | 安全决策点：内核对象（`struct file *`）直接可读；前提 CONFIG_BPF_LSM=y + `lsm=bpf` 启动参数（本机 =y 实证，运行级待验证） |
-| 08-netfilter | NETFILTER | `SEC("netfilter")` | `int nf(struct bpf_nf_ctx *ctx)` | `NF_ACCEPT` / `NF_DROP` | 6.6+ 新程序类型；`bpf_nf_ctx{state, in, out}`；完整可运行示例交叉引用 ch09 `09-netfilter-go/` |
+| 08-netfilter | NETFILTER | `SEC("netfilter")` | `int nf(struct bpf_nf_ctx *ctx)` | `NF_ACCEPT` / `NF_DROP` | 6.6+ 新程序类型；`bpf_nf_ctx{state, skb}`【Task 5 实现期 BTF 实证回写：计划原文误写 in/out】；完整可运行示例交叉引用 ch09 `09-netfilter-go/` |
 
 - 各目录源文件名：`kretprobe.bpf.c` / `uprobe.bpf.c` / `cgroup_skb.bpf.c` / `socket_filter.bpf.c` / `sockops.bpf.c` / `sk_msg.bpf.c` / `lsm.bpf.c` / `netfilter.bpf.c`。
 - 每目录 README.md 固定六段：**任务一句话 / 代码走读 / 挂载方式与前提 / 预期输出示例（运行级待验证）/ 验证状态（按 C6）/ 参考来源**；头部注释必须含「预期加载前提」一句话。
@@ -1026,7 +1026,7 @@ char LICENSE[] SEC("license") = "GPL";
 ```c
 // SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause
 /* 类型画廊⑧：netfilter——6.6+ 的新程序类型（本机 7.0 满足；预期加载前提：root）。
- * ctx 是 struct bpf_nf_ctx：{ state, in, out }——netfilter 钩子点的报文与状态。
+ * ctx 是 struct bpf_nf_ctx：{ state, skb }——netfilter 钩子状态与报文（本机 BTF 实证）。
  * 返回值语义：NF_ACCEPT/NF_DROP（uapi netfilter.h #define，不在 BTF——冒烟结论④）。
  * 完整可运行示例（Go 控制面 + 规则表）见第 9 章 09-netfilter-go/。 */
 #include "vmlinux.h"
