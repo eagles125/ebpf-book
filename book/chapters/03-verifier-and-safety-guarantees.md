@@ -221,3 +221,565 @@ bpf_check()（kernel/bpf/verifier.c）
 4. 512 字节栈限、百万条指令预算、循环必须收敛——三者共同把什么排除在模型之外？（提示：「无界」；这是 1.1 可终止保证的三道预算化机制——2.4/2.6。）
 
 **延伸路径**：本节涉及的源码检索与 bpftool 命令索引见附录 B（[`book/appendix/b-tool-command-index.md`](../appendix/b-tool-command-index.md)）；BTF 缺失环境下的内核自建路径见附录 C（[`book/appendix/c-distro-btf-build-guide.md`](../appendix/c-distro-btf-build-guide.md)）。
+
+## 三、失败画廊：七类典型拒绝
+
+一节把「合法但难证明」的写法列成了七类清单（1.4），本节把这七类做成七个现场：每类先看一份 clang 编译通过的 bad 程序——语法无懈可击，只在加载期被验证器拦下——再对照它的最小修复版 fixed，两份源码 diff 只差一处语义。全部素材落在 [`book/examples/chapter-03/02-fail-gallery/`](../examples/chapter-03/02-fail-gallery/)：七对目录各自含 bad.bpf.c、fixed.bpf.c、Makefile 与 README，只编译不加载（compile-only），bad 程序的验收口径就是「编译成功」。走读顺序按「从最常见到最隐蔽」排列：判空（3.1）→ 报文边界（3.2）→ 指针算术（3.3）→ 栈初始化（3.4）→ 终止性（3.5）→ 白名单（3.6）→ 任意地址（3.7）。每个 card 固定六段：背景问题 → bad 代码全文 → 预期 verifier 日志关键行 → 为什么拒绝（回指二节原理小节）→ fixed 修复片段 → 修复原则一句话。日志口径全节统一：凡日志均为预期输出示例 / 运行级待验证，日志行随内核版本略有差异（以 5.10+ 稳定措辞为基准）——读日志认「信号 → 根因类别」的映射，不背文本（2.7 教师视角同口径）。
+
+### 3.1 未检查的映射查找（画廊 01）
+
+背景问题：`bpf_map_lookup_elem` 是 BPF 程序与数据面交互的第一入口，也是初学者写下的第一行「会出事的代码」。第 2 章 3.2 给过标准样本：数组映射对越界下标的查找不报错，而是在辅助函数内部定界、返回 NULL；1.2 由此把「判空」定为程序侧硬性义务。本对展示不履行义务的现场——对查找返回值直接 `*v += 1`。
+
+bad 程序全文（画廊 01 目录：[`book/examples/chapter-03/02-fail-gallery/01-map-null/`](../examples/chapter-03/02-fail-gallery/01-map-null/)；下贴 `book/examples/chapter-03/02-fail-gallery/01-map-null/bad.bpf.c`）：
+
+```c
+// SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause
+/*
+ * 画廊 01-map-null / bad：预期被拒：map_value_or_null 直接解引用。
+ *
+ * verifier 为什么会拒绝：bpf_map_lookup_elem 这个辅助函数（helper）的返回值天然
+ *   可能是 NULL——key 不在映射（map）里、key 越界（本例 array 映射只有 1 个槽）
+ *   都查不到。因此返回值寄存器的类型是 map_value_or_null：「映射值指针 或 NULL」
+ *   两态合一。验证器（verifier）按最坏情况证明安全：不判空就 *v += 1，存在对
+ *   NULL 解引用的路径——内核态空指针访问会让内核崩溃，违反「已验证程序不可能
+ *   崩溃内核」的安全承诺，所以必须在加载期拒绝，而不是等运行时出错。
+ *
+ * 本文件在 clang 层面完全合法（编译通过）；拒绝发生在加载期。修复形态见同目录
+ * fixed.bpf.c——仅插入一个 NULL 分支；卡片讲解见本目录 README.md。
+ */
+#include "vmlinux.h"
+#include <bpf/bpf_helpers.h>
+
+/* uapi 常量不在 vmlinux.h 中（BTF 只含类型），画廊 XDP 类骨架统一手工定义 */
+#define ETH_P_IP 0x0800
+#define IPPROTO_UDP 17
+
+/* 画廊公共 stats map 块：单槽 array 映射计数器——本对的错误点不在 map 本身，
+ * 而在 lookup 返回值的处理，故保留最简形态 */
+struct {
+    __uint(type, BPF_MAP_TYPE_ARRAY);
+    __uint(max_entries, 1);
+    __type(key, __u32);
+    __type(value, __u64);
+} stats SEC(".maps");
+
+SEC("xdp")
+int probe_bad(struct xdp_md *ctx)
+{
+    __u32 key = 0;
+    __u64 *v = bpf_map_lookup_elem(&stats, &key);
+    *v += 1;                       /* 预期被拒：返回值可能是 NULL，直接解引用 */
+    return XDP_PASS;
+}
+
+char LICENSE[] SEC("license") = "GPL";
+```
+
+预期 verifier 日志关键行（预期输出示例 / 运行级待验证；日志行随内核版本略有差异）：
+
+```text
+invalid mem access 'map_value_or_null'
+```
+
+关键行指认「对处于 map_value_or_null 状态的寄存器做了不允许的内存访问」，日志前文会列出对应的指令与寄存器状态（格式随版本略有差异）。
+
+为什么拒绝：回到 2.3 的类型表——查找返回值定型为 `PTR_TO_MAP_VALUE_OR_NULL`，语义是「映射值指针 或 NULL」两态合一，「要求的检查」一列写明必须判空：`if (!v)` 的空路径退出后，非空路径上类型收窄为 `PTR_TO_MAP_VALUE`，解引用才可证明安全。bad 跳过收窄直接解引用，而验证器按最坏情况证明：key 查不到的路径上这就是一次内核态空指针访问，违反第一类安全保证（1.1）——必须在加载期拒绝，而不是等运行时出错。这正是 1.2 两层防线分工的程序侧落点：内核把「下标是否越界」下沉到辅助函数内部裁决（第 2 章 3.2 的运行时定界），调用方的义务就是判空——类型系统的定型要求，不是风格偏好（锚点 `01-pkt-parse` 里 `if (count)` 的防御式判空是同一模式的冗余变体，1.2 的调停口径）。
+
+fixed 修复片段（下贴 `book/examples/chapter-03/02-fail-gallery/01-map-null/fixed.bpf.c` 的 `probe_fixed` 函数；映射定义与 license 与 bad 一致）：
+
+```c
+SEC("xdp")
+int probe_fixed(struct xdp_md *ctx)
+{
+    __u32 key = 0;
+    __u64 *v = bpf_map_lookup_elem(&stats, &key);
+    if (!v)
+        return XDP_PASS;           /* 修复：NULL 分支让类型从 map_value_or_null 定型为 map_value */
+    *v += 1;
+    return XDP_PASS;
+}
+```
+
+修复原则一句话：**lookup 之后、解引用之前先判空 `if (!v) return ...;`**——判空让类型从 map_value_or_null 定型为 map_value；NULL 分支的返回动作按业务语义选择，同型错误（`bpf_ringbuf_reserve` 等可能返回 NULL 的返回值）遵循同一原则。
+
+### 3.2 报文边界检查缺失（画廊 02）
+
+背景问题：报文解析是 XDP 程序的本职，也是被拒率最高的一类写法——报文长度运行时才确定，随时可能被硬件或上游截断，最小以太网帧都可能不完整。正面锚点 `01-pkt-parse` 已示范「通过路径」长什么样；本对把同类解析的界检查全部删掉，看验证器看到的世界。
+
+bad 程序全文（画廊 02 目录：[`book/examples/chapter-03/02-fail-gallery/02-pkt-bounds/`](../examples/chapter-03/02-fail-gallery/02-pkt-bounds/)；下贴 `book/examples/chapter-03/02-fail-gallery/02-pkt-bounds/bad.bpf.c`）：
+
+```c
+// SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause
+/*
+ * 画廊 02-pkt-bounds / bad：预期被拒：报文边界检查缺失——首个越界读在 eth->h_proto。
+ *
+ * verifier 为什么会拒绝：packet 指针（从 ctx->data 起）指向长度可变的报文，网络
+ *   报文随时可能被硬件/上游截断，验证器（verifier）无法凭「一般报文够长」放行——
+ *   每个字段的读偏移都必须先与 data_end 界标比较、证明落在报文内。本程序把
+ *   eth/ip 两层指针推进后未做任何 (void *)(指针 + 1) > data_end 检查就读字段，
+ *   第一个字段读 eth->h_proto（偏移 12..13）时已不可证明在报文内——越界读会泄出
+ *   报文缓冲区之外的内核内存，因此加载期直接拒绝。
+ *
+ * 对照通过路径锚点 ../../01-pkt-parse/pkt_parse.bpf.c：同一解析链，每层解引用前
+ * 先做界检查即放行。本文件在 clang 层面完全合法（编译通过）；修复形态见同目录
+ * fixed.bpf.c——仅插入两层界检查；卡片讲解见本目录 README.md。
+ */
+#include "vmlinux.h"
+#include <bpf/bpf_helpers.h>
+#include <bpf/bpf_endian.h>    /* bpf_htons：h_proto 为网络字节序 */
+
+/* uapi 常量不在 vmlinux.h 中（BTF 只含类型），画廊 XDP 类骨架统一手工定义 */
+#define ETH_P_IP 0x0800
+#define IPPROTO_UDP 17
+
+SEC("xdp")
+int probe_bad(struct xdp_md *ctx)
+{
+    void *data = (void *)(long)ctx->data;
+    void *data_end = (void *)(long)ctx->data_end;
+    struct ethhdr *eth = data;
+    struct iphdr *ip = data + sizeof(*eth);
+    if (eth->h_proto == bpf_htons(ETH_P_IP) && ip->protocol == IPPROTO_UDP)
+        return XDP_DROP;           /* 预期被拒：首个越界读在 eth->h_proto（无任何 data_end 检查） */
+    return XDP_PASS;
+}
+
+char LICENSE[] SEC("license") = "GPL";
+```
+
+程序把 `eth`、`ip` 两层指针推进后直接读字段，全程没有一次与 `data_end` 的比较——首个越界读在 `eth->h_proto`（bad 头注释同口径）。
+
+预期 verifier 日志关键行（预期输出示例 / 运行级待验证；日志行随内核版本略有差异）：
+
+```text
+R2 offset is outside of the packet
+```
+
+关键行指认「寄存器 R2 的偏移已超出报文范围」（部分版本作等价措辞 `invalid packet access`），指认点就是第一个无检查的字段读。一个读日志的提醒：寄存器编号随编译器的寄存器分配变化——同一份源码换 clang 版本、或加删一行无关语句，`R2` 就可能变成 `R1`/`R3`；认措辞与偏移语义，别认编号。
+
+为什么拒绝：2.5 讲过原理——`data` 与 `data_end` 从上下文读出时是两个毫无关系的指针，只有一句 `if ((void *)(eth + 1) > data_end)` 这样的比较，才能在「不返回」的路径上建立「报文指针偏移加对象大小，不超过尾界偏移」的事实，此后的解引用才可证明落在报文内。bad 一次比较都没有，第一个字段读 `eth->h_proto`（偏移 12..13）就处于不可证明状态：报文若短于 14 字节，这次读会越过报文缓冲区、泄出缓冲区之外的内核内存（信息泄露，2.6 同一模型）。验证器按最坏情况证明，不赌「报文一般够长」。对照锚点 `book/examples/chapter-03/01-pkt-parse/pkt_parse.bpf.c`：同一个检查在「通过路径」的位置就是每层解引用前的那一行——本对 fixed 插入的两层检查与锚点的一、二层逐字同形，差别只在命中 UDP 时返回 `XDP_DROP`。
+
+fixed 修复片段（下贴 `book/examples/chapter-03/02-fail-gallery/02-pkt-bounds/fixed.bpf.c` 的 `probe_fixed` 函数；license 与 bad 一致）：
+
+```c
+SEC("xdp")
+int probe_fixed(struct xdp_md *ctx)
+{
+    void *data = (void *)(long)ctx->data;
+    void *data_end = (void *)(long)ctx->data_end;
+    struct ethhdr *eth = data;
+    if ((void *)(eth + 1) > data_end)      /* 修复①：第一层界检查——以太网头（14 字节）完整落在报文内才可读 */
+        return XDP_PASS;
+    struct iphdr *ip = data + sizeof(*eth);
+    if ((void *)(ip + 1) > data_end)       /* 修复②：第二层界检查——IPv4 头完整落在报文内才可读 */
+        return XDP_PASS;
+    if (eth->h_proto == bpf_htons(ETH_P_IP) && ip->protocol == IPPROTO_UDP)
+        return XDP_DROP;                   /* 与 bad 相同的判定与动作，此时读取已被界检查证明安全 */
+    return XDP_PASS;
+}
+```
+
+修复原则一句话：**每层协议头解引用前，先做整层界检查 `(void *)(指针 + 1) > data_end`**——用「下一层头尾」证明整层落在报文内；上一层检查通过不代表下一层安全，推进模式是「上一层尾 = 这一层头」。
+
+### 3.3 对报文尾界的无效指针运算（画廊 03）
+
+背景问题：看完 3.2 读者可能想「优化」：与其每层比较，不如先把 `data_end` 挪 4 字节再统一比？这一步恰好踩在类型系统最敏感的位置——对尾界指针本身做算术。它不是「忘了检查」，而是结构性不可证明，「补一个检查」豁免不了。
+
+bad 程序全文（画廊 03 目录：[`book/examples/chapter-03/02-fail-gallery/03-ptr-math/`](../examples/chapter-03/02-fail-gallery/03-ptr-math/)；下贴 `book/examples/chapter-03/02-fail-gallery/03-ptr-math/bad.bpf.c`）：
+
+```c
+// SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause
+/*
+ * 画廊 03-ptr-math / bad：预期被拒：pkt_end 指针禁止算术。
+ *
+ * verifier 为什么会拒绝：ctx->data_end 是报文尾界（pkt_end）——验证器（verifier）
+ *   信任模型的锚点：整个「报文内安全」的证明全部建立在「指针与 data_end 比较」
+ *   之上。若允许对尾界本身做算术（data_end += 4），程序就能挪动界标、把越界访问
+ *   伪造成「界内」，尾界的可信性即告失效。因此内核把尾界寄存器的类型
+ *   （PTR_TO_PACKET_END）登记为不可参与算术——加载期直接拒绝，而不是放行一个
+ *   可能被篡改的界标。需要越过若干字节时，把算术放在 packet 指针上并立刻用界
+ *   检查收口（见同目录 fixed.bpf.c）。
+ *
+ * 可观测性说明：紧随其后的比较消费了算术结果——这不是修复，而是防止 clang -O2 把
+ *   未使用的 data_end += 4 当死代码消除（消除后产物里没有这条 offending 指令，
+ *   加载期也就看不到拒绝）。比较行写作 data > data_end 而非 data + 4 > data_end：
+ *   两侧偏移不等（0 对 4），编译器无法折叠公共偏移，算术指令得以保留；真正被拒
+ *   的仍是对尾界的算术本身。本文件在 clang 层面完全合法（编译通过）；拒绝发生在
+ *   加载期。卡片讲解见本目录 README.md。
+ */
+#include "vmlinux.h"
+#include <bpf/bpf_helpers.h>
+
+/* uapi 常量不在 vmlinux.h 中（BTF 只含类型），画廊 XDP 类骨架统一手工定义 */
+#define ETH_P_IP 0x0800
+#define IPPROTO_UDP 17
+
+SEC("xdp")
+int probe_bad(struct xdp_md *ctx)
+{
+    void *data = (void *)(long)ctx->data;
+    void *data_end = (void *)(long)ctx->data_end;
+    data_end += 4;                 /* 预期被拒：pkt_end 指针禁止算术（内核以此保住报文尾界的可信性） */
+    if (data > data_end)           /* 算术结果参与比较：防止 clang -O2 死代码消除掉 offending 指令 */
+        return XDP_DROP;
+    return XDP_PASS;
+}
+
+char LICENSE[] SEC("license") = "GPL";
+```
+
+先读头注释与两个行内注释的分工：`data_end += 4` 是被拒的肇事指令（offending 指令）；紧随其后的 `if (data > data_end)` **不是修复、也不是业务逻辑**，而是可观测性装置——若算术结果无人消费，clang -O2 会把 `data_end += 4` 当死代码消除，产物里没有这条指令、加载期也就看不到拒绝；比较行故意写成偏移不等的 `data > data_end`（0 对 4），编译器无法折叠公共偏移，肇事指令才得以保留。真正被拒的仍是对尾界算术这一条——**不要把「加一个消费比较」误学成修复模式**。
+
+预期 verifier 日志关键行（预期输出示例 / 运行级待验证；日志行随内核版本略有差异）：
+
+```text
+R2 pointer arithmetic on pkt_end PROHIBITED
+```
+
+这是少数直接在寄存器类型层面（而非访存层面）给出的拒绝，日志会带上肇事指令 `data_end += 4` 的位置；寄存器编号同样随分配变化（实测产物中 `data_end` 分配在 r1）——认措辞，不认编号。
+
+为什么拒绝：2.3 类型表里 `PTR_TO_PACKET_END` 一行的「允许的算术」一栏写着**不可算术**，理由是信任模型而非保守癖：验证器对报文内存安全的全部证明——「读偏移落在 `[data, data_end)` 内」——都建立在尾界**可信**的前提上（2.5 的关系推导以尾界为比较基准）；一旦允许 `data_end += 4`，程序就能挪动界标、把越界访问伪造成「界内」，整个证明的地基即被抽掉。对照 2.3 表的另一行：packet 指针（`PTR_TO_PACKET`，`ctx->data` 一侧）**允许**算术，只是结果的后续访问必须仍受界检查约束——bad 与 fixed 的分界不在「想做偏移运算」，在「对界标本身做运算」。
+
+fixed 修复片段（下贴 `book/examples/chapter-03/02-fail-gallery/03-ptr-math/fixed.bpf.c` 的 `probe_fixed` 函数）：
+
+```c
+SEC("xdp")
+int probe_fixed(struct xdp_md *ctx)
+{
+    void *data = (void *)(long)ctx->data;
+    void *data_end = (void *)(long)ctx->data_end;
+    if (data + 4 > data_end)       /* 修复：算术放在 packet 指针上，且立刻用界检查收口 */
+        return XDP_PASS;
+    return XDP_PASS;
+}
+```
+
+修复原则一句话：**算术放在 packet 指针上，`data_end` 全程只读、只作比较**——需要越过 N 字节时写 `if (data + N > data_end)`，一条语句同时完成「做算术」与「证安全」；算术之后立即收口，否则落回 3.2 的拒绝。
+
+### 3.4 栈变量未初始化使用（画廊 04）
+
+背景问题：变量只在某个分支里赋值、分支外使用——C 初学者的经典错误。在用户态程序里它读到的是垃圾值；在 BPF 程序里，栈上从未写过的槽残留着**前一次系统调用留下的进程敏感数据**（地址、凭据片段），读出并回传用户态就是一次内核信息泄露——这不是正确性问题，是安全问题。
+
+bad 程序全文（画廊 04 目录：[`book/examples/chapter-03/02-fail-gallery/04-stack-uninit/`](../examples/chapter-03/02-fail-gallery/04-stack-uninit/)；下贴 `book/examples/chapter-03/02-fail-gallery/04-stack-uninit/bad.bpf.c`）：
+
+```c
+// SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause
+/*
+ * 画廊 04-stack-uninit / bad：预期被拒：栈变量仅在 if (v) 分支赋值，分支外使用可能未初始化。
+ *
+ * verifier 为什么会拒绝：验证器（verifier）对 512 字节栈的每个槽位都跟踪初始化状态
+ *   （栈槽的初始化跟踪，见正文 2.6）。本程序里 verdict 只在 if (v) 分支内被写入；
+ *   v == NULL（key 不在映射（map）里、映射内存紧张等都查不到）的那条路径上没有
+ *   任何写入，但
+ *   if (verdict > 10) 依然要读这个槽——「读一个从未写过的栈槽」在加载期即被拒绝
+ *   （豁免条件：仅在允许非特权 BPF 的配置下成立；特权 CAP_PERFMON 加载放行
+ *   未初始化栈读——见本目录 README 的特权豁免说明）。
+ *   内核栈不会在使用间清零，未初始化的槽里可能残留前一次系统调用留下的敏感数据，
+ *   读出并回传就是信息泄露，所以按最坏情况证明的验证器不允许任何未初始化读。
+ *
+ * 可观测性说明：声明行上的 volatile 不是修复、也不是语义错误的一部分——它是编译级
+ *   装置：未初始化读在 C 里是未定义行为，clang -O2 会把「分支外使用未初始化值」按
+ *   undef 折叠（实测：折叠后产物里没有那条未初始化读，整个程序反而变成验证器可
+ *   放行的形态）；volatile 让每次读写都落到真实栈槽，offending 指令（未初始化栈槽
+ *   读取）得以保留。本文件在 clang 层面完全合法（编译通过）；拒绝发生在加载期。
+ *   修复形态见同目录 fixed.bpf.c——仅补一处声明初始化；卡片讲解见本目录 README.md。
+ */
+#include "vmlinux.h"
+#include <bpf/bpf_helpers.h>
+
+/* uapi 常量不在 vmlinux.h 中（BTF 只含类型），画廊 XDP 类骨架统一手工定义 */
+#define ETH_P_IP 0x0800
+#define IPPROTO_UDP 17
+
+/* 画廊公共 stats map 块：单槽 array 映射——本对的错误点不在 map 本身，
+ * 而在 lookup 返回值的条件赋值与栈初始化跟踪 */
+struct {
+    __uint(type, BPF_MAP_TYPE_ARRAY);
+    __uint(max_entries, 1);
+    __type(key, __u32);
+    __type(value, __u64);
+} stats SEC(".maps");
+
+SEC("xdp")
+int probe_bad(struct xdp_md *ctx)
+{
+    __u32 key = 0;
+    volatile __u64 verdict;        /* 预期被拒：仅在 if (v) 分支赋值，分支外使用可能未初始化（volatile 抑制编译器 UB 折叠，见头注释） */
+    __u64 *v = bpf_map_lookup_elem(&stats, &key);
+    if (v)
+        verdict = *v;
+    if (verdict > 10)
+        return XDP_DROP;
+    return XDP_PASS;
+}
+
+char LICENSE[] SEC("license") = "GPL";
+```
+
+先读头注释的可观测性说明：声明行的 `volatile` **不是修复、也不是语义错误的一部分**——未初始化读在 C 里是未定义行为，clang -O2 会把「分支外使用未初始化值」按未定义值折叠（实测：折叠后产物里没有那条未初始化读，整个程序反而变成验证器可放行的形态）；`volatile` 让每次读写落到真实栈槽，未初始化栈槽读取这条肇事指令才得以保留。fixed 侧同样带 `volatile`，使 diff 只剩 `= 0` 一处。
+
+预期 verifier 日志关键行（预期输出示例 / 运行级待验证；日志行随内核版本略有差异）——真实措辞两种形态并列，没有任何内核版本打印两者的拼接体：
+
+```text
+R2 !read_ok
+```
+
+```text
+invalid read from stack off -16+0 size 8
+```
+
+前者针对未初始化（`NOT_INIT`，与 2.3 表末行同源）的寄存器给出寄存器号，后者无寄存器号、按栈槽偏移与读取尺寸指认——寄存器号与偏移随产物代码生成与内核版本而异（本对 bad 产物实测：栈槽偏移 -16、尺寸 8）。
+
+**特权豁免（重要教学内容）**：上述拒绝有配置前提——仅在允许非特权 BPF 的配置（`kernel.unprivileged_bpf_disabled=0`，即非特权用户可加载 BPF）下成立。特权加载（CAP_PERFMON 一类能力档）下，验证环境的 `allow_uninit_stack` 一类档位标志置位，未初始化栈读被放行——内核认为特权用户本就能读取此类数据，泄露模型对特权档不成立（2.6 的机制讲解）。同一份字节码，非特权路径拒绝、特权路径放行——2.6 点亮的「验证器严格度随特权档位变化」在这对上现场化；教学与代码审计一律按「必须初始化」对待，不依赖特权豁免。
+
+为什么拒绝：2.6 的栈槽初始化跟踪——512 字节栈的每个槽位，只在「当前这条路径上先写过」之后才允许读。本例 `verdict` 的栈槽只在 `if (v)` 分支内被写入；`v == NULL` 的路径（key 查不到——与 3.1 同源的运行时定界）直接落到 `if (verdict > 10)`，这条路径上槽从未被写，读取即拒。与 3.1 对照着记：那里跟踪的是寄存器的联合类型（map_value_or_null），这里跟踪的是栈槽的写入记录——「按所有可能路径的最坏情况证明」是同一原理的两次落地。
+
+fixed 修复片段（下贴 `book/examples/chapter-03/02-fail-gallery/04-stack-uninit/fixed.bpf.c` 的 `probe_fixed` 函数；映射定义、赋值与判定语句与 bad 完全一致）：
+
+```c
+SEC("xdp")
+int probe_fixed(struct xdp_md *ctx)
+{
+    __u32 key = 0;
+    volatile __u64 verdict = 0;    /* 修复：声明即初始化，所有路径上都有确定值 */
+    __u64 *v = bpf_map_lookup_elem(&stats, &key);
+    if (v)
+        verdict = *v;
+    if (verdict > 10)
+        return XDP_DROP;
+    return XDP_PASS;
+}
+```
+
+修复原则一句话：**声明即初始化**——`__u64 verdict = 0;` 让所有路径上「先写后读」；或把使用点包进赋值分支，验证器要求的是「读之前这条路径上写过」。
+
+### 3.5 不可证明终止的循环（画廊 05）
+
+背景问题：循环上界取自报文内容——「报文一般不长」是直觉，但攻击者完全可以构造一个 4 字节头、`n = 0xFFFFFFFF` 的报文；一个被放行的 n 次循环会把 CPU 永久卡死在收包软中断里——拒绝服务（Denial of Service，DoS）。可终止是 1.1 的第二类安全保证，验证器必须证明「必然停机」才放行。
+
+bad 程序全文（画廊 05 目录：[`book/examples/chapter-03/02-fail-gallery/05-loop/`](../examples/chapter-03/02-fail-gallery/05-loop/)；下贴 `book/examples/chapter-03/02-fail-gallery/05-loop/bad.bpf.c`）：
+
+```c
+// SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause
+/*
+ * 画廊 05-loop / bad：预期被拒：循环上界取自报文且无掩码，迭代次数不可证明。
+ *
+ * verifier 为什么会拒绝：循环体是一条回跳的 back-edge——验证器（verifier）要么证明
+ *   循环必然终止（有界循环，5.3 起支持），要么拒绝。本程序循环上界 n 直接取自
+ *   报文内容（*(u32 *)data，最大可达 2^32-1），且没有任何掩码收窄：验证器对 n 的
+ *   取值推导只能得到「任意 32 位无符号数」，无法证明迭代有界。看似「报文一般
+ *   不长」没有用——最坏情况证明要求覆盖攻击者构造的超长迭代：一个被放行的
+ *   n 次循环会把 CPU 卡在收包软中断里，即拒绝服务（DoS），所以加载期直接拒绝。
+ *
+ * 可观测性说明：循环累加写作 sum ^= i 而非 sum += i——这不是修复的一部分，而是
+ *   编译级装置：+= 是线性递推，clang -O2 的归纳变量优化（-indvars）会算出闭式
+ *   n*(n-1)/2、把循环整条消除（实测：产物里没有任何 back-edge，程序反而变成
+ *   验证器可放行的形态）；XOR 递推没有闭式，循环得以保留。if (sum == 0xdeadbeef)
+ *   消费循环结果，同样防止循环体被当死代码删除。本文件在 clang 层面完全合法
+ *   （编译通过）；拒绝发生在加载期。修复形态见同目录 fixed.bpf.c——仅加一处
+ *   掩码；卡片讲解见本目录 README.md。
+ */
+#include "vmlinux.h"
+#include <bpf/bpf_helpers.h>
+
+/* uapi 常量不在 vmlinux.h 中（BTF 只含类型），画廊 XDP 类骨架统一手工定义 */
+#define ETH_P_IP 0x0800
+#define IPPROTO_UDP 17
+
+SEC("xdp")
+int probe_bad(struct xdp_md *ctx)
+{
+    void *data = (void *)(long)ctx->data;
+    void *data_end = (void *)(long)ctx->data_end;
+    if (data + 4 > data_end)
+        return XDP_PASS;
+    __u32 n = *(__u32 *)data;      /* 预期被拒：上界取自报文且无掩码，迭代次数不可证明 */
+    __u64 sum = 0;
+    for (__u32 i = 0; i < n; i++)
+        sum ^= i;                  /* XOR 而非 +=：线性递推会被 -indvars 折叠成闭式、循环整条消除（见头注释可观测性说明） */
+    if (sum == 0xdeadbeef)         /* 消费 sum，防止被优化删除 */
+        return XDP_DROP;
+    return XDP_PASS;
+}
+
+char LICENSE[] SEC("license") = "GPL";
+```
+
+先读头注释的可观测性说明：循环累加写作 `sum ^= i` **不是修复的一部分**——`+=` 是线性递推，clang -O2 的归纳变量优化（-indvars）会算出闭式、把循环整条消除（实测：产物里没有任何回边，程序反而变成可放行形态）；XOR 递推没有闭式，循环才得以保留，`if (sum == 0xdeadbeef)` 消费循环结果同理防止死代码删除。
+
+预期 verifier 日志关键行（预期输出示例 / 运行级待验证；日志行随内核版本略有差异）：
+
+```text
+infinite loop detected at insn 12
+```
+
+主形态与路径档位有关（2.6）：特权路径上回边被放行进入状态探索，取值域无法收敛到「有限次迭代必退出」时，以 `infinite loop detected at insn ...` 拒绝——insn 编号锚定循环回边所在，随产物与内核版本而异（本对 bad 产物实测：第 12 条指令回跳第 10 条）；非特权路径对回边在 CFG 一层直接严查，形态为 `back-edge from insn ... to ...`。两类路径的拒绝根因相同：循环不可证明终止。
+
+为什么拒绝：2.6 终止性的第二道机制——验证器对放行的回边不数迭代次数，看**状态探索是否收敛**；收敛的前提是上界可推导，而本例 `n` 从报文读入且无任何收窄，2.5 的边界推导只能给出「[0, 2^32−1] 中的任意值」，最坏 40 亿次迭代不可证明有界。版本演进一句话（保守措辞，以所用内核文档为准）：5.3 之前任何回边一律拒绝，终止性靠禁止循环语法实现；5.3 起对特权程序允许有界循环，终止性改由探索收敛裁决；5.17 起还可用辅助函数 `bpf_loop` 把复杂迭代交给内核。结论不变：无界执行进不来（2.6 的三道预算化机制在此收口）。
+
+fixed 修复片段（下贴 `book/examples/chapter-03/02-fail-gallery/05-loop/fixed.bpf.c` 的 `probe_fixed` 函数；界检查、循环结构与消费语句与 bad 完全一致）：
+
+```c
+SEC("xdp")
+int probe_fixed(struct xdp_md *ctx)
+{
+    void *data = (void *)(long)ctx->data;
+    void *data_end = (void *)(long)ctx->data_end;
+    if (data + 4 > data_end)
+        return XDP_PASS;
+    __u32 n = *(__u32 *)data & 0xF;   /* 修复：掩码定界，上界收窄到 [0, 15]（迭代至多 15 次），循环可证明终止 */
+    __u64 sum = 0;
+    for (__u32 i = 0; i < n; i++)
+        sum ^= i;                  /* 与 bad 相同：XOR 防止归纳变量优化把循环折叠成闭式 */
+    if (sum == 0xdeadbeef)
+        return XDP_DROP;
+    return XDP_PASS;
+}
+```
+
+修复原则一句话：**上界先收窄再进循环**——`n & 0xF` 让按位与沿位级抽象传播（2.5 的伏笔例），上界塌缩到 [0, 15]、迭代至多 15 次，可证明终止；掩码位数按业务语义选，上界 = 2^位数 − 1。
+
+### 3.6 辅助函数白名单越界（画廊 06）
+
+背景问题：想在 XDP 程序里按进程聚合统计？`bpf_get_current_pid_tgid()` 在 tracing 程序里天天在用，搬进 XDP 就加载失败——而 clang 一声不吭。第 2 章 1.3 末的预告②「调用当前程序类型不支持的辅助函数，编译期不报错、加载时被拒」在此兑现，这也是 1.3「两件事」最干净的现场：clang 只负责把 call 翻译成「调用辅助函数 id 14」，白名单核对发生在加载期。
+
+bad 程序全文（画廊 06 目录：[`book/examples/chapter-03/02-fail-gallery/06-helper-misuse/`](../examples/chapter-03/02-fail-gallery/06-helper-misuse/)；下贴 `book/examples/chapter-03/02-fail-gallery/06-helper-misuse/bad.bpf.c`）：
+
+```c
+// SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause
+/*
+ * 画廊 06-helper-misuse / bad：预期被拒：tracing 类专用 helper 不在 XDP 程序类型的白名单。
+ *
+ * verifier 为什么会拒绝：辅助函数（helper）不是全局可用——内核按程序类型（program
+ *   type）登记各自的 helper 白名单（verifier_ops，见正文 2.7）。bpf_get_current_pid_tgid()
+ *   读取「当前进程上下文」，只有 tracing/kprobe 等挂在进程上下文里的程序类型才有
+ *   语义；XDP 程序跑在网卡收包软中断里，没有「当前进程」可言——放行它不仅语义
+ *   错乱，还会把任意进程的 pid/tgid 泄露给网卡路径上的程序。验证器在加载期检查
+ *   每条 call 指令：helper id 不在本程序类型的白名单内即拒绝。
+ *
+ * 本文件在 clang 层面完全合法（编译通过）——clang 只负责把 call 翻译成
+ *   「调用 helper id 14」，白名单核对发生在加载期。修复形态见同目录 fixed.bpf.c
+ *   ——改用 XDP 白名单内的等价能力；卡片讲解见本目录 README.md。
+ */
+#include "vmlinux.h"
+#include <bpf/bpf_helpers.h>
+
+/* uapi 常量不在 vmlinux.h 中（BTF 只含类型），画廊 XDP 类骨架统一手工定义 */
+#define ETH_P_IP 0x0800
+#define IPPROTO_UDP 17
+
+SEC("xdp")
+int probe_bad(struct xdp_md *ctx)
+{
+    __u32 pid = (__u32)bpf_get_current_pid_tgid();  /* 预期被拒：tracing 类专用 helper，不在 XDP 白名单 */
+    if (pid)
+        return XDP_DROP;
+    return XDP_PASS;
+}
+
+char LICENSE[] SEC("license") = "GPL";
+```
+
+预期 verifier 日志关键行（预期输出示例 / 运行级待验证；日志行随内核版本略有差异）：
+
+```text
+unknown func bpf_get_current_pid_tgid#14
+```
+
+5.10+ 内核源码中，白名单 miss 的唯一输出形态就是 `unknown func <名字>#<id>`——早期教学材料流传的「cannot use helper / not allowed for program type」措辞已不存在于内核源码。**排歧点（初学者最容易误判的地方）**：不要把 `unknown func` 读成「辅助函数不存在」——`bpf_get_current_pid_tgid` 当然存在，「unknown」修饰的是「对本程序类型不可用」，不是「内核没有这个函数」；排查这类拒绝先查辅助函数的程序类型适用面（`include/uapi/linux/bpf.h` 注释或 `bpftool feature probe`），不要先怀疑内核版本。
+
+为什么拒绝：2.7 的机制——白名单按程序类型正向登记，每个程序类型登记一组验证器操作，「给定编号，返回该类型的原型或 NULL」一类回调回答「这个类型能否调用编号 N」。白名单不是官僚关卡，它跟着**执行上下文**走：`bpf_get_current_pid_tgid()` 读的是「当前进程」的 pid/tgid，tracing/kprobe 类程序挂在进程上下文的事件上，「当前进程」有意义；XDP 程序跑在网卡收包软中断里，可能在任意进程的地址空间切换间隙执行——「当前进程」要么无意义、要么指向毫不相关的进程，放行还等于把系统内任意进程的 pid 泄露给网卡路径上的程序。验证器在加载期扫到 call 指令、查出 id、比对清单，不在即拒——不需要等运行时才发现「数据没意义」。
+
+fixed 修复片段（下贴 `book/examples/chapter-03/02-fail-gallery/06-helper-misuse/fixed.bpf.c` 的 `probe_fixed` 函数；判定结构与返回动作与 bad 一致）：
+
+```c
+SEC("xdp")
+int probe_fixed(struct xdp_md *ctx)
+{
+    __u32 cpu = bpf_get_smp_processor_id();         /* 修复：改用 XDP 白名单内的等价能力 */
+    if (cpu)
+        return XDP_DROP;
+    return XDP_PASS;
+}
+```
+
+修复原则一句话：**先查适用面再选辅助函数**——拿不准就换同程序类型白名单内的等价能力（按 pid 聚合换不成，就按 CPU 聚合）；这是语义替换、不是绕过——白名单没有豁免机制，直接改 helper id 硬绕，会在参数原型检查处再次被拒（2.7）。
+
+### 3.7 ctx 标量强转指针直接解引用（画廊 07）
+
+背景问题：最后一类最隐蔽——tracepoint 上下文的 `args[]` 字段**在数值上**存着合法的用户态地址（本例是 openat 的 filename 参数），C 强转成指针就能用，编译器放行。但「数值上像指针」与「类型上是指针」是两回事——这正是第 2 章 5.2 预告⑦之一「ctx 申报访问与任意内核指针 probe 界限的分界，证明过程是第 3 章正题」的正式兑现。
+
+bad 程序全文（画廊 07 目录：[`book/examples/chapter-03/02-fail-gallery/07-kernel-ptr/`](../examples/chapter-03/02-fail-gallery/07-kernel-ptr/)；下贴 `book/examples/chapter-03/02-fail-gallery/07-kernel-ptr/bad.bpf.c`）：
+
+```c
+// SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause
+/*
+ * 画廊 07-kernel-ptr / bad：预期被拒：ctx 标量字段强转指针后直接解引用。
+ *
+ * verifier 为什么会拒绝：tracepoint 上下文（struct trace_event_raw_sys_enter）的
+ *   args[] 字段是「指针的数值」——寄存器类型是标量（SCALAR_VALUE），不是任何
+ *   可解引用的指针类型。验证器（verifier）的类型系统只允许解引用「登记过的指针」：
+ *   ctx 本身可按布局访问（申报访问），而 ctx 字段里存着的内核/用户地址属于
+ *   「任意地址」，直接解引用 = 允许 BPF 程序读内核里任何位置（任意读漏洞），
+ *   因此加载期拒绝。任意地址必须走 probe 系辅助函数（helper）（bpf_probe_read_user_str
+ *   等，helper 内部做受界限检查——第 2 章预告⑦的兑现，正文 2.3 寄存器类型表）。
+ *
+ * 本文件在 clang 层面完全合法（编译通过）——C 的强制转换随便写，寄存器类型的
+ *   核对发生在加载期。本对为 tracepoint 程序类型（无 XDP 挂载风险），画廊骨架中
+ *   的 uapi 常量块按 C2 说明不加。修复形态见同目录 fixed.bpf.c——probe 系 helper
+ *   受控读取；卡片讲解见本目录 README.md。
+ */
+#include "vmlinux.h"
+#include <bpf/bpf_helpers.h>
+
+SEC("tracepoint/syscalls/sys_enter_openat")
+int probe_bad(struct trace_event_raw_sys_enter *ctx)
+{
+    char *fn = (char *)ctx->args[1];   /* 预期被拒：ctx 标量字段强转指针后直接解引用 */
+    if (fn[0] == '/')                  /* 任意内核/用户地址必须走 probe 系 helper（第 2 章预告） */
+        return 1;
+    return 0;
+}
+
+char LICENSE[] SEC("license") = "GPL";
+```
+
+预期 verifier 日志关键行（预期输出示例 / 运行级待验证；日志行随内核版本略有差异）：
+
+```text
+R1 invalid mem access 'scalar'
+```
+
+关键行指认「对一个标量（scalar）类型的寄存器做了内存访问」，等价形态亦可作无前缀的 `invalid mem access 'scalar'`；寄存器号随产物而异（本对 bad 产物实测：解引用目标寄存器为 R1），指认点就是 `fn[0]` 那条字节读取指令，日志前文会给出该寄存器当前的类型与取值域。
+
+为什么拒绝：2.3 类型表第一行——`SCALAR_VALUE` 是「纯数值，不指向任何内存」，**不可解引用**。分两步看：`ctx->args[1]` 这一步完全合法——ctx 本身是 `PTR_TO_CTX`，字段按申报布局访问，加载期静态放行（2.3 的上下文申报机制）；但从 ctx 加载出来的值在类型系统里只是标量——「一个数」。C 的强制转换能骗过编译器，骗不过验证器：类型随数据流走，寄存器没被登记为指针，解引用就没有任何「访问安全」的证明可言。放行意味着什么：程序可以把**任意 64 位数**当成地址去读——一次 `fn[0]` 就是一次不受界限检查的任意读。真正的任意地址必须走 probe 系辅助函数（2.7 的能力登记面）：helper 在内部把源地址限定在对应空间、按缓冲区大小受控拷贝，越界或缺页返回错误值而非崩溃。
+
+fixed 修复片段（下贴 `book/examples/chapter-03/02-fail-gallery/07-kernel-ptr/fixed.bpf.c` 的 `probe_fixed` 函数；SEC 与返回值语义与 bad 一致）：
+
+```c
+SEC("tracepoint/syscalls/sys_enter_openat")
+int probe_fixed(struct trace_event_raw_sys_enter *ctx)
+{
+    char fn[64] = {};                  /* 修复：probe 系 helper 受控读取到栈缓冲 */
+    long n = bpf_probe_read_user_str(fn, sizeof(fn), (const void *)ctx->args[1]);
+    if (n > 0 && fn[0] == '/')         /* 5.5+ 用 user 变体；旧版 bpf_probe_read_str 行为随架构，保守注明 */
+        return 1;
+    return 0;
+}
+```
+
+版本演进点（保守注明）：`bpf_probe_read_user_str` 为 5.5+（probe 系按访问空间拆分）；更旧内核的 `bpf_probe_read_str` 读取空间随架构配置而异，以所用内核文档为准。
+
+修复原则一句话：**任意内核/用户地址一律走 probe 系辅助函数读入栈缓冲**（`bpf_probe_read_user_str` / `bpf_probe_read_kernel*`），判读放在「读取成功」分支内；绝不解引用「来源不是验证器登记的指针类型」的任何值——map value 里存的地址、报文里读出的指针值同理。
+
+**教师视角**：本节的编排是「先见尸体、再学解剖」——七对按「从最常见到最隐蔽」排列：判空（3.1）与报文边界（3.2）是初学者第一周就会撞上的两类；指针算术（3.3）与栈初始化（3.4）开始要求理解类型系统与路径跟踪；循环（3.5）、白名单（3.6）与任意地址（3.7）要懂验证器的信任模型才看得懂「拒绝的理由」。顺序与一、二节相反：先看现场再回头读原理，是因为拒绝日志本身就是最好的「为什么」引子——但若只有现场没有一、二节，读者只会把七条日志背成七条咒语。读者最容易卡住的地方：把「被拒」当编译错误排查——反复检查语法、换编译器、怀疑环境，而日志指认的是具体指令；正确动作永远是读日志、把信号对回根因类别（四节实战专教这件事）。最后一个提醒：3.3/3.4/3.5 三对 bad 里的防折叠写法（消费比较、volatile、XOR 累加）是编译级可观测性装置、不是修复模式——它们是为了让肇事指令在产物里存活而做的技术处理，别学成「写 BPF 要加 volatile」。
+
+**学生动手**：按画廊总览 README 的三步逐对走读（01→07）：进入每对目录，先 `make`——bad 与 fixed 都要编译成功（bad 的验收口径就是编译成功）；再 `diff bad.bpf.c fixed.bpf.c`，亲眼确认只差一处语义；然后把本节七个 card 的预期 verifier 日志关键行抄进自己的笔记，与 diff 的差异行一一对号——「哪一行的删除/新增对应哪条日志」。拿到特权环境时逐个加载 bad 观察真实日志（运行级待验证——编写环境无加载权限），与笔记里的预期行对照。做完七对，回到 1.4 学生动手写下的问题清单对答案。
+
+检查点（先自答，再看提示）：
+
+1. 画廊七个 bad 程序为什么全部 clang 编译通过、却在加载期被拒？「编译成功 ≠ 能加载」在这套素材上如何亲手验证？（提示：clang 只回答「是不是合法的 C 程序、合法的字节码」（1.3 的两件事），七处错误全在语义层——类型、边界、初始化、终止、权限——核对者是加载路径第 2 步的验证器；`diff bad.bpf.c fixed.bpf.c` 加各自 `make`，亲眼看「都编译成功、只差一处语义」。）
+2. 3.2 的报文边界错误补一行比较就能修，3.3 对尾界的算术为什么「补检查」修不了？（提示：前者缺的是「关系」——比较建立报文指针与尾界的相对关系（2.5）；后者错在类型——`PTR_TO_PACKET_END` 登记为不可算术，信任模型的锚点不容挪动（2.3），修复方向是把算术移到 packet 指针上并立刻收口。）
+3. 3.4 的拒绝随特权档位翻转，3.2/3.3/3.7 的日志寄存器编号随编译器分配漂移——这两类「会变」分别教你怎么对待验证结论与日志文本？（提示：严格度随信任档位变化是设计而非缺陷——教学与审计按最严档对待（2.6 的特权豁免）；日志行随产物与内核版本漂移——值得记的是「信号 → 根因类别」的映射，四节实战把它变成排错工作流。）
+
+**独立示例**：[`book/examples/chapter-03/02-fail-gallery/`](../examples/chapter-03/02-fail-gallery/)——七对 bad/fixed 的完整源码、Makefile 与 README（每对 README 含「为什么拒绝」「预期 verifier 日志关键行」「验证状态」三段，与本节七个 card 一一对应）；正面锚点 [`../examples/chapter-03/01-pkt-parse/`](../examples/chapter-03/01-pkt-parse/) 与 3.2 对照阅读；环境自检见 [`../examples/chapter-03/00-env/`](../examples/chapter-03/00-env/)。
