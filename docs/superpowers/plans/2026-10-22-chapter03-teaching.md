@@ -829,6 +829,8 @@ git commit -m "docs(ch03): 学习目标/导读/安全模型/验证流水线内�
 
 ### Task 6: 正文「三、失败画廊：七类典型拒绝」
 
+- [x] Task 6: 正文「三、失败画廊：七类典型拒绝」
+
 **tasks.md 条目**：「Include integrated examples that intentionally fail verification, then show corrected versions.」（正文呈现部分）＋「Explain common errors involving unchecked map lookup, packet bounds, invalid pointer arithmetic, stack initialization, loops, and helper misuse.」（正文讲解部分）
 
 **Files:**
@@ -838,7 +840,7 @@ git commit -m "docs(ch03): 学习目标/导读/安全模型/验证流水线内�
 - Consumes: C7 标题；Task 3/4 的七对文件（代码块逐字对应）；C8 交叉链接；2.3/2.5/2.6/2.7 小节（每个 card 回指对应原理小节）。
 - Produces: 七个 card 固定结构（Task 10 审计依据）；每个 card 的「为什么拒绝」回指小节号。
 
-- [ ] **Step 1: 写「三、失败画廊：七类典型拒绝」（9–12k）**——小节锚点固定为 `### 3.1`–`### 3.7`，每类一个 card，**每个 card 固定六段**：背景问题 → bad 代码（贴对应文件全文）→ 预期 verifier 日志关键行（标注「预期输出示例 / 运行级待验证」+ 版本差异注）→ 为什么拒绝（原理讲解，回指二节小节号）→ fixed 代码（贴对应片段）→ 修复原则一句话；各 card 对应关系：
+- [x] **Step 1: 写「三、失败画廊：七类典型拒绝」（9–12k）**——小节锚点固定为 `### 3.1`–`### 3.7`，每类一个 card，**每个 card 固定六段**：背景问题 → bad 代码（贴对应文件全文）→ 预期 verifier 日志关键行（标注「预期输出示例 / 运行级待验证」+ 版本差异注）→ 为什么拒绝（原理讲解，回指二节小节号）→ fixed 代码（贴对应片段）→ 修复原则一句话；各 card 对应关系：
   - 3.1 未检查 map lookup（画廊 01）→ 回指 2.3（map_value_or_null 定型）；第 2 章 3.2 运行时定界回指。
   - 3.2 报文边界（画廊 02）→ 回指 2.5（packet 指针比较）；与锚点 `01-pkt-parse` 的对照（同一个检查在「通过路径」的位置）。
   - 3.3 无效指针运算（画廊 03）→ 回指 2.3（pkt_end 不可算术的类型学理由）。
@@ -846,13 +848,13 @@ git commit -m "docs(ch03): 学习目标/导读/安全模型/验证流水线内�
   - 3.5 循环可终止性（画廊 05）→ 回指 2.5（掩码定界）与 2.6（终止性）；5.3 前后差异与 `bpf_loop` 一句话（保守措辞）。
   - 3.6 helper 误用（画廊 06）→ 回指 2.7（白名单按程序类型登记）；第 2 章 1.3 失败点预告回收。
   - 3.7 任意内核指针（画廊 07）→ 回指 2.3/2.7（probe 界限）；第 2 章「证明过程是第 3 章正题」预告的正式兑现。
-- [ ] **Step 2: 三节末尾落双视角**：**教师视角**段（为什么用「先见尸体再学解剖」的顺序——七对按从最常见到最隐蔽排列；读者容易卡住的地方：把「被拒」当编译错误排查）+ **学生动手**段（逐一 `make` 七对、diff bad/fixed、把预期日志关键行抄进自己的笔记）+ 检查点（3 问 + 提示，含「为什么 bad 程序能编译通过」）。
-- [ ] **Step 3: 核对（硬性）**
+- [x] **Step 2: 三节末尾落双视角**：**教师视角**段（为什么用「先见尸体再学解剖」的顺序——七对按从最常见到最隐蔽排列；读者容易卡住的地方：把「被拒」当编译错误排查）+ **学生动手**段（逐一 `make` 七对、diff bad/fixed、把预期日志关键行抄进自己的笔记）+ 检查点（3 问 + 提示，含「为什么 bad 程序能编译通过」）。
+- [x] **Step 3: 核对（硬性）**
 
 Run: `grep -c "^### 3\." book/chapters/03-verifier-and-safety-guarantees.md && grep -c "预期 verifier 日志" book/chapters/03-verifier-and-safety-guarantees.md && grep -c "examples/chapter-03/02-fail-gallery/" book/chapters/03-verifier-and-safety-guarantees.md && wc -m book/chapters/03-verifier-and-safety-guarantees.md`
 Expected: `7`、`≥ 7`（每个 card 一处）、`≥ 7`（七个 card 均标注源文件路径）；`wc -m ≥ 24000`（中段值参考）。
 
-- [ ] **Step 4: 提交**
+- [x] **Step 4: 提交**
 
 ```bash
 git add book/chapters/03-verifier-and-safety-guarantees.md
