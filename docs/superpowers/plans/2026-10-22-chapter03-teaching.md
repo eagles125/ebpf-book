@@ -903,6 +903,8 @@ git commit -m "docs(ch03): 五层环境紧凑版与实战两条路径走读"
 
 ### Task 8: 正文「可视化/常见问题与排错/课后扩展任务/总结/本章参考来源」
 
+- [x] Task 8: 正文「可视化/常见问题与排错/课后扩展任务/总结/本章参考来源」
+
 **tasks.md 条目**：「Add text visualization of verifier state branching and pruning.」＋「Add troubleshooting, summary, and references including kernel docs, LWN, and bpf mailing list discussions.」
 
 **Files:**
@@ -912,24 +914,24 @@ git commit -m "docs(ch03): 五层环境紧凑版与实战两条路径走读"
 - Consumes: Task 5–7 成稿；二节探索/剪枝与边界推导结论（可视化图 1 素材）；C3 七对与练习 2 的日志信号（排错速查表素材）；Task 9 未落地前先写好课后任务表（C9，与 exercises/README 逐字一致）。
 - Produces: 全部 11 个 `##` 一级小节齐备（C7 收齐）；课后任务表（Task 9 exercises/README 总览表与其逐字一致）。
 
-- [ ] **Step 1: 写「可视化：验证器状态探索与剪枝」（1.5–2k）**——两张 text 图（` ```text ` 代码块，格式遵循 `book/STYLE.md` 可视化节）：
+- [x] **Step 1: 写「可视化：验证器状态探索与剪枝」（1.5–2k）**——两张 text 图（` ```text ` 代码块，格式遵循 `book/STYLE.md` 可视化节）：
   - 图 1 状态探索树：一个双分支小程序（如锚点的字节序判断）的探索树——两条路径各自的寄存器状态、汇合点合并、等价状态剪枝标记（对应二节 2.4；任务条目「state branching and pruning」的直接落点）。
   - 图 2 加载-验证双结局流程图：`BPF_PROG_LOAD` → license 检查 → verifier（探索/剪枝循环）→ 通过（JIT → 挂载）或拒绝（`-EACCES` + 日志）双结局（对应一节 1.3 与四节实战）。
   - 图后各配 2–3 段「怎么读这张图」的讲解（禁止裸图）。
-- [ ] **Step 2: 写「常见问题与排错」（2.5–3.5k）**——四组，每组「现象/原因与处理」表：
+- [x] **Step 2: 写「常见问题与排错」（2.5–3.5k）**——四组，每组「现象/原因与处理」表：
   - verifier 日志速查表：八行信号→根因→修复（C3 七对 + 练习 2 的负偏移信号「R2 min value is negative」），每行链接对应画廊目录/练习目录。
   - 日志获取与详细度：loader 侧 libbpf 日志回调（`libbpf_set_strict_mode`/print 函数一句话口径）、`bpftool prog load` 的日志输出方式、日志太长被截断的处理（保守措辞，随 libbpf 版本）。
   - 权限类失败区分：`-EPERM`（非 root/无 CAP_BPF）与 `-EACCES`（verifier 拒绝）的判别流程——第 2 章排错节「详析指向第 3 章」预告的兑现（预告⑧回收）。
   - 版本差异导致的拒绝差异：有界循环（5.3）、`bpf_probe_read_user_str`（5.5）、`bpf_loop`（5.17）演进表 + 「以所用内核为准」保守措辞。
-- [ ] **Step 3: 写「课后扩展任务」（表格 + 防剧透说明段）**——固定表格（C9 逐字，Task 9 的 exercises/README.md 总览表须与此逐字一致）+ 防剧透说明段：先自行实现再看参考；README 结构（任务在前、思路独立成节放后部）。
-- [ ] **Step 4: 写「总结」（0.8–1.2k）**：验证器三类保证回顾；安全模型「静态证明 + 运行时定界」双防线一句话；**预告勾稽表**——第 2 章八处预告（现状基线清单）与本章兑现小节的对照表（预告⑨回收的正式落点）；通往第 4 章的桥（程序类型决定 helper 白名单与上下文，verifier 的「游戏规则」随挂载点变化）。
-- [ ] **Step 5: 写「本章参考来源」**：按 `book/STYLE.md` 格式列——Linux kernel documentation（Documentation/bpf/verifier.rst、BPF program types、helpers）、LWN.net verifier 系列（state/pruning/pointer types 文章）、bpf mailing list（有界循环与 precision tracking 经典讨论线索）、Andrii Nakryiko（libbpf 与 verifier 日志相关文章）、ebpf.top BPF 入门系列。
-- [ ] **Step 6: 结构收齐核对（硬性）**
+- [x] **Step 3: 写「课后扩展任务」（表格 + 防剧透说明段）**——固定表格（C9 逐字，Task 9 的 exercises/README.md 总览表须与此逐字一致）+ 防剧透说明段：先自行实现再看参考；README 结构（任务在前、思路独立成节放后部）。
+- [x] **Step 4: 写「总结」（0.8–1.2k）**：验证器三类保证回顾；安全模型「静态证明 + 运行时定界」双防线一句话；**预告勾稽表**——第 2 章八处预告（现状基线清单）与本章兑现小节的对照表（预告⑨回收的正式落点）；通往第 4 章的桥（程序类型决定 helper 白名单与上下文，verifier 的「游戏规则」随挂载点变化）。
+- [x] **Step 5: 写「本章参考来源」**：按 `book/STYLE.md` 格式列——Linux kernel documentation（Documentation/bpf/verifier.rst、BPF program types、helpers）、LWN.net verifier 系列（state/pruning/pointer types 文章）、bpf mailing list（有界循环与 precision tracking 经典讨论线索）、Andrii Nakryiko（libbpf 与 verifier 日志相关文章）、ebpf.top BPF 入门系列。
+- [x] **Step 6: 结构收齐核对（硬性）**
 
 Run: `grep -c "^## " book/chapters/03-verifier-and-safety-guarantees.md && grep -c "计划\|建议\|后续补齐\|占位" book/chapters/03-verifier-and-safety-guarantees.md | cat`
 Expected: `11`（C7 全部一级小节齐备）；占位式表述 0 命中（「预期输出」含「预期」不算——grep 词表不含「预期」）。
 
-- [ ] **Step 7: 提交**
+- [x] **Step 7: 提交**
 
 ```bash
 git add book/chapters/03-verifier-and-safety-guarantees.md
