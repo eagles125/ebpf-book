@@ -897,6 +897,8 @@ git commit -m "feat(ch04): 类型画廊前四类（kretprobe/uprobe/cgroup-skb/s
 
 ### Task 5: 类型画廊后四类（sockops/sk-msg/lsm/netfilter）
 
+- [x] Task 5: 类型画廊后四类（sockops/sk-msg/lsm/netfilter）
+
 **tasks.md 条目**：同 Task 4（示例资产部分·后半）。
 
 **Files:**
@@ -905,7 +907,7 @@ git commit -m "feat(ch04): 类型画廊前四类（kretprobe/uprobe/cgroup-skb/s
 - Create: `book/examples/chapter-04/03-type-gallery/07-lsm/{lsm.bpf.c,Makefile,README.md}`
 - Create: `book/examples/chapter-04/03-type-gallery/08-netfilter/{netfilter.bpf.c,Makefile,README.md}`
 
-- [ ] **Step 1: 创建 `05-sockops/sockops.bpf.c`**（逐字如下）
+- [x] **Step 1: 创建 `05-sockops/sockops.bpf.c`**（逐字如下）
 
 ```c
 // SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause
@@ -951,7 +953,7 @@ int so(struct bpf_sock_ops *ops)
 char LICENSE[] SEC("license") = "GPL";
 ```
 
-- [ ] **Step 2: 创建 `06-sk-msg/sk_msg.bpf.c`**（逐字如下）
+- [x] **Step 2: 创建 `06-sk-msg/sk_msg.bpf.c`**（逐字如下）
 
 ```c
 // SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause
@@ -985,7 +987,7 @@ int sm(struct sk_msg_md *msg)
 char LICENSE[] SEC("license") = "GPL";
 ```
 
-- [ ] **Step 3: 创建 `07-lsm/lsm.bpf.c`**（逐字如下）
+- [x] **Step 3: 创建 `07-lsm/lsm.bpf.c`**（逐字如下）
 
 ```c
 // SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause
@@ -1021,7 +1023,7 @@ int BPF_PROG(lf, struct file *file)
 char LICENSE[] SEC("license") = "GPL";
 ```
 
-- [ ] **Step 4: 创建 `08-netfilter/netfilter.bpf.c`**（逐字如下）
+- [x] **Step 4: 创建 `08-netfilter/netfilter.bpf.c`**（逐字如下）
 
 ```c
 // SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause
@@ -1055,12 +1057,12 @@ int nf(struct bpf_nf_ctx *ctx)
 char LICENSE[] SEC("license") = "GPL";
 ```
 
-- [ ] **Step 5: 为四目录各创建 `Makefile`**（C2 模板）与 `README.md`（C5 画廊六段，同 Task 4 Step 7 口径）。
-- [ ] **Step 6: 编译验证（本机真实执行，硬性）**
+- [x] **Step 5: 为四目录各创建 `Makefile`**（C2 模板）与 `README.md`（C5 画廊六段，同 Task 4 Step 7 口径）。
+- [x] **Step 6: 编译验证（本机真实执行，硬性）**
 
 Run: `for d in 05-sockops 06-sk-msg 07-lsm 08-netfilter; do make -C book/examples/chapter-04/03-type-gallery/$d || exit 1; done`
 Expected: 四目录退出码均 0。失败即修代码重跑。
-- [ ] **Step 7: 提交**
+- [x] **Step 7: 提交**
 
 ```bash
 git add book/examples/chapter-04/03-type-gallery/
@@ -1303,7 +1305,7 @@ char LICENSE[] SEC("license") = "GPL";
 - [ ] **Step 3: 创建两个练习 `Makefile`**——C2 模板替换：练习 1 `<SRCS> := solution.bpf.c`；练习 2 `<SRCS> := broken.bpf.c fixed.bpf.c`。
 - [ ] **Step 4: 创建两个练习 `README.md`**——按 C5 防剧透七段结构。关键口径：练习 1 `## 提示`：三元组三问（要什么数据/谁产生/哪个 ctx 给它）+ 三场景各自的候选类型集合；`## 参考实现思路`（分界线后）：选型论证表（场景→选型→错误选项为何不行：场景A 用 kprobe 行不行[能拿到参数但拿不到 LSM 决策点语义与 audit 语义]、场景B 用 XDP 行不行[看不见 socket 状态]等）；练习 2 `## 提示`：从日志第一处 ctx 访问拒绝入手（回指第 3 章排错节）；`## 参考实现思路`：错位诊断三步（看 SEC→看 ctx 类型→看 is_valid_access 白名单）；两者 `## 预期输出示例`（运行级待验证；练习 2 给完整预期拒绝日志并标注「随内核版本略有差异」）；`## 验证状态` 按 C6。
 - [ ] **Step 5: 创建 `exercises/README.md`**：C9 逐字任务总览表 + 防剧透阅读法 + 各练习构建命令（各目录 `make`）+ 验证状态汇总表（按 C6）。
-- [ ] **Step 6: 编译验证（本机真实执行，硬性）**
+- [x] **Step 6: 编译验证（本机真实执行，硬性）**
 
 Run: `make -C book/examples/chapter-04/exercises/01-type-selection && make -C book/examples/chapter-04/exercises/02-type-mismatch`
 Expected: 退出码均 0（练习 2 生成 `broken.bpf.o` 与 `fixed.bpf.o`——broken 也必须编译通过）。失败即修代码重跑。
