@@ -1,33 +1,59 @@
 # Comet Subagent 进度检查点 — generate-ebpf-book
 
-- plan: docs/superpowers/plans/2026-09-26-chapter02-teaching.md（9 任务）
+- plan: docs/superpowers/plans/2026-10-22-chapter03-teaching.md（11 任务，第 3 章《验证器与安全保障》）
+- design-doc: docs/superpowers/specs/2026-10-22-chapter03-teaching-design.md（ff88829；三项章级分叉按推荐项采用，待用户复核）
 - review_mode: thorough；tdd_mode: direct；isolation: current（master）
-- **停靠（2026-09-26，第 2 章 plan 全部完成，终审通过；全书 change 的 guard 仍按设计阻塞）**
+- 上一章检查点（第 2 章，2026-09-26 停靠）见 git 历史：34efa8d Park ch02 build session
+- ⚠️ 编排文件保护：本文件与 `.comet/**`、plan checkbox 为控制器专管——subagent 不得触碰，不得对其执行 git restore/checkout/stash
 
 ## 当前状态
 
-- 第 2 章 plan 的 9 个任务全部实现、逐任务审查通过并勾选（终审修复波 8a7d973 后无遗留开放项）
-- 最终完整审查（5f5bda5..8a7d973，32 提交）：0 Critical / 1 Important 已修（libbpf memlock 句）+ 2 项 fix-before-delivery 已修（枚举计数 35、第 6 章引用）——scoped 复审 3/3 ADDRESSED
-- 硬性验收记录：verify-build.sh 单章版 PASS=4 FAIL=0（Task 8/9 真实运行，记录在 book/examples/chapter-02/README.md）；正文 wc -m=47971（裁定口径 35–48k，余量 29——后续触碰正文须等量对冲压缩）
-- tasks.md：Chapter 2 九条已统一勾选（281f1ee）；全书 change 累计 107/296
-- **`comet guard build --apply` 按设计 BLOCKED**：tasks.md 全部勾选条件未满足——全书 Batch 2/4/6/7/8 等其余章节未开工。build→verify 须等全书完成或用户改变 change 组织方式
-- SDD 工作区 .superpowers/sdd/2026-09-26-chapter02-teaching/ 已按 Finish 删除（git 历史为记录）
-- 延后项登记（未来批次/统稿）：枚举计数类「实测 N 个」声明机械核对；跨章引用「第 N 章」自动比对；图 2 ASCII 观感；1.8 JIT 措辞；章末「与各 README」措辞对齐
+- **停靠（2026-10-22，用户请求暂存）**：Task 1–8 已收口（实现+审查+勾选）；**Task 9 实现 b9a057c 已提交、计划回写 02eb94a 已提交，处于 task-review 阶段（reviewer 已派发一次、被暂存停止，未返回结论——恢复时用现成材料重新派发全新 reviewer，不得重复派发 implementer）**
+- 恢复方式：Task 9 reviewer 重派（三路径材料已在磁盘：task-9-brief.md / task-9-report.md / review-38beeee..02eb94a.diff，BASE=38beeee HEAD=02eb94a）→ 通过后勾选 Task 9 → Task 10（verify-build/交叉链接/篇幅终检+控制器上限裁定+终检清单清扫）→ Task 11（主审+tasks.md 勾选）→ 最终完整审查 → 停靠
+- SDD 台账权威文件：`.superpowers/sdd/2026-10-22-chapter03-teaching/progress.md`
 
-## 已完成任务（第 2 章 plan）
+## 第 3 章任务台账
 
-- Task 9 主审与 tasks.md 勾选（`281f1ee`；勾选 `a08a296`；Approved）
-- Task 8 verify-build 与交叉链接（`145f227`；勾选 `9ac87d6`；Approved；PASS=4 FAIL=0）
-- Task 7 练习参考实现与总览（`2605b47`；勾选 `38561f8`；Approved）
-- Task 6 正文收尾五节（`14c02f4`+修复 `2bcf1b6`；勾选 `65a75c8`；修复轮 1 通过）
-- Task 5 实战节（`e05d847`；勾选 `dbe8c2b`；Approved）
-- Task 4 映射全景与 bpf() 分析（`7a4e0f9`+修复 `db9f4d1`；勾选 `7249590`；修复轮 1 通过）
-- Task 3 正文前半（`bbfd64f`+修复 `56a8dee`；勾选 `9c9ada6`；修复轮 1 通过）
-- Task 2 01-trace-stat 集成示例（`8c8277a`；勾选 `ac5587f`；Approved）
-- Task 1 章级 README、00-env 与 .gitignore（`ba7895e`；勾选 `a6094bd`；Approved）
-- 控制器裁定：篇幅上限 48k（3d148e6）；5.2 超量接受；终审 memlock/计数/章号三处措辞校准（8a7d973）
+- Task 1 章级 README、00-env、.gitignore — done（8c8ba39 / 勾选 6b5b69a）
+- Task 2 01-pkt-parse 正面锚点示例 — done（fef465c / 勾选 33edc7f）
+- Task 3 画廊前三对 — done（1a120e3+c8e8fa8 / 勾选 ba95f0d）
+- Task 4 画廊后四对与总览 — done（7adb1e5+5e8a450 / 勾选 882390c）
+- Task 5 正文 目标/导读/一/二 — done（c162f24+567bc4e / 勾选 80d8382）
+- Task 6 正文 三、失败画廊走读 — done（145716e / 勾选 40bd080）
+- Task 7 正文 四、实战 — done（dfe7edf+07487fb / 勾选 621baa6）
+- Task 8 正文 可视化/排错/课后/总结/参考 — done（1d3d242 / 勾选 38beeee）
+- Task 9 练习参考实现与 exercises 总览 — **task-review 阶段**（实现 b9a057c：broken volatile 适配[预授权,三处 offending 指令 objdump 证实存活]+fixed/reproduce 逐字+防剧透七段 README+C9 总览；计划回写 02eb94a）
+- Task 10 verify-build/交叉链接/篇幅终检 — pending
+- Task 11 主审与 tasks.md 勾选（收口）— pending
+- 最终完整审查 — pending
+
+## Task 10 终检清单（控制器裁定与清扫项，来自各任务延后 Minor）
+
+1. **篇幅上限裁定**：章当前 61073 字符 vs 终检口径 35–48k——超长主因计划强制的逐字代码贴入（三节 23.6k/四节 10.5k,结构性低估），按 ch02 先例（45k→48k 控制裁定 3d148e6）由控制器裁定新上限并同步计划/设计,或压缩重复叙述不删原理
+2. 01-pkt-parse/README.md:42 同源 ping 措辞手术（Task 7 裁定遗留,README 属 Task 2 资产）
+3. 学生动手「逐个加载 bad」对 3.4 补特权豁免括注（Task 6 Minor 1）
+4. 2.6「CAP_BPF 一类」与 3.4「CAP_PERFMON 一类」统一（Task 6 Minor 2,2.6 宜补 perfmon 档）
+5. 「最坏 40 亿次」与 README 05「近 43 亿」口径同步（Task 6 Minor 4,可选）
+6. 图 1 解读「探索步数省一半」→「省去臂 2 在 J 之后的整段重复探索」（Task 8 Minor 1）
+7. 排错②「2.7 预告的 log_level 细目」出处改 5.2（Task 8 Minor 2）
+8. XDP gloss 归位至章内首现导读（Task 7 Minor ②）
+9. 学习目标首条全角括号嵌套排版（Task 5 Minor,可选）
+10. 972 行深一层日志保真（寄存器状态行 off= 语义/基址 r1 实测首行 R1）——「认措辞不认编号」对冲已并存,终检酌定（Task 7 re-review 移交）
+11. 交叉链接核对后回填章级 README 验证摘要（Task 10 Step 2 自带）
+
+## Task 11 顺带核对项
+
+- 全书台账:全章 wc -m 终值与裁定口径记录入 book/examples/chapter-03/README.md;tasks.md「Chapter 3」8 条统一勾选;预告⑨勾稽表兑现确认（Task 8 已落）
+
+## 已确认决策（不得重新询问）
+
+- 四项工作方式（2026-09-25）：isolation=current（master）、build_mode=subagent-driven-development（subagent_dispatch=confirmed）、tdd_mode=direct、review_mode=thorough
+- 验证策略：编译级真实验证 + 运行效果「预期输出示例」+「运行级待验证」（无 root，unprivileged_bpf_disabled=2）
+- 第 3 章特有（2026-10-22）：画廊 bad/fixed 与练习 broken 必须 clang 编译通过；预期 verifier 日志按 5.10+ 内核源码校正基准（04 特权豁免/05 主形态 infinite loop detected/06 unknown func）+ 版本差异口径
+- 检查点第 1 问修正版保留（第三层检查后无解引用,实测裁定）;实战节动手观察用 UDP 流量（ping 是 ICMP 不计数）
+- 本平台 Agent 工具无 model 参数，按可用工具派发（先例：ch02 会话）
 
 ## 恢复指引
 
-1. 用户决策下一章/下一批次（Batch 2/4/6/7/8 任一），为该章走 design → plan → build（同第 2/17 章模式）
-2. 全书 tasks.md 勾满后：`comet guard build --apply` → verify → archive
+1. 读本检查点 + SDD 台账，对照 plan 未勾选任务与 git log 恢复；检查点若与台账不一致，以 git log + plan checkbox + 台账为准重写本文件
+2. 全部任务完成 + 最终完整审查通过后：停靠（全书 tasks.md 未勾满，`comet guard build --apply` 按设计阻塞，同第 2 章）
