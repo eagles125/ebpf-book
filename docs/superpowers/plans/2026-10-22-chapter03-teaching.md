@@ -1199,6 +1199,8 @@ git commit -m "docs(ch03): 交叉链接示例资产并完成全量编译级验�
 
 ### Task 11: 主审（teaching completeness）与 tasks.md 勾选（收口）
 
+- [x] Task 11: 主审（teaching completeness）与 tasks.md 勾选（收口）
+
 **tasks.md 条目**：「Main-agent review for technical accuracy and clear "expected rejection" labels.」；同时统一勾选「Chapter 3」全部 8 条。
 
 **Files:**
