@@ -226,6 +226,8 @@ git commit -m "feat(ch04): 章级 README、00-env 环境自检与构建基座"
 
 ### Task 2: 01-multi-observe 集成锚点（同一事件五副眼镜）
 
+- [x] Task 2: 01-multi-observe 集成锚点（同一事件五副眼镜）
+
 **tasks.md 条目**：「Include at least two integrated hook examples from tracing, networking, or security categories.」（追踪类）＋「Explain `bpf_prog_type` versus `bpf_attach_type`, context structure differences, return values, and helper availability.」（代码实物部分）。
 
 **Files:**
@@ -234,7 +236,7 @@ git commit -m "feat(ch04): 章级 README、00-env 环境自检与构建基座"
 - Create: `book/examples/chapter-04/01-multi-observe/Makefile`
 - Create: `book/examples/chapter-04/01-multi-observe/README.md`
 
-- [ ] **Step 1: 创建 `multi_observe.bpf.c`**（逐字如下）
+- [x] **Step 1: 创建 `multi_observe.bpf.c`**（逐字如下）
 
 ```c
 // SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause
@@ -347,7 +349,7 @@ int BPF_PROG(fx_entry, int dfd, const char *filename, struct open_how *how, int 
 char LICENSE[] SEC("license") = "GPL";
 ```
 
-- [ ] **Step 2: 创建 `multi_observe.c`**（逐字如下；loader 中文注释覆盖 attach 选型与失败模式）
+- [x] **Step 2: 创建 `multi_observe.c`**（逐字如下；loader 中文注释覆盖 attach 选型与失败模式）
 
 ```c
 // SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause
@@ -454,13 +456,13 @@ out:
 }
 ```
 
-- [ ] **Step 3: 创建 `Makefile`**——C4 单对象模板逐字（仅 `<SRCS>` 无替换、目标 `multi_observe`）。
-- [ ] **Step 4: 编译验证（本机真实执行，硬性）**
+- [x] **Step 3: 创建 `Makefile`**——C4 单对象模板逐字（仅 `<SRCS>` 无替换、目标 `multi_observe`）。
+- [x] **Step 4: 编译验证（本机真实执行，硬性）**
 
 Run: `make -C book/examples/chapter-04/01-multi-observe`
 Expected: 退出码 0（`multi_observe.bpf.o` → `multi_observe.skel.h` → 可执行 `multi_observe`）。失败即修代码重跑，直至通过。
-- [ ] **Step 5: 创建 `README.md`**——按 C5 十段结构。关键口径：五镜对照表（镜/SEC/ctx 形状/能拿到什么）；预期输出示例（5 行分镜 + 计数增长，标注「预期输出示例 / 运行级待验证」）；无特权预期失败表（open/load EPERM、attach 失败形态）；验证状态按 C6 本章补充条。
-- [ ] **Step 6: 提交**
+- [x] **Step 5: 创建 `README.md`**——按 C5 十段结构。关键口径：五镜对照表（镜/SEC/ctx 形状/能拿到什么）；预期输出示例（5 行分镜 + 计数增长，标注「预期输出示例 / 运行级待验证」）；无特权预期失败表（open/load EPERM、attach 失败形态）；验证状态按 C6 本章补充条。
+- [x] **Step 6: 提交**
 
 ```bash
 git add book/examples/chapter-04/01-multi-observe/ .gitignore
