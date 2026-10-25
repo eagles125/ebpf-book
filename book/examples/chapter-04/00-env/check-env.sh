@@ -37,8 +37,9 @@ check 'libbpf 头文件（libbpf-dev）'       test -f /usr/include/bpf/bpf_help
 echo "== 权限分级（加载级/运行级） =="
 if [ "$(id -u)" -eq 0 ]; then
     echo 'OK    当前为 root：可加载、可挂载 XDP/TC 与 tracepoint'
-elif capsh --print 2>/dev/null | grep -q 'cap_bpf'; then
-    echo 'OK    具备 CAP_BPF：可加载程序，挂载 XDP/TC 还需 CAP_NET_ADMIN'
+# 判定用 effective set（Current 行）而非 bounding set——bounding set 含 cap_bpf 不代表当前可加载（第 3 章同款脚本的遗留教训，本章修正）
+elif capsh --print 2>/dev/null | grep -q '^Current:.*cap_bpf'; then
+    echo 'OK    具备 CAP_BPF（effective set）：可加载程序，挂载 XDP 还需 CAP_NET_ADMIN'
 else
     ubd="$(cat /proc/sys/kernel/unprivileged_bpf_disabled 2>/dev/null || echo 未知)"
     echo "WARN  非 root 且无 CAP_BPF（unprivileged_bpf_disabled=${ubd}）："
