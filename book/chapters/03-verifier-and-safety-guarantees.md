@@ -783,3 +783,206 @@ int probe_fixed(struct trace_event_raw_sys_enter *ctx)
 3. 3.4 的拒绝随特权档位翻转，3.2/3.3/3.7 的日志寄存器编号随编译器分配漂移——这两类「会变」分别教你怎么对待验证结论与日志文本？（提示：严格度随信任档位变化是设计而非缺陷——教学与审计按最严档对待（2.6 的特权豁免）；日志行随产物与内核版本漂移——值得记的是「信号 → 根因类别」的映射，四节实战把它变成排错工作流。）
 
 **独立示例**：[`book/examples/chapter-03/02-fail-gallery/`](../examples/chapter-03/02-fail-gallery/)——七对 bad/fixed 的完整源码、Makefile 与 README（每对 README 含「为什么拒绝」「预期 verifier 日志关键行」「验证状态」三段，与本节七个 card 一一对应）；正面锚点 [`../examples/chapter-03/01-pkt-parse/`](../examples/chapter-03/01-pkt-parse/) 与 3.2 对照阅读；环境自检见 [`../examples/chapter-03/00-env/`](../examples/chapter-03/00-env/)。
+
+## 四、实战：读懂你的第一条 verifier 日志
+
+一至三节回答了「验证器是什么、怎么验、拒绝长什么样」，本节把镜头换到你手上：在本章自己的示例上走完「编译 → 加载 → 观察 → 读日志」的闭环。观察走锚点 `01-pkt-parse` 的通过路径，读日志走画廊 02 的被拒路径——XDP（eXpress Data Path，快速数据路径）锚点与画廊 02 的 bad 互为镜像，后者就是前者删掉全部界检查的形态。5.1 按五层把环境备齐（层序与第 2 章 5.1 一致，场景收窄为「加载即部署」的 XDP 单机验证）；5.2 走读两条路径的代码，把三节两次预告的「把『信号 → 根因类别』映射变成排错工作流」兑现成可操作的三步流程。
+
+### 5.1 五层环境（紧凑版）
+
+#### 第一层：依赖环境
+
+**内核版本与 BTF**：示例要求 Linux 5.10+ 且开启 `CONFIG_DEBUG_INFO_BTF`——XDP 程序类型、`bpf_program__attach_xdp`（本机 libbpf 1.3 头文件已含）与 skeleton 工作流在 5.10 上均已可用；`make` 第一步由 bpftool 从 `/sys/kernel/btf/vmlinux` 生成 `vmlinux.h`，BTF 缺失则编译停在第一步（自建带 BTF 内核的路径见附录 C）。本机内核 7.0，在基线之上。
+
+**权限矩阵**。加载 BPF 程序需要特权（1.3 加载路径的档位判别——`-EPERM` 的来源）；与第 2 章 tracepoint 权限档的关键差异在挂载一列：tracepoint 挂载是纯观测，不需要 `CAP_NET_ADMIN`；XDP 挂载要接管接口的收包路径，**必须 `CAP_NET_ADMIN`**（第 17 章 TC 同此要求）：
+
+| 环境档位 | 可编译 | 可加载 | 可挂载 XDP |
+|---|---|---|---|
+| root | 可 | 可 | 可 |
+| 非 root + `CAP_BPF`+`CAP_NET_ADMIN` | 可 | 可 | 可 |
+| 非 root 且无上述能力 | 可 | 不可 | 不可 |
+
+组合要求随内核版本略有差异，教学上以 root 或第二档为稳妥口径。本机真实档位是第三行：非 root、`/proc/sys/kernel/unprivileged_bpf_disabled` 实测为 2——编译全可、加载不可，这正是 5.2 全部输出标注「运行级待验证」的原因。
+
+**工具清单与检查方法**：清单不必背——运行 `bash book/examples/chapter-03/00-env/check-env.sh`（无 root 也可），脚本按「内核与 BTF → 工具链（编译级）→ 权限分级（加载级/运行级）」三段输出并给出三档结论。本机第三段输出（本地验证）：
+
+```text
+== 权限分级（加载级/运行级） ==
+OK    具备 CAP_BPF：可加载程序，挂载 XDP 还需 CAP_NET_ADMIN
+OK    lo 接口存在（XDP 锚点程序的推荐挂载目标）
+
+结论：编译级依赖齐备；加载级/运行级能力见上方权限分级输出。
+```
+
+三档结论的读法：前两段（内核与 BTF、工具链）全 OK，编译级成立——5.2 动手清单全部可完成；lo 存在，运行级的挂载目标在。那行 OK 要按第 2 章 5.1 拆过的同名偏差读：脚本检的是 capsh 的 bounding set（能力边界集），本机 bounding set 恰含 `cap_bpf`，但 bounding set 不等于生效能力（`capsh --has-p=cap_bpf` 实测 not permitted，本地验证）——真实档位仍是上表第三行，加载级结论以「非 root、`unprivileged_bpf_disabled=2`」为准。
+
+#### 第二层：编译环境
+
+四件工具一条链（与第 2 章 5.1 同一套，版本按本章示例复核）：clang/LLVM 18.x 以 `-target bpf` 把 BPF C 编成字节码；libbpf-dev 提供两侧的头文件与链接库；bpftool 7.x 生成 `vmlinux.h` 与 skeleton；gcc + make 构建用户态 loader。Debian/Ubuntu 一行安装：
+
+```bash
+sudo apt install clang llvm gcc bpftool libbpf-dev make
+```
+
+版本自检（本机实测输出节选，本地验证）：
+
+```text
+$ clang --version | head -1
+Ubuntu clang version 18.1.3 (1ubuntu1)
+$ bpftool version
+bpftool v7.7.0
+using libbpf v1.7
+$ dpkg -s libbpf-dev | grep ^Version
+Version: 1:1.3.0-2build2
+$ make --version | head -1
+GNU Make 4.3
+```
+
+一句提醒（第 2 章 5.1 的同款口径）：`bpftool version` 报出的 libbpf v1.7 是其自身随带的运行时；编译 loader 的头文件与链接库来自 libbpf-dev 1.3.0——两者不必同版，口径以 libbpf-dev 为准。
+
+#### 第三层：部署环境
+
+**「加载即部署」是本章与第 2 章场景的根本差异**：第 2 章 tracepoint 的部署是往运行中的内核挂一个观测点；本章 XDP 程序的验证、JIT 与挂载压缩进同一次加载调用——`bpf(BPF_PROG_LOAD)` 返回的一瞬间，安全性裁决已经完成（1.3 的四步路径）。于是本章没有独立的「部署验证」步骤：`bpftool prog load` 与锚点 loader 的 `open_and_load`（`pkt_parse.c`）都是验证现场——命令返回成功即验证通过，返回 `-EACCES` 即验证拒绝、日志同步到手（拿到手的方法见 5.2 被拒路径）。
+
+部署动作只剩选挂载目标：XDP 挂到网络接口上，本章只用 `lo`（回环接口）或自建的 veth（virtual Ethernet，虚拟以太网接口对）。安全警告（本章示例统一措辞）：
+
+> XDP 程序直接作用于网卡收包路径——本章示例只应挂在 veth 或 lo 上实验；切勿在不了解影响前挂到生产物理网卡。
+
+与第 17 章「勿挂物理网卡」红线（「绝不要挂到物理网卡或 SSH 正在使用的接口」）的呼应：两条措辞是同一条纪律的两种口径——那里的防火墙程序本来就要丢包改包，失联风险连着带外恢复预案一起写；本章程序只观测不干预，风险面更小，但挂载动作发生在驱动收包路径上，挂错接口影响的仍是全系统网络，「不了解影响前不挂生产物理网卡」没有豁免。
+
+#### 第四层：运行环境
+
+启动与停止共两条：`sudo ./pkt_parse lo` 前台运行，Ctrl-C 退出即卸载（`bpf_link__destroy` 加 `__destroy`，引用归零、对象回收——第 2 章 4.4 的同一条链）。两句「没有」：没有规则下发——锚点无控制面语义，loader 本身就是全部控制面；没有 pin——map/prog/link 的存活完全跟随进程（第 2 章 4.5「不 pin」的一侧）。挂载模式一句话（README 与正文统一措辞）：flags=0 挂载时若驱动不支持原生 XDP，内核一般会自动回退到 generic（SKB）模式——具体行为随内核版本，以实测为准（回退的含义：原生模式在驱动层收包，generic 模式退到协议栈入口按 SKB——套接字缓冲，内核报文的标准载体——逐包处理，功能等价、性能路径不同）。
+
+#### 第五层：运行效果
+
+加载成功后，loader 每秒打印一次累计 UDP 计数（预期输出示例 / 运行级待验证）：
+
+```text
+XDP 已挂载到 lo，每秒打印 UDP 计数，Ctrl-C 退出。
+udp_packets=42
+udp_packets=57
+```
+
+首行是挂载成功提示；之后每秒一行累计值，另开终端 `ping 127.0.0.1` 或任意本机 UDP 流量（DNS 查询等）都会让数字增长；程序只观测不干预、一律 `XDP_PASS`。
+
+**验证状态约定表**——本章全部示例与正文统一执行（前三行为验证状态三类标注的约定原文，第四行为「预期输出」的标注规则），供 `scripts/verify-build.sh` 的编译级汇总对账：
+
+| 标注 | 约定原文 | 适用范围 |
+|---|---|---|
+| 编译验证 | 已在编写环境（x86_64、内核 7.0、clang 18、bpftool 7.7、libbpf 1.3）`make` 通过 | 01-pkt-parse、画廊七对与练习目录的构建 |
+| 待运行验证 | 编写环境为非 root（`unprivileged_bpf_disabled=2`），未执行加载与运行；『预期输出』为教学示例 | 全部需要加载权限的操作 |
+| 本章补充 | bad 程序与 broken 练习的验证状态为「编译级已通过（预期如此——拒绝发生在加载期）；加载级『预期被拒』待特权环境验证」 | 画廊七对 bad 与练习 1 的 broken |
+| 预期输出示例 / 运行级待验证 | 涉及加载/运行的效果一律写「预期输出示例」并标注「运行级待验证」，不得写成「已验证通过」 | 5.1/5.2 与练习中全部输出块 |
+
+### 5.2 代码走读：通过与被拒两条路径
+
+**教师视角**：为什么用「同一类检查的正反两面」教学？三节画廊是七个不同根因的横截面，本节做一次纵剖——画廊 02 的 bad 就是锚点删掉全部界检查后的形态（这份亲缘关系写在 bad 的头注释里）。同一解析链「每层一行检查」与「一行都没有」并排放着，边界检查就从「要背的规则」变成「能 diff 的因果」。读者容易卡住的两处先亮出来：其一，「预期日志哪里来的」——编写环境无加载权限，日志不能本机实测，口径是教学推导：以 5.10+ 稳定措辞与 `Documentation/bpf/verifier.rst` 为基准给出关键行，全部标注「预期输出示例 / 运行级待验证」，你拿到特权环境后用真实日志对账即可；其二，「日志第一行该看什么」——答案恰恰是别从第一行读起：2.7 讲过日志逐指令展开、每行是「指令号 + 执行后的寄存器状态」，动辄上百行，**结论在最后一行**，读法是先读尾行、再向上回溯肇事指令。
+
+先读**通过路径**。下贴 `book/examples/chapter-03/01-pkt-parse/pkt_parse.bpf.c` 第 25–57 行（程序本体；文件头注释、include、map 定义与末行 license 见源文件——头注释一句话点题：缺一层界检查就会被拒，现场见画廊 02）：
+
+```c
+SEC("xdp")
+int pkt_parse(struct xdp_md *ctx)
+{
+    /* xdp_md 的 data/data_end 是寄存器宽度裸指针，经 (long) 中转标准转换 */
+    void *data = (void *)(long)ctx->data;
+    void *data_end = (void *)(long)ctx->data_end;
+
+    /* 第一层：以太网头——解引用前先证明 [data, data+14) 在报文内 */
+    struct ethhdr *eth = data;
+    if ((void *)(eth + 1) > data_end)
+        return XDP_PASS;                       /* 截断报文：放行交协议栈处理 */
+    if (eth->h_proto != bpf_htons(ETH_P_IP))   /* h_proto 为网络字节序 */
+        return XDP_PASS;
+
+    /* 第二层：IPv4 头——边界检查以「上一层尾=这一层头」推进 */
+    struct iphdr *ip = data + sizeof(*eth);
+    if ((void *)(ip + 1) > data_end)
+        return XDP_PASS;
+    if (ip->protocol != IPPROTO_UDP)
+        return XDP_PASS;
+
+    /* 第三层：UDP 头——同一模式再走一遍；不读 payload，无需更深的检查 */
+    struct udphdr *udp = (void *)ip + sizeof(*ip);
+    if ((void *)(udp + 1) > data_end)
+        return XDP_PASS;
+
+    __u32 key = 0;
+    __u64 *count = bpf_map_lookup_elem(&udp_counts, &key);
+    if (count)                                  /* array map 单槽恒在，防御式检查 */
+        __sync_fetch_and_add(count, 1);         /* 原子递增：多网卡队列并发安全 */
+
+    return XDP_PASS;                            /* 只观测不干预，一律放行 */
+}
+```
+
+逐段看验证器看到的世界。开头两句把 `ctx->data`/`ctx->data_end` 装进两个指针——此刻它们是「毫无关系的指针」（2.5 的原话），任何访存的安全性都还没被证明。三层检查是本章的题眼，**推进模式**：第一层 `if ((void *)(eth + 1) > data_end)` 证明整个以太网头（14 字节）落在报文内——比较在「不返回」的路径上建立了报文指针与尾界的相对关系（2.5），此后的 `eth->h_proto` 读取才可证明；第二层指针取 `data + sizeof(*eth)`——上一层尾 = 这一层头，再比一次，`ip->protocol` 的读取随之可证明；第三层把同一模式再走一遍。三行检查的分工要看准：前两层各保一次真实的字段读，第三层检查之后并没有 `udp` 的字段读取——它是推进模式的示范位：哪天要读 UDP 头字段，检查已经就位；反过来删掉它，程序预期仍能通过验证（检查是为解引用服务的——检查点第 1 问专门拆这件事）。字节序一处：`eth->h_proto` 是网络字节序，比较前过 `bpf_htons(ETH_P_IP)`；漏转换编译期合法、运行期行为错——验证器不管语义对错（1.4 的「安全不含逻辑正确」）。收尾三件事：`bpf_map_lookup_elem` 拿计数槽，`if (count)` 是防御式判空（array 单槽恒在，非 verifier 硬性要求——1.2 的调停口径）；`__sync_fetch_and_add` 原子递增消除多网卡队列的写竞争（验证器对原子操作天然放行，第 2 章 3.4 竞争样本的对策面）；出口一律 `XDP_PASS`——解析、计数、放行，只观测不干预。
+
+再读**被拒路径**。下贴 `book/examples/chapter-03/02-fail-gallery/02-pkt-bounds/bad.bpf.c` 全文（3.2 按画廊格式讲过它的「为什么被拒」，这里换「日志怎么读」的视角）：
+
+```c
+// SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause
+/*
+ * 画廊 02-pkt-bounds / bad：预期被拒：报文边界检查缺失——首个越界读在 eth->h_proto。
+ *
+ * verifier 为什么会拒绝：packet 指针（从 ctx->data 起）指向长度可变的报文，网络
+ *   报文随时可能被硬件/上游截断，验证器（verifier）无法凭「一般报文够长」放行——
+ *   每个字段的读偏移都必须先与 data_end 界标比较、证明落在报文内。本程序把
+ *   eth/ip 两层指针推进后未做任何 (void *)(指针 + 1) > data_end 检查就读字段，
+ *   第一个字段读 eth->h_proto（偏移 12..13）时已不可证明在报文内——越界读会泄出
+ *   报文缓冲区之外的内核内存，因此加载期直接拒绝。
+ *
+ * 对照通过路径锚点 ../../01-pkt-parse/pkt_parse.bpf.c：同一解析链，每层解引用前
+ * 先做界检查即放行。本文件在 clang 层面完全合法（编译通过）；修复形态见同目录
+ * fixed.bpf.c——仅插入两层界检查；卡片讲解见本目录 README.md。
+ */
+#include "vmlinux.h"
+#include <bpf/bpf_helpers.h>
+#include <bpf/bpf_endian.h>    /* bpf_htons：h_proto 为网络字节序 */
+
+/* uapi 常量不在 vmlinux.h 中（BTF 只含类型），画廊 XDP 类骨架统一手工定义 */
+#define ETH_P_IP 0x0800
+#define IPPROTO_UDP 17
+
+SEC("xdp")
+int probe_bad(struct xdp_md *ctx)
+{
+    void *data = (void *)(long)ctx->data;
+    void *data_end = (void *)(long)ctx->data_end;
+    struct ethhdr *eth = data;
+    struct iphdr *ip = data + sizeof(*eth);
+    if (eth->h_proto == bpf_htons(ETH_P_IP) && ip->protocol == IPPROTO_UDP)
+        return XDP_DROP;           /* 预期被拒：首个越界读在 eth->h_proto（无任何 data_end 检查） */
+    return XDP_PASS;
+}
+
+char LICENSE[] SEC("license") = "GPL";
+```
+
+预期 verifier 日志关键行（预期输出示例 / 运行级待验证；日志行随内核版本略有差异）：
+
+```text
+R2 offset is outside of the packet
+```
+
+逐行读法按三步走——这套步骤就是本章要教的排错工作流（三节末检查点预告的兑现）：
+
+- **第一步：分清失败在哪一层**。真实加载时 libbpf 把完整日志打到 stderr（log_buf 机制，2.7）；用 `bpftool prog load` 直接加载产物则日志跟在命令输出后，详细度由 log_level 档位控制（细目收在排错节）。拿到日志先确认它是验证拒绝（`-EACCES`）而非权限失败（`-EPERM`）——两者判别见 1.3，混着查最浪费时间。
+- **第二步：读尾行认信号**。`R2 offset is outside of the packet` 指认「寄存器 R2 的偏移已超出报文范围」（部分版本作等价措辞 `invalid packet access`），肇事指令就是日志倒数几行里那条 `eth->h_proto` 的读取——错误结论在最后，原因在它前面的指令轨迹里。`R2` 是**被拒访存的基址报文指针**，源码里就是 `eth`；但别把编号当知识——寄存器随 clang 的分配变化，本机 clang 18 对这份源码的产物里 `eth` 实际落在 r1（`llvm-objdump -d bad.bpf.o` 可自查：`r2 = *(u16 *)(r1 + 0xc)`，r2 是读入值的寄存器、被指认的基址是 r1）——3.2 的「认措辞与偏移语义，别认编号」在此实操化。日志前文的寄存器状态行会给出 `off`（相对报文起点的偏移）与访问宽度：挂回源码，`eth->h_proto` 就是偏移 12、宽 2 字节——验证器在说「在 off 12 读 2 字节，是否落在报文内不可证明」。
+- **第三步：信号对根因，根因改源码**。`offset is outside of the packet` 属报文边界类——根因是「推进指针后没有与 `data_end` 的比较」，对策是补回界检查（同目录 fixed 的两层检查即最小修复，修复原则见 3.2）。日志文本随内核版本漂移，「措辞 → 根因类别」的映射与这三步流程不漂移——排错节把它们收成速查表。
+
+**学生动手**（编译级无需 root，运行级需 5.1 权限表前两档）：
+
+- [ ] 构建锚点：`make -C book/examples/chapter-03/01-pkt-parse`——全链产出（vmlinux.h → bpf.o → skel.h → 可执行文件），编译级本地验证通过；`vmlinux.h` 自带的数条 `-Wmissing-declarations` 告警是 clang 18 下的已知现象，与示例源码无关。
+- [ ] 满足权限时运行：`sudo ./pkt_parse lo`，另开终端 `ping 127.0.0.1`，对照 5.1 第五层观察计数增长，Ctrl-C 退出即卸载（运行级待验证）。
+- [ ] 无 root 时走被拒路径的编译级自查：`cd book/examples/chapter-03/02-fail-gallery/02-pkt-bounds && make`——bad 与 fixed 都必须编译成功（bad 的验收口径就是编译成功）；再 `diff bad.bpf.c fixed.bpf.c` 确认差异只有两层界检查，把本节预期日志关键行与 diff 差异行一一对号——「删掉的检查 ↔ 被拒信号」。
+- [ ] （可选，需特权）`sudo bpftool prog load bad.bpf.o` 复现真实拒绝日志，与本节预期行对账；编号若与本书不同，正是「认措辞不认编号」的现场版（运行级待验证）。
+
+检查点（先自答，再看提示）：
+
+1. 锚点里哪几行界检查删掉会立刻被拒？第三层那行删掉后，为什么预期反而能通过加载？（提示：每层一个检查——前两层各保一次真实的字段读，删掉即退回「无关系指针」状态，画廊 02 的信号随即出现；第三层的 `udp` 从未被解引用，检查删掉后 clang -O2 连失效的指针一并消除（本机产物实测），剩余访存仍各有检查——「检查是为解引用服务的」，没有解引用就没有需要证明的访存（预期加载通过，运行级待验证）。）
+2. 预期日志里的 `R2` 对应源码哪个变量？（提示：被拒访存的基址报文指针——bad 里的 `eth`；本机 clang 18 产物实测它在 r1——编号随分配漂移，认措辞不认编号。）
+3. 为什么本机的拒绝日志可能与本书不同？（提示：日志行随内核版本与编译器分配漂移——5.10+ 稳定措辞只是基准；值得带走的是「信号 → 根因类别」映射与三步工作流，它们不随文本漂移。）
+
+**独立示例**：[`book/examples/chapter-03/01-pkt-parse/`](../examples/chapter-03/01-pkt-parse/)——通过路径全套（BPF 侧、loader、Makefile 与 README，快速上手见其 README）；被拒路径 [`../examples/chapter-03/02-fail-gallery/02-pkt-bounds/`](../examples/chapter-03/02-fail-gallery/02-pkt-bounds/)——bad/fixed 与预期日志关键行的画廊 card；环境自检见 [`../examples/chapter-03/00-env/`](../examples/chapter-03/00-env/)。
