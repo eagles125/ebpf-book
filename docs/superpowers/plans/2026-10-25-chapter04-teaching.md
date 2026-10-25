@@ -473,6 +473,8 @@ git commit -m "feat(ch04): 01-multi-observe 同一事件五副眼镜（追踪类
 
 ### Task 3: 02-xdp-tc 集成锚点（同一报文两种 ctx）
 
+- [x] Task 3: 02-xdp-tc 集成锚点（同一报文两种 ctx）
+
 **tasks.md 条目**：「Include at least two integrated hook examples from tracing, networking, or security categories.」（网络类）。
 
 **Files:**
@@ -482,7 +484,7 @@ git commit -m "feat(ch04): 01-multi-observe 同一事件五副眼镜（追踪类
 - Create: `book/examples/chapter-04/02-xdp-tc/Makefile`
 - Create: `book/examples/chapter-04/02-xdp-tc/README.md`
 
-- [ ] **Step 1: 创建 `xdp_count.bpf.c`**（逐字如下）
+- [x] **Step 1: 创建 `xdp_count.bpf.c`**（逐字如下）
 
 ```c
 // SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause
@@ -536,7 +538,7 @@ int xdp_entry(struct xdp_md *ctx)
 char LICENSE[] SEC("license") = "GPL";
 ```
 
-- [ ] **Step 2: 创建 `tc_count.bpf.c`**（逐字如下）
+- [x] **Step 2: 创建 `tc_count.bpf.c`**（逐字如下）
 
 ```c
 // SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause
@@ -591,7 +593,7 @@ int tc_entry(struct __sk_buff *skb)
 char LICENSE[] SEC("license") = "GPL";
 ```
 
-- [ ] **Step 3: 创建 `xdp_tc.c`**（逐字如下）
+- [x] **Step 3: 创建 `xdp_tc.c`**（逐字如下）
 
 ```c
 // SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause
@@ -712,13 +714,13 @@ out:
 }
 ```
 
-- [ ] **Step 4: 创建 `Makefile`**——C4 双对象变体逐字（目标 `xdp_tc`；`xdp_count.bpf.o`/`tc_count.bpf.o` 两条 clang 规则；两个 skeleton 规则；`xdp_tc: xdp_tc.c xdp_count.skel.h tc_count.skel.h` 一条 gcc 规则；clean 含 `xdp_tc`）。
-- [ ] **Step 5: 编译验证（本机真实执行，硬性）**
+- [x] **Step 4: 创建 `Makefile`**——C4 双对象变体逐字（目标 `xdp_tc`；`xdp_count.bpf.o`/`tc_count.bpf.o` 两条 clang 规则；两个 skeleton 规则；`xdp_tc: xdp_tc.c xdp_count.skel.h tc_count.skel.h` 一条 gcc 规则；clean 含 `xdp_tc`）。
+- [x] **Step 5: 编译验证（本机真实执行，硬性）**
 
 Run: `make -C book/examples/chapter-04/02-xdp-tc`
 Expected: 退出码 0（两个 `.bpf.o`、两个 skel、可执行 `xdp_tc`）。失败即修代码重跑，直至通过。
-- [ ] **Step 6: 创建 `README.md`**——按 C5 十段结构。关键口径：两种 ctx 对照表（xdp_md vs __sk_buff 字段/语义/verdict）；挂载差异（attach_xdp 返回 link vs bpf_tc_attach netlink 模型）；预期输出示例（两行对照计数，标注「预期输出示例 / 运行级待验证」）；安全警告统一措辞；验证状态按 C6。
-- [ ] **Step 7: 提交**
+- [x] **Step 6: 创建 `README.md`**——按 C5 十段结构。关键口径：两种 ctx 对照表（xdp_md vs __sk_buff 字段/语义/verdict）；挂载差异（attach_xdp 返回 link vs bpf_tc_attach netlink 模型）；预期输出示例（两行对照计数，标注「预期输出示例 / 运行级待验证」）；安全警告统一措辞；验证状态按 C6。
+- [x] **Step 7: 提交**
 
 ```bash
 git add book/examples/chapter-04/02-xdp-tc/ .gitignore
