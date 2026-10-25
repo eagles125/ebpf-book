@@ -63,6 +63,9 @@ vmlinux.h（bpftool 由 /sys/kernel/btf/vmlinux 生成） -> pkt_parse.bpf.o（c
   各 README 中「预期输出」均为教学示例。
 - **本章补充**：bad 程序与 broken 练习的验证状态为「编译级已通过（预期如此——拒绝发生在加载期）；
   加载级『预期被拒』待特权环境验证」。
+- **篇幅记录**：章正文 `book/chapters/03-verifier-and-safety-guarantees.md` 的 `wc -m` 终值为
+  **61565** 字符，落在全书篇幅口径 35k–63k 区间内（63k 上限为控制器裁定，计划同步提交 83e13d2；
+  2026-10-25 终检）。
 
 ## 参考来源
 

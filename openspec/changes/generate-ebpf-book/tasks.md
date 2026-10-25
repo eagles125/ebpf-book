@@ -178,14 +178,14 @@
 
 ### Chapter 3: Verifier and Safety Guarantees
 
-- [ ] Write full chapter prose explaining verifier goals, control-flow graph construction, state exploration, state pruning, pointer types, bounds checks, stack limits, and helper constraints.
-- [ ] Analyze `kernel/bpf/verifier.c`, `bpf_verifier_env`, `bpf_reg_state`, and the high-level verification pipeline.
-- [ ] Include integrated examples that intentionally fail verification, then show corrected versions.
-- [ ] Create standalone Chapter 3 verifier examples under `book/examples/chapter-03/`.
-- [ ] Explain common errors involving unchecked map lookup, packet bounds, invalid pointer arithmetic, stack initialization, loops, and helper misuse.
-- [ ] Add text visualization of verifier state branching and pruning.
-- [ ] Add troubleshooting, summary, and references including kernel docs, LWN, and bpf mailing list discussions.
-- [ ] Main-agent review for technical accuracy and clear “expected rejection” labels.
+- [x] Write full chapter prose explaining verifier goals, control-flow graph construction, state exploration, state pruning, pointer types, bounds checks, stack limits, and helper constraints.
+- [x] Analyze `kernel/bpf/verifier.c`, `bpf_verifier_env`, `bpf_reg_state`, and the high-level verification pipeline.
+- [x] Include integrated examples that intentionally fail verification, then show corrected versions.
+- [x] Create standalone Chapter 3 verifier examples under `book/examples/chapter-03/`.
+- [x] Explain common errors involving unchecked map lookup, packet bounds, invalid pointer arithmetic, stack initialization, loops, and helper misuse.
+- [x] Add text visualization of verifier state branching and pruning.
+- [x] Add troubleshooting, summary, and references including kernel docs, LWN, and bpf mailing list discussions.
+- [x] Main-agent review for technical accuracy and clear “expected rejection” labels.
 
 ### Chapter 4: Program Types and Hook Points
 
