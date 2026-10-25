@@ -1104,6 +1104,8 @@ git commit -m "feat(ch03): 课后练习参考实现（修复挑战与日志诊�
 
 ### Task 10: scripts/verify-build.sh、全量编译验证、正文交叉链接与篇幅终检
 
+- [x] Task 10: scripts/verify-build.sh、全量编译验证、正文交叉链接与篇幅终检
+
 **tasks.md 条目**：「Create standalone Chapter 3 verifier examples under `book/examples/chapter-03/`.」（scripts 部分）＋「Add troubleshooting, summary, and references including kernel docs, LWN, and bpf mailing list discussions.」（验证状态全量标注收口）
 
 **Files:**
@@ -1115,7 +1117,7 @@ git commit -m "feat(ch03): 课后练习参考实现（修复挑战与日志诊�
 - Consumes: Task 1–9 全部产物；C6/C8。
 - Produces: 全绿 verify-build 记录（章级 README 验证状态说明区）；Task 11 主审依据。
 
-- [ ] **Step 1: 创建 `scripts/verify-build.sh`**（完整内容如下）
+- [x] **Step 1: 创建 `scripts/verify-build.sh`**（完整内容如下）
 
 ```bash
 #!/usr/bin/env bash
@@ -1169,24 +1171,24 @@ echo "== 汇总: PASS=$pass FAIL=$fail =="
 [ "$fail" -eq 0 ]
 ```
 
-- [ ] **Step 2: 首次全量运行（硬性验收）**
+- [x] **Step 2: 首次全量运行（硬性验收）**
 
 Run: `bash book/examples/chapter-03/scripts/verify-build.sh`
 Expected: `PASS 00-env`、`PASS 01-pkt-parse`、`PASS 02-fail-gallery/01..07`（七行）、`PASS exercises/01-fix-challenge`、`PASS exercises/02-log-diagnosis`；汇总 `FAIL=0`，退出码 0。任何 FAIL 回到对应任务修复后重跑。
 记录：把本次运行摘要（PASS/FAIL 数与工具版本）替换进 `book/examples/chapter-03/README.md` 验证状态说明区的占位句。
 
-- [ ] **Step 3: 正文交叉链接**（C8 惯例）：章首「本章独立示例已全部落地到 [`book/examples/chapter-03/`](../examples/chapter-03/)」与目录总览；5.2 与三节每个代码块前后标注对应文件路径；「一/二/三/四」各节末尾「**独立示例**」链接（二节末为附录 B/C 链接）；三节各 card 链接画廊目录；课后扩展任务节链接 exercises/ 两目录与总览 README。
-- [ ] **Step 4: 交叉链接核对（硬性）**
+- [x] **Step 3: 正文交叉链接**（C8 惯例）：章首「本章独立示例已全部落地到 [`book/examples/chapter-03/`](../examples/chapter-03/)」与目录总览；5.2 与三节每个代码块前后标注对应文件路径；「一/二/三/四」各节末尾「**独立示例**」链接（二节末为附录 B/C 链接）；三节各 card 链接画廊目录；课后扩展任务节链接 exercises/ 两目录与总览 README。
+- [x] **Step 4: 交叉链接核对（硬性）**
 
 Run: `grep -c "](../examples/chapter-03/" book/chapters/03-verifier-and-safety-guarantees.md && grep -c "](../appendix/" book/chapters/03-verifier-and-safety-guarantees.md`
 Expected: `≥ 10`（锚点 + 画廊七对 + exercises 两目录 + 顶层/画廊 README）；`≥ 1`。
 
-- [ ] **Step 5: 篇幅终检（硬性）**
+- [x] **Step 5: 篇幅终检（硬性）**
 
 Run: `wc -m book/chapters/03-verifier-and-safety-guarantees.md`
 Expected: 35000–63000（2026-10-25 控制裁定上调上限，原 35000–48000）。低于下限：优先补原理讲解而非注水（写作纪律——每个概念钉回读者已见过的代码）；高于上限：压缩重复叙述，不删原理。
 
-- [ ] **Step 6: 提交**
+- [x] **Step 6: 提交**
 
 ```bash
 git add book/examples/chapter-03/ book/chapters/03-verifier-and-safety-guarantees.md
