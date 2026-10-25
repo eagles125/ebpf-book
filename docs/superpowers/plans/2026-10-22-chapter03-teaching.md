@@ -8,7 +8,7 @@ base-ref: ff8882993b9235ccd224e23a7293e16f6ed33216
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**目标:** 将第 3 章《验证器与安全保障》从零写为 35–48k 字符的完整教学章节（机制章 + 失败画廊实战化），并落地 `book/examples/chapter-03/` 全部独立示例资产（00-env + 01-pkt-parse 正面锚点 + 02-fail-gallery 七对 bad/fixed + scripts 编译级验证）与 2 项课后练习的完整可编译参考实现（含防剧透 README）。
+**目标:** 将第 3 章《验证器与安全保障》从零写为 35–63k 字符的完整教学章节（机制章 + 失败画廊实战化），并落地 `book/examples/chapter-03/` 全部独立示例资产（00-env + 01-pkt-parse 正面锚点 + 02-fail-gallery 七对 bad/fixed + scripts 编译级验证）与 2 项课后练习的完整可编译参考实现（含防剧透 README）。
 
 **架构:** 01-pkt-parse（XDP 报文解析，libbpf-bootstrap C loader 模式）承载「验证通过」路径，02-fail-gallery 七对 bad/fixed 承载「预期被拒」路径——bad 程序在 clang 层面全部合法（拒绝发生在加载期），把第 2 章「编译成功≠能加载」的教学点变成 verify-build 的机械验收事实；正文按「完整章节模板」组织为 安全模型→验证流水线内核分析→失败画廊→实战读日志 四段；课后练习（修复挑战、日志诊断）各带完整参考实现；`scripts/verify-build.sh` 做单章编译级汇总验证。
 
@@ -29,7 +29,7 @@ base-ref: ff8882993b9235ccd224e23a7293e16f6ed33216
 1. **语言**：全书与全部代码注释使用中文（`Language: zh-CN`）；术语遵循 `book/STYLE.md`（map=映射、helper=辅助函数、program type=程序类型、attachment point=挂载点）；术语首次出现用「英文（中文解释）」或「中文（English）」格式。
 2. **验证策略（硬性验收）**：编译级真实验证在本机执行——clang 18.1.3、bpftool 7.7.0（libbpf 1.3 系统头）、gcc、BTF（`/sys/kernel/btf/vmlinux` 存在）齐备，本章无 Go、无网络依赖；**无 root，`kernel.unprivileged_bpf_disabled=2`**。凡涉及加载/运行的效果一律写「预期输出示例」并标注「运行级待验证」，不得写成「已验证通过」。
 3. **bad/fixed 编译口径（本章特有硬性验收）**：画廊七对与练习 broken 程序**必须全部 clang 编译通过**——它们不是语法错误，是语义被拒；verify-build 对它们的验收就是「编译成功」。加载级行为（通过/拒绝的实际 verifier 日志）本机不可实测，预期日志一律标注「预期输出示例 / 运行级待验证」。
-4. **篇幅**：章节正文目标 35–48k 字符（`wc -m` 口径）；分节预算按设计 §3.3：目标+导读 2–2.5k、一（安全模型）3.5–4.5k、二（内核分析）8–11k、三（画廊走读）9–12k、四（实战含五层）6–8k、可视化 1.5–2k、排错 2.5–3.5k、课后任务与总结/参考 2.5–3.5k。
+4. **篇幅**：章节正文目标 35–63k 字符（`wc -m` 口径；2026-10-25 控制裁定上调上限，原 48k——三节七 card 与四节五层环境的计划强制逐字代码贴入[实测三节约 23.6k、四节约 10.5k]使自然落点约 58–63k，压缩至 48k 必删原理或裁剪契约结构，设计文档 §3.3 同步修订；分节预算为讲解文字口径，不含逐字代码贴入体量）；分节预算按设计 §3.3：目标+导读 2–2.5k、一（安全模型）3.5–4.5k、二（内核分析）8–11k、三（画廊走读）9–12k、四（实战含五层）6–8k、可视化 1.5–2k、排错 2.5–3.5k、课后任务与总结/参考 2.5–3.5k。
 5. **叙事**：双视角落「一（安全模型）、三（失败画廊）、四（实战）」三节——各节内用「**教师视角**」「**学生动手**」加粗引导段，检查点用编号列表（2–4 个自测问题 + 答案提示）。本章非渐进阶段章节，「四段式阶段教学节奏」不约束一/二/三节；「四、实战」5.2 内以教师视角引入/核心代码原理讲解/学生动手/检查点四段组织（设计 §3.2）。
 6. **代码注释**：所有 `.bpf.c` 与 loader C 源文件中文注释，覆盖五类要点：数据结构字段语义、verifier 边界检查原因、helper 选型原因、map 类型选型原因、失败模式。画廊 bad 文件的注释必须讲清「verifier 为什么会拒绝」。
 7. **内核兼容**：helper/特性保守选择，5.10+ 兼容优先；verifier 日志文本随内核版本漂移——预期日志以 5.10+ 稳定格式与 `Documentation/bpf/verifier.rst` 措辞为基准，全文统一标注「日志行随内核版本略有差异」；版本演进点（有界循环 5.3、`bpf_probe_read_user_str` 5.5、`bpf_loop` 5.17）保守措辞并注明。本机内核 7.0.0-38 仅作编译口径参考。
@@ -816,7 +816,7 @@ git commit -m "feat(ch03): 失败画廊后四对与画廊总览（stack/loop/hel
 - [x] **Step 4: 核对（硬性）**
 
 Run: `grep -c "^## " book/chapters/03-verifier-and-safety-guarantees.md && grep -c "^### 1\." book/chapters/03-verifier-and-safety-guarantees.md && grep -c "^### 2\." book/chapters/03-verifier-and-safety-guarantees.md && wc -m book/chapters/03-verifier-and-safety-guarantees.md`
-Expected: `4`（学习目标/导读/一/二）、`4`、`7`；`wc -m ≥ 14000`（本任务中段值参考；Task 10 终检 35–48k）。
+Expected: `4`（学习目标/导读/一/二）、`4`、`7`；`wc -m ≥ 14000`（本任务中段值参考；Task 10 终检 35–63k）。
 
 - [x] **Step 5: 提交**
 
@@ -1184,7 +1184,7 @@ Expected: `≥ 10`（锚点 + 画廊七对 + exercises 两目录 + 顶层/画廊
 - [ ] **Step 5: 篇幅终检（硬性）**
 
 Run: `wc -m book/chapters/03-verifier-and-safety-guarantees.md`
-Expected: 35000–48000。低于下限：优先补原理讲解而非注水（写作纪律——每个概念钉回读者已见过的代码）；高于上限：压缩重复叙述，不删原理。
+Expected: 35000–63000（2026-10-25 控制裁定上调上限，原 35000–48000）。低于下限：优先补原理讲解而非注水（写作纪律——每个概念钉回读者已见过的代码）；高于上限：压缩重复叙述，不删原理。
 
 - [ ] **Step 6: 提交**
 
