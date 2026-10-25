@@ -865,6 +865,8 @@ git commit -m "docs(ch03): 失败画廊七类典型拒绝走读"
 
 ### Task 7: 正文「四、实战：读懂你的第一条 verifier 日志」（五层环境紧凑版 + 代码走读 + 双视角 + 检查点）
 
+- [x] Task 7: 正文「四、实战：读懂你的第一条 verifier 日志」（五层环境紧凑版 + 代码走读 + 双视角 + 检查点）
+
 **tasks.md 条目**：「Write full chapter prose explaining verifier goals, control-flow graph construction, state exploration, state pruning, pointer types, bounds checks, stack limits, and helper constraints.」（实战落点部分：边界检查与栈限在锚点代码中的落地）
 
 **Files:**
@@ -874,23 +876,23 @@ git commit -m "docs(ch03): 失败画廊七类典型拒绝走读"
 - Consumes: Task 2 的 01-pkt-parse 全部文件与 Task 3 的 02-pkt-bounds（代码块逐字对应）；`../00-env/check-env.sh` 三档结论；C6 验证状态三条；C7 标题；C1 挂载模式措辞。
 - Produces: 5.1 的验证状态约定表（Task 10 审计依据）；「四」节末「独立示例」链接（C8）。
 
-- [ ] **Step 1: 写 `### 5.1 五层环境（紧凑版）`（2.5–3.5k）**——五层用 `#### 第一层：依赖环境` … `#### 第五层：运行效果` 定长小节，口径与第 2 章 5.1 一致但面向「加载即部署」的单机验证场景：
+- [x] **Step 1: 写 `### 5.1 五层环境（紧凑版）`（2.5–3.5k）**——五层用 `#### 第一层：依赖环境` … `#### 第五层：运行效果` 定长小节，口径与第 2 章 5.1 一致但面向「加载即部署」的单机验证场景：
   - 第一层 依赖环境：内核 5.10+ 与 `CONFIG_DEBUG_INFO_BTF` 要求；权限矩阵表（root / CAP_BPF+CAP_NET_ADMIN / 非 root 三档 × 可编译/可加载/可挂载三列——XDP 挂载需 CAP_NET_ADMIN，与第 2 章 tracepoint 权限档的差异点明）；工具清单与检查方法——引用 `bash book/examples/chapter-03/00-env/check-env.sh` 及其三档结论解读（本机 `unprivileged_bpf_disabled=2` 语境示例输出，标「本地验证」）。
   - 第二层 编译环境：clang/LLVM 18.x、libbpf-dev、bpftool 7.x、make；各版本验证命令（本机实测输出标「本地验证」）；`apt install` 一行说明。
   - 第三层 部署环境：**「加载即部署」是本章特殊性**——验证发生在部署瞬间，`bpftool prog load` 与 loader 的 `open_and_load` 都是验证现场；XDP 挂载目标建议 `lo` 或 veth；**安全警告段**（全局约束 8 措辞，逐字）+ 与第 17 章「勿挂物理网卡」的呼应说明。
   - 第四层 运行环境：`sudo ./pkt_parse lo` 启动、Ctrl-C 卸载；C1 挂载模式措辞（generic 回退）；无规则下发、无 pin（第 2 章 4.5 对照）。
   - 第五层 运行效果：UDP 计数增长预期输出（标注运行级待验证）；**验证状态约定表**——C6 三条 + 本章补充条（bad 程序的「编译级已通过/加载级预期被拒待验证」双状态）逐字引入。
-- [ ] **Step 2: 写 `### 5.2 代码走读：通过与被拒两条路径`（3.5–4.5k）**——四段组织：
+- [x] **Step 2: 写 `### 5.2 代码走读：通过与被拒两条路径`（3.5–4.5k）**——四段组织：
   - **教师视角引入**：为什么用「同一类检查的正反两面」教学（锚点通过路径 + 画廊 02 被拒路径互为镜像）；读者容易卡住的两处——「预期日志哪里来的」（不能本机实测，教学推导口径）、「日志第一行该看什么」。
   - 核心代码原理讲解：贴 `book/examples/chapter-03/01-pkt-parse/pkt_parse.bpf.c` 逐段讲解（三层边界检查推进模式、字节序、原子计数、`XDP_PASS` 语义）；贴 `book/examples/chapter-03/02-fail-gallery/02-pkt-bounds/bad.bpf.c` 与其预期拒绝日志（逐行读法：错误行在最后、`R2` 是哪个寄存器、`off`/`size` 指什么——「预期输出示例 / 运行级待验证」标注）。
-  - **学生动手**：`make` 锚点、`sudo ./pkt_parse lo`（满足权限时）、`ping 127.0.0.1` 观察计数；无 root 时改为 `make` 画廊 02 的 bad/fixed 并对照预期日志自查；动手清单用 checkbox。
-  - 检查点：3 问 + 提示——(1) 锚点里哪三行删掉任何一行都会被拒？（提示：每层一个检查）(2) 预期日志里 `R2` 对应源码哪个变量？(3) 为什么本机的拒绝日志可能与本书不同？（提示：全局约束 7 版本差异）。
-- [ ] **Step 3: 核对（硬性）**
+  - **学生动手**：`make` 锚点、`sudo ./pkt_parse lo`（满足权限时）、生成一次本机 UDP 流量（如 `dig @127.0.0.53 localhost`）观察计数（`ping` 是 ICMP 不计数——实现期实测修正）；无 root 时改为 `make` 画廊 02 的 bad/fixed 并对照预期日志自查；动手清单用 checkbox。
+  - 检查点：3 问 + 提示——(1) 前两层边界检查删掉任一行为什么必被拒？第三层（UDP 头）检查删掉后为什么预期仍能通过？（提示：检查是为解引用服务的——第三层之后无任何 udp 字段读取；实现期实测修正原「三行删掉任一都被拒」的可证伪断言，运行级待验证）(2) 预期日志里 `R2` 对应源码哪个变量？(3) 为什么本机的拒绝日志可能与本书不同？（提示：全局约束 7 版本差异）。
+- [x] **Step 3: 核对（硬性）**
 
 Run: `grep -c "examples/chapter-03/01-pkt-parse/" book/chapters/03-verifier-and-safety-guarantees.md && grep -c "#### 第" book/chapters/03-verifier-and-safety-guarantees.md && grep -c "教师视角" book/chapters/03-verifier-and-safety-guarantees.md && grep -c "学生动手" book/chapters/03-verifier-and-safety-guarantees.md && wc -m book/chapters/03-verifier-and-safety-guarantees.md`
 Expected: `≥ 2`（两份源文件路径标注各至少一次）；`5`（五层定长小节）；`≥ 3`（一/三/四三节均有）；`≥ 3`；`wc -m ≥ 30000`（中段值参考）。
 
-- [ ] **Step 4: 提交**
+- [x] **Step 4: 提交**
 
 ```bash
 git add book/chapters/03-verifier-and-safety-guarantees.md
