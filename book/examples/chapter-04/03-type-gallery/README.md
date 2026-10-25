@@ -19,7 +19,7 @@
 | `05-sockops/` | SOCK_OPS | `SEC("sockops")` | `int so(struct bpf_sock_ops *ops)` | 1=已处理 / 0 透传 | TCP 连接生命周期回调（`ops->op` 判 `BPF_SOCK_OPS_PASSIVE/ACTIVE_ESTABLISHED_CB`）；socket 级状态可见——XDP/TC 没有的视角 |
 | `06-sk-msg/` | SK_MSG | `SEC("sk_msg")` | `int sm(struct sk_msg_md *msg)` | `__SK_PASS` / `__SK_DROP` | sockmap 重定向判决；与 sockops 配对构建 sockmap 体系（深入留第 22/23 章交叉引用） |
 | `07-lsm/` | LSM | `SEC("lsm/file_open")` | `int BPF_PROG(lf, struct file *file)` | **0 允许 / 非 0 阻断**（裁决语义以所用内核源码 `include/linux/lsm_hook_defs.h` 为准） | 安全决策点：内核对象（`struct file *`）直接可读；前提 `CONFIG_BPF_LSM=y` + `lsm=bpf` 启动参数（本机 =y 实证，运行级待验证） |
-| `08-netfilter/` | NETFILTER | `SEC("netfilter")` | `int nf(struct bpf_nf_ctx *ctx)` | `NF_ACCEPT` / `NF_DROP` | 内核 6.6+ 新程序类型；ctx 为 `bpf_nf_ctx{state, in, out}`；完整可运行示例交叉引用第 9 章 `09-netfilter-go/` |
+| `08-netfilter/` | NETFILTER | `SEC("netfilter")` | `int nf(struct bpf_nf_ctx *ctx)` | `NF_ACCEPT` / `NF_DROP` | 内核 6.6+ 新程序类型；ctx 为 `bpf_nf_ctx{state, skb}`（本机 BTF 实证；同第 9 章 `09-netfilter-go/` 口径）；完整可运行示例交叉引用第 9 章 `09-netfilter-go/` |
 
 ## 阅读顺序建议
 
