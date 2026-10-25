@@ -56,7 +56,7 @@ base-ref: c9ae92e75a8ba0d5cfbde846f1f7660598f07d75
 ### C1. 01-multi-observe 锚点契约
 
 - 共享分镜 map：`lenses`，`BPF_MAP_TYPE_ARRAY`，`max_entries 5`，key `__u32`（镜编号 0–4），value `struct lens_val { __u64 count; char last_name[64]; __s64 last_ret; }`（count=本镜触发次数；last_name=最近一次文件名；last_ret 仅 fexit 写）。map 选型注释统一：「ARRAY——key 恒定 5 个、无删除，教学聚焦类型差异而非 map 选型」。
-- 5 个程序与 SEC（skeleton 符号前缀 `multi_observe`，`skel->progs.<名>`）：
+- 5 个程序与 SEC（skeleton 符号前缀 `multi_observe_bpf`——bpftool 以对象文件名 `multi_observe.bpf.o` 派生 `<名>_bpf__open/load/destroy`，第 3 章先例 `pkt_parse_bpf` 同型【Task 2 实现期实测教训回写：计划原文误写 `multi_observe`】；`skel->progs.<名>`）：
   | 镜 | key | SEC | 函数签名（逐字） |
   |---|---|---|---|
   | tracepoint | 0 | `SEC("tracepoint/syscalls/sys_enter_openat2")` | `int tp_entry(struct trace_event_raw_sys_enter *ctx)` |
@@ -369,6 +369,16 @@ char LICENSE[] SEC("license") = "GPL";
 static volatile sig_atomic_t exiting = 0;
 static void on_sigint(int sig) { exiting = 1; }
 
+/* libbpf 1.x：错误走标准 errno；日志回调把 WARN/INFO 透传到 stderr（DEBUG 级滤除），
+ * 便于教学观察挂载过程。libbpf_set_print 只接收回调函数指针，不能直接传级别常量
+ * （Task 2 实现期实测教训：传 LIBBPF_INFO 枚举是类型错误，运行必崩）。 */
+static int libbpf_print_fn(enum libbpf_print_level level, const char *format, va_list args)
+{
+    if (level > LIBBPF_INFO)
+        return 0;
+    return vfprintf(stderr, format, args);
+}
+
 /* 与 multi_observe.bpf.c 的 struct lens_val 保持一致（skeleton 不导出 map 值类型） */
 struct lens_val {
     __u64 count;
@@ -382,26 +392,26 @@ static const char *LENS_NAMES[5] = {
 
 int main(void)
 {
-    struct multi_observe *skel;
+    struct multi_observe_bpf *skel;
     struct bpf_link *links[5] = {0};
     struct bpf_program *progs[5];
     int err = 0;
 
     signal(SIGINT, on_sigint);
     /* libbpf 1.x：错误走标准 errno，日志级别给到 INFO 便于教学观察挂载过程 */
-    libbpf_set_print(LIBBPF_INFO);
+    libbpf_set_print(libbpf_print_fn);
 
-    skel = multi_observe__open();
+    skel = multi_observe_bpf__open();
     if (!skel) {
         fprintf(stderr, "skeleton open 失败：见上方 libbpf 日志\n");
         return 1;
     }
     /* 加载：这一步内部依次过 ELF 解析、重定位、verifier——第 3 章的全部内容
-     * 都发生在 multi_observe__load() 内部 */
-    err = multi_observe__load(skel);
+     * 都发生在 multi_observe_bpf__load() 内部 */
+    err = multi_observe_bpf__load(skel);
     if (err) {
         fprintf(stderr, "load 失败（无特权环境的预期失败：%s）\n", strerror(-err));
-        multi_observe__destroy(skel);
+        multi_observe_bpf__destroy(skel);
         return 1;
     }
 
@@ -439,7 +449,7 @@ int main(void)
 out:
     for (int i = 0; i < 5; i++)
         bpf_link__destroy(links[i]);   /* link 销毁即卸载（第 2 章生命周期回指） */
-    multi_observe__destroy(skel);
+    multi_observe_bpf__destroy(skel);
     return err;
 }
 ```
@@ -602,6 +612,15 @@ char LICENSE[] SEC("license") = "GPL";
 static volatile sig_atomic_t exiting = 0;
 static void on_sigint(int sig) { exiting = 1; }
 
+/* libbpf 1.x：日志回调把 WARN/INFO 透传到 stderr（DEBUG 级滤除）——
+ * libbpf_set_print 只接收回调函数指针，不能直接传级别常量（同 Task 2 教训）。 */
+static int libbpf_print_fn(enum libbpf_print_level level, const char *format, va_list args)
+{
+    if (level > LIBBPF_INFO)
+        return 0;
+    return vfprintf(stderr, format, args);
+}
+
 struct pkt_stats { __u64 packets; __u64 udp; };
 
 static void print_stats(int map_fd, const char *tag)
@@ -615,14 +634,14 @@ static void print_stats(int map_fd, const char *tag)
 
 int main(void)
 {
-    struct xdp_count *xdp = NULL;
-    struct tc_count *tc = NULL;
+    struct xdp_count_bpf *xdp = NULL;
+    struct tc_count_bpf *tc = NULL;
     struct bpf_link *xdp_link = NULL;
     unsigned int ifindex;
     int err = 1;
 
     signal(SIGINT, on_sigint);
-    libbpf_set_print(LIBBPF_INFO);
+    libbpf_set_print(libbpf_print_fn);
 
     ifindex = if_nametoindex("lo");   /* <net/if.h>；隐式声明告警的教训见第 3 章 */
     if (!ifindex) {
@@ -630,13 +649,13 @@ int main(void)
         return 1;
     }
 
-    xdp = xdp_count__open();
-    tc = tc_count__open();
+    xdp = xdp_count_bpf__open();
+    tc = tc_count_bpf__open();
     if (!xdp || !tc) {
         fprintf(stderr, "skeleton open 失败\n");
         goto out;
     }
-    if (xdp_count__load(xdp) || tc_count__load(tc)) {
+    if (xdp_count_bpf__load(xdp) || tc_count_bpf__load(tc)) {
         fprintf(stderr, "load 失败（无特权环境的预期失败）\n");
         goto out;
     }
@@ -681,8 +700,8 @@ out:
         bpf_tc_detach(&hook, NULL);   /* 清理 TC filter（qdisc 留置无害） */
     }
     bpf_link__destroy(xdp_link);
-    xdp_count__destroy(xdp);
-    tc_count__destroy(tc);
+    xdp_count_bpf__destroy(xdp);
+    tc_count_bpf__destroy(tc);
     return err;
 }
 ```
