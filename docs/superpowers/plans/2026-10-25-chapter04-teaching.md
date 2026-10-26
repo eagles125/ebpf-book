@@ -107,7 +107,7 @@ clean:
 | 02-uprobe | KPROBE（uprobe 变体） | `SEC("uprobe")` | `int up(struct pt_regs *ctx)` | 0 | 用户态探针：SEC 命名规则 `uprobe/<二进制路径>:<偏移>`（loader/bpftool 提供路径与偏移，编译期 SEC 串仅为标记）；用户内存读必须走 probe 系 helper（回指第 3 章 card ⑦） |
 | 03-cgroup-skb | CGROUP_SKB | `SEC("cgroup/skb")` | `int cg(struct __sk_buff *skb)` | **1 放行 / 0 丢弃** | cgroup 维度的网络 verdict；`bpf_get_current_cgroup_id()` 演示 cgroup 上下文获取；与 XDP/TC 的选择边界（挂哪、能否看 socket 状态） |
 | 04-socket-filter | SOCKET_FILTER | `SEC("socket")` | `int sf(struct __sk_buff *skb)` | **返回值=接受拷贝的字节数**（0=该 socket 不见此包） | 经典 tcpdump/pcap 载体；只读观测（不干预协议栈）；与 cgroup-skb 同 ctx 不同返回语义的对照 |
-| 05-sockops | SOCK_OPS | `SEC("sockops")` | `int so(struct bpf_sock_ops *ops)` | 1=已处理 / 0 透传 | TCP 连接生命周期回调（`ops->op` 判 `BPF_SOCK_OPS_PASSIVE/ACTIVE_ESTABLISHED_CB`）；socket 级状态可见（XDP/TC 没有的视角） |
+| 05-sockops | SOCK_OPS | `SEC("sockops")` | `int so(struct bpf_sock_ops *ops)` | 1=已处理 / 0 透传（**教学约定**——内核实际消费面较窄：取值类回调返回 0 并经 `sock_ops.reply` 传值、非 0 视为未提供，事件类回调多忽略，以所用内核源码为准【Task 6 审查回写】） | TCP 连接生命周期回调（`ops->op` 判 `BPF_SOCK_OPS_PASSIVE/ACTIVE_ESTABLISHED_CB`）；socket 级状态可见（XDP/TC 没有的视角） |
 | 06-sk-msg | SK_MSG | `SEC("sk_msg")` | `int sm(struct sk_msg_md *msg)` | `__SK_PASS` / `__SK_DROP` | sockmap 重定向判决；与 sockops 配对构建 sockmap 体系（深入留第 22/23 章交叉引用） |
 | 07-lsm | LSM | `SEC("lsm/file_open")` | `int BPF_PROG(lf, struct file *file)` | **0 允许 / 非 0 阻断**（裁决语义以所用内核源码 `include/linux/lsm_hook_defs.h` 为准） | 安全决策点：内核对象（`struct file *`）直接可读；前提 CONFIG_BPF_LSM=y + `lsm=bpf` 启动参数（本机 =y 实证，运行级待验证） |
 | 08-netfilter | NETFILTER | `SEC("netfilter")` | `int nf(struct bpf_nf_ctx *ctx)` | `NF_ACCEPT` / `NF_DROP` | 6.6+ 新程序类型；`bpf_nf_ctx{state, skb}`【Task 5 实现期 BTF 实证回写：计划原文误写 in/out】；完整可运行示例交叉引用 ch09 `09-netfilter-go/` |
