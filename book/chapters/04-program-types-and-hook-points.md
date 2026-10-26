@@ -85,7 +85,7 @@ void *data_end = (void *)(long)ctx->data_end;
 
 - `return 1;`（[`03-type-gallery/03-cgroup-skb/`](../examples/chapter-04/03-type-gallery/03-cgroup-skb/)）——**1=放行、0=丢弃**，cgroup 维度的网络 verdict；
 - `return 0;`（[`03-type-gallery/04-socket-filter/`](../examples/chapter-04/03-type-gallery/04-socket-filter/)）——**0=不向观测 socket 拷贝本包**，报文本身照常走协议栈：返回值是「拷几字节」，不是判决；
-- `return 1;`（[`03-type-gallery/05-sockops/`](../examples/chapter-04/03-type-gallery/05-sockops/)）——**1=本回调已处理、0=交还内核默认路径**，TCP 状态机回调的应答，与网络 verdict 无关。
+- `return 1;`（[`03-type-gallery/05-sockops/`](../examples/chapter-04/03-type-gallery/05-sockops/)）——**1=本回调已处理、0=交还内核默认路径**，TCP 状态机回调的应答，与网络 verdict 无关。注意这是画廊的教学约定：内核对 sockops 返回值的实际消费面较窄——取值类回调（本机可复核出处：`include/net/tcp.h` 的 `tcp_call_bpf()`）在程序返回 0 时取程序经 `sock_ops.reply` 字段传入的值、非 0 一律折叠为「未提供」；纯事件类回调（如示例计数的两类 ESTABLISHED_CB）的返回值多被忽略。精确消费面随内核版本演进，以所用内核源码为准。
 
 三者里有两个的 ctx 同为 `struct __sk_buff`，一个甚至同样写 `return 1;`——含义却各不相同。返回值语义由程序类型说了算，这是三元组里最容易被忽略、也最容易出事故的一项：把「观测类惯例返回 0」带进 cgroup/skb，`return 0;` 意味着**丢弃全部流量**。画廊③的失败分支刻意返回 1（放行），就是给这个事故写的预防针。
 
@@ -109,7 +109,7 @@ void *data_end = (void *)(long)ctx->data_end;
 | TC（`tc`，旧名 `classifier`，SCHED_CLS） | 协议栈 qdisc/filter（clsact 的 ingress/egress） | `struct __sk_buff`（协议栈加工后的字段现成可读） | `TC_ACT_*`（uapi `#define`，不在 BTF——锚点②手工定义实证） | `TC_ACT` 常量族 uapi 稳定；需 `CONFIG_NET_CLS_ACT` | 协议栈入口的过滤、统计、NAT 配套 |
 | cgroup-skb（`cgroup/skb`，CGROUP_SKB） | cgroup 内进程的网络事件（ingress/egress 两个挂载方向） | `struct __sk_buff`（与 TC 同形） | **1=放行 / 0=丢弃**（裸二值，非 `TC_ACT_*`） | 需 `CONFIG_CGROUP_BPF`；挂载对象是 cgroup fd | 按容器/进程组做网络准入 |
 | socket filter（`socket`，SOCKET_FILTER） | 挂到某个 socket 的过路报文 | `struct __sk_buff`（与 TC、cgroup-skb 同形） | **返回值=接受拷贝给该 socket 的字节数**（0=该包对它不可见）——非 verdict | 最古老的程序类型；只读观测、不干预协议栈 | tcpdump/pcap 抓包过滤 |
-| sockops（`sockops`，SOCK_OPS） | TCP 状态机事件（挂载于 cgroup） | `struct bpf_sock_ops`（两端地址端口、TCP 状态、`snd_cwnd` 等 socket 级字段） | 1=本回调已处理 / 0=交还默认路径 | socket 级字段随版本演进；需 cgroup v2 | TCP 调优、为 sockmap 收纳 socket |
+| sockops（`sockops`，SOCK_OPS） | TCP 状态机事件（挂载于 cgroup） | `struct bpf_sock_ops`（两端地址端口、TCP 状态、`snd_cwnd` 等 socket 级字段） | 1=本回调已处理 / 0=交还默认路径（**教学约定**——内核实际消费面较窄：取值类回调返回 0 并经 `sock_ops.reply` 传值、非 0 一律视为未提供；事件类回调多忽略，随内核版本演进，以所用内核源码为准，见 1.2） | socket 级字段随版本演进；需 cgroup v2 | TCP 调优、为 sockmap 收纳 socket |
 | sk_msg（`sk_msg`，SK_MSG） | sockmap 转发路径的判决点 | `struct sk_msg_md`（报文内存区间与两端 socket 元数据） | `__SK_PASS`/`__SK_DROP`（`enum sk_action`，带下划线前缀，在 BTF） | 需 sockmap＋sockops 配对搭建，判决端才被触发 | socket 间消息重定向判决 |
 | LSM（`lsm/<hook 名>`，LSM） | 内核安全决策点（hook） | hook 原型参数直列（如 `struct file *`，内核对象不经转接直接可读） | 0=允许 / 非 0=阻断（裁决语义以所用内核源码 `lsm_hook_defs.h` 为准） | 三前提：root＋`CONFIG_BPF_LSM=y`＋启动参数含 `lsm=bpf`（本机配置实证 =y、启动参数未启用，运行级待验证）；内核 5.7+ | 安全审计与准入策略 |
 | netfilter（`netfilter`，NETFILTER） | netfilter 钩子点（协议族/hook 号/优先级显式指定） | `struct bpf_nf_ctx{ state, skb }`（本机 BTF 实证） | `NF_ACCEPT`/`NF_DROP`（uapi `#define`，不在 BTF） | 内核 6.6+ 新程序类型 | 用 BPF 写防火墙规则（可运行示例见第 9 章） |
