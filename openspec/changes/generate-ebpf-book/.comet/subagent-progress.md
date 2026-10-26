@@ -7,7 +7,8 @@
 
 ## 当前状态
 
-- **停靠（2026-10-26）**：第 4 章 12 任务中 **Task 1–5 已收口**（实现+逐任务审查+计划勾选），全部审查通过；**Task 6 已提取 brief（`.superpowers/sdd/2026-10-25-chapter04-teaching/task-6-brief.md`），implementer 派发在启动前被取消——未产生任何改动**；Task 7–12 与终审未动
+- **停靠（2026-10-27，用户请求暂存）**：Task 1–6 已收口（实现+逐任务审查+计划勾选），Task 7–12 与终审未动
+- HEAD = fcedbb5；工作树干净（正文 04-*.md = 23512 字符 Task 6 收口态）（实现+逐任务审查+计划勾选），全部审查通过；**Task 6 已提取 brief（`.superpowers/sdd/2026-10-25-chapter04-teaching/task-6-brief.md`），implementer 派发在启动前被取消——未产生任何改动**；Task 7–12 与终审未动
 - HEAD = ab7119d；工作树干净
 - SDD 台账权威文件：`.superpowers/sdd/2026-10-25-chapter04-teaching/progress.md`（Task 1–5 完成线、修复轮、回写、延后 Minor 全记录）
 - 恢复方式：Task 6 重派**全新 implementer**（brief 已就绪；正文任务派发要点见台账与 ch03 会话先例——需给实现者 ch03/ch02 正文做文风先例、第 4 章 C7 标题逐字、机器实证事实清单）→ Task 7/8/9 → Task 10 exercises → Task 11 verify-build/交叉链接/篇幅终检（35–52k）→ Task 12 主审+tasks.md 勾选（Chapter 4 七条，Batch 2 随之收官）→ 最终完整审查 → 停靠
@@ -19,8 +20,8 @@
 - Task 3 02-xdp-tc 同一报文两种 ctx — done（ac73189 + 修复轮 1 ecfc807 / 勾选后 d5e77e3 前）——修复项：bpf_tc_detach 传填充 opts（NULL 是静默 no-op）；计划回写已同步
 - Task 4 画廊前四类与总览 — done（5b65477 / 勾选后 d5e77e3 前）——Approved 0 修复
 - Task 5 画廊后四类 — done（0d0d4c4 + 修复轮 1 d7cf474/3587c90 / 勾选 ab7119d）——实现者实证 bpf_nf_ctx{state, skb}（计划原文误写 in/out），计划回写 e27dcc2
-- Task 6 正文 目标/导读/一/二 — **brief 已就绪，待重派**（实现被取消，零改动）
-- Task 7 正文 三、类型画廊走读 — pending
+- Task 6 正文 目标/导读/一/二 — done（637cea3+修复轮 bb83f7e / 回写 d5d7c33 / 勾选 82acc80）——修复项：1.2/1.3 sockops 返回值补「教学约定+内核消费面」保守标注（tcp_call_bpf 实证）；计划回写两笔[d5d7c33 C3 口径留痕、fcedbb5 Task 7 card 定位笔误 3.5/3.6→3.4/3.5]；5 Minor 挂账 Task 11 清扫
+- Task 7 正文 三、类型画廊走读 — **brief 就绪待重派全新 implementer**（2026-10-27 停靠：实现者运行 45 分钟后被停靠中止于提交前——未提交、未写报告；三节草稿瞬时态 43453 字符已快照存档 task-7-draft-parked.md 供参考[非真相源，超 12–15k 预算]，工作树已恢复干净；派发要点[十四类口径互认/sockops 3.12 保守标注/card 六段/勘误后 card 定位 3.4 fentry 3.5 fexit]已注入该 brief 派发模板，重派时按 Task 6 同款完整注入）
 - Task 8 正文 四、实战 — pending
 - Task 9 正文 可视化/排错/课后/总结/参考 — pending
 - Task 10 exercises 两项（01-type-selection、02-type-mismatch）— pending
@@ -47,5 +48,5 @@
 ## 恢复指引
 
 1. 读本检查点 + SDD 台账，对照 plan 未勾选任务与 git log 恢复；以 git log + plan checkbox + 台账为准
-2. Task 6 重派全新 implementer（brief 已就绪）后按任务序推进至 Task 12 + 终审
+2. Task 7 重派全新 implementer（brief 已就绪；Task 8/9/10 brief 已预提取在 SDD 工作区）后按任务序推进至 Task 12 + 终审
 3. 全部完成 + 终审通过后：停靠（全书 tasks.md 未勾满，`comet guard build --apply` 按设计阻塞，同第 2/3 章）
