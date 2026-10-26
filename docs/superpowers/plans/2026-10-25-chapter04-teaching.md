@@ -1073,19 +1073,21 @@ git commit -m "feat(ch04): 类型画廊后四类（sockops/sk-msg/lsm/netfilter�
 
 ### Task 6: 正文「学习目标/本章导读/一、程序类型系统/二、内核实现分析」
 
+- [x] Task 6: 正文「学习目标/本章导读/一、程序类型系统/二、内核实现分析」
+
 **tasks.md 条目**：「Explain `bpf_prog_type` versus `bpf_attach_type`, context structure differences, return values, and helper availability.」＋「Write full chapter prose covering …」（机制部分）。
 
 **Files:**
 - Create: `book/chapters/04-program-types-and-hook-points.md`
 
-- [ ] **Step 1: 写「# 第 4 章」题头、「学习目标」「本章导读」（约 2–2.5k）**——导读回收 ch02:72 与 ch03:1123 两处预告（逐条兑现清单同 ch03 导读模式）；本章问题：「同一个 BPF 程序为什么不能到处挂」；学习路线图：先类型系统、再内核注册机制、再画廊逐类、最后实战选型。
-- [ ] **Step 2: 写「一、程序类型系统：类型决定什么」（6–8k）**——小节锚点 `### 1.1`–`### 1.5`：1.1 两层模型（`bpf_prog_type` 与 `bpf_attach_type` 为什么要分两层：一个类型多个挂载语义——kprobe/kretprobe/uprobe 同类型不同 attach；XDP 的 XDP-generic/native/offload 三种挂载模式一句话）；1.2 类型三元组（ctx 布局/helper 可用面/返回值语义——各配最小例，helper 面演示用 ch03 card ⑥ 反例的正面版：`bpf_get_current_pid_tgid` 在 tracing 类可用）；1.3 十四类总对比表（列：程序类型/触发源/ctx 类型/返回值语义/稳定边界/典型用途——C3 表 + 锚点 5 类 + perf event 一行带过注明第 9 章主场）；1.4 选型决策树（文本图：先分观测/网络/安全三类→再按「要什么数据」分叉→落到类型+attach；教师视角：为什么选型错误的程序多数**编译通过**——类型检查在加载期，回指第 3 章）；1.5 检查点（3 问+提示）。
-- [ ] **Step 3: 写「二、类型与钩子的内核实现分析」（8–10k）**——小节锚点 `### 2.1`–`### 2.6`：2.1 注册表（`include/uapi/linux/bpf.h` 的 `bpf_prog_type` 枚举与 `kernel/bpf/bpf_types.c` 的 `BPF_PROG_TYPE` 宏表→编译期生成 `bpf_types[]`，每类型一组 `bpf_verifier_ops`[ch03 2.6 回指]）；2.2 ctx 的两层皮（UAPI ctx 结构→`is_valid_access` 白名单→`convert_ctx_accesses` 把字段访问重写为内核内部偏移——「ctx 字段为什么按 UAPI 偏移稳定」）；2.3 SEC 命名与 libbpf 解析（`bpf_helpers.h` 文档化 SEC 名义法；SEC→prog_type+attach_type 映射表[本章涉及的 15 种 SEC 逐行]；`SEC("tc")` 与旧名 `classifier` 的关系）；2.4 挂载机制（`bpf_link` 与 `link_create`：attach 类型决定 link 子操作；自动 attach 的实现路径；fentry/fexit 依赖 BTF 的原因与签名漂移的加载期校验——冒烟结论⑤的 vfs_unlink 漂移例证进正文）；2.5 返回值校验（verifier 对程序返回值的按类型检查：XDP 必须 xdp_action、tracing 0/1 等——`bpf_prog_type` 决定的 enforce 规则，保守措辞）；2.6 检查点（2 问+提示）。
-- [ ] **Step 4: 核对（硬性）**
+- [x] **Step 1: 写「# 第 4 章」题头、「学习目标」「本章导读」（约 2–2.5k）**——导读回收 ch02:72 与 ch03:1123 两处预告（逐条兑现清单同 ch03 导读模式）；本章问题：「同一个 BPF 程序为什么不能到处挂」；学习路线图：先类型系统、再内核注册机制、再画廊逐类、最后实战选型。
+- [x] **Step 2: 写「一、程序类型系统：类型决定什么」（6–8k）**——小节锚点 `### 1.1`–`### 1.5`：1.1 两层模型（`bpf_prog_type` 与 `bpf_attach_type` 为什么要分两层：一个类型多个挂载语义——kprobe/kretprobe/uprobe 同类型不同 attach；XDP 的 XDP-generic/native/offload 三种挂载模式一句话）；1.2 类型三元组（ctx 布局/helper 可用面/返回值语义——各配最小例，helper 面演示用 ch03 card ⑥ 反例的正面版：`bpf_get_current_pid_tgid` 在 tracing 类可用）；1.3 十四类总对比表（列：程序类型/触发源/ctx 类型/返回值语义/稳定边界/典型用途——C3 表 + 锚点 5 类 + perf event 一行带过注明第 9 章主场）；1.4 选型决策树（文本图：先分观测/网络/安全三类→再按「要什么数据」分叉→落到类型+attach；教师视角：为什么选型错误的程序多数**编译通过**——类型检查在加载期，回指第 3 章）；1.5 检查点（3 问+提示）。
+- [x] **Step 3: 写「二、类型与钩子的内核实现分析」（8–10k）**——小节锚点 `### 2.1`–`### 2.6`：2.1 注册表（`include/uapi/linux/bpf.h` 的 `bpf_prog_type` 枚举与 `kernel/bpf/bpf_types.c` 的 `BPF_PROG_TYPE` 宏表→编译期生成 `bpf_types[]`，每类型一组 `bpf_verifier_ops`[ch03 2.6 回指]）；2.2 ctx 的两层皮（UAPI ctx 结构→`is_valid_access` 白名单→`convert_ctx_accesses` 把字段访问重写为内核内部偏移——「ctx 字段为什么按 UAPI 偏移稳定」）；2.3 SEC 命名与 libbpf 解析（`bpf_helpers.h` 文档化 SEC 名义法；SEC→prog_type+attach_type 映射表[本章涉及的 15 种 SEC 逐行]；`SEC("tc")` 与旧名 `classifier` 的关系）；2.4 挂载机制（`bpf_link` 与 `link_create`：attach 类型决定 link 子操作；自动 attach 的实现路径；fentry/fexit 依赖 BTF 的原因与签名漂移的加载期校验——冒烟结论⑤的 vfs_unlink 漂移例证进正文）；2.5 返回值校验（verifier 对程序返回值的按类型检查：XDP 必须 xdp_action、tracing 0/1 等——`bpf_prog_type` 决定的 enforce 规则，保守措辞）；2.6 检查点（2 问+提示）。
+- [x] **Step 4: 核对（硬性）**
 
 Run: `grep -c "^## " book/chapters/04-program-types-and-hook-points.md && grep -c "^### 1\." book/chapters/04-program-types-and-hook-points.md && grep -c "^### 2\." book/chapters/04-program-types-and-hook-points.md && wc -m book/chapters/04-program-types-and-hook-points.md`
 Expected: `4`（学习目标/导读/一/二）、`5`、`6`；`wc -m ≥ 16000`（本任务中段值参考；Task 11 终检 35–52k）。
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add book/chapters/04-program-types-and-hook-points.md
