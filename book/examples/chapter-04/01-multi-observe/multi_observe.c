@@ -8,6 +8,7 @@
  * （目标函数签名不匹配），README 排错表逐一对应。 */
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <signal.h>
 #include <unistd.h>
 #include <bpf/libbpf.h>

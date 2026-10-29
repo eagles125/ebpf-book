@@ -67,8 +67,8 @@ for d in book/examples/chapter-04/exercises/0*/; do make -C "$d"; done
   README 中「预期输出」均为教学示例。
 - 编译级已在编写环境（x86_64、内核 7.0、clang 18、bpftool 7.7、libbpf 1.3）
   `make` 通过。
-- 全量编译汇总由 `scripts/verify-build.sh` 生成（计划内资产，随后续批次
-  落地），摘要见章级 [`../README.md`](../README.md)。
+- 全量编译汇总由 `scripts/verify-build.sh` 生成（已随本章落地，复跑
+  `scripts/verify-build.sh` 即得），摘要见章级 [`../README.md`](../README.md)。
 
 ## 参考来源
 
