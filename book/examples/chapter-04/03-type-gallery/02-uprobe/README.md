@@ -25,7 +25,7 @@
 ## 挂载方式与前提
 
 - **预期加载前提**：root + 指定二进制路径与偏移（uprobe 挂载要向目标二进制注入断点，
-  需特权；偏移取目标 ELF 内符号地址——`nm -D`/`readelf -s` 可查，或用
+  需特权；偏移取目标 ELF 内的文件偏移（PIE/共享库下与运行时虚拟地址不同）——`nm -D`/`readelf -s` 可查，或用
   `bpf_program__attach_uprobe_opts` 传 `func_name` 交由 libbpf 查符号表）。
 - **挂载形态**：libbpf `bpf_program__attach_uprobe(…, pid, binary_path, func_offset)`；
   挂上后 `/sys/kernel/tracing/events/uprobes/` 出现对应事件。教学挂法：挑一个常用

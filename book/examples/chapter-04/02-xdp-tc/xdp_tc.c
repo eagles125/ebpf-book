@@ -2,13 +2,15 @@
 /* 第 4 章锚点②用户态 loader：XDP 与 TC 同挂 lo，对照读数。
  * attach 选型：XDP 走 bpf_program__attach_xdp（返回 link）；TC 没有 link 对应物——
  * 走 netlink 的 qdisc/filter 模型（bpf_tc_hook_create 建 clsact、bpf_tc_attach 绑
- * ingress，沿第 17 章 04-nat-tc 先例）。flags=0 挂 lo 时内核一般自动回退 generic
- * （SKB）模式——具体行为随内核版本，以实测为准（运行级待验证）。
+ * ingress，沿第 17 章 04-nat-tc 先例）。flags=0 按 native 尝试、失败并不自动回退
+ * generic（SKB）模式——如需显式 SKB 模式应改用 bpf_xdp_attach 指定
+ * XDP_FLAGS_SKB_MODE（具体行为随内核版本，以实测为准，运行级待验证）。
  * 失败模式：无特权 load 即 EPERM；clsact 已存在时 hook_create 返回 -EEXIST 视为成功。 */
 #include <stdio.h>
 #include <stdlib.h>
 #include <signal.h>
 #include <unistd.h>
+#include <errno.h>
 #include <net/if.h>
 #include <bpf/libbpf.h>
 #include <bpf/bpf.h>
@@ -47,6 +49,7 @@ int main(void)
     int err = 1;
 
     signal(SIGINT, on_sigint);
+    signal(SIGTERM, on_sigint);
     libbpf_set_print(libbpf_print_fn);
 
     ifindex = if_nametoindex("lo");   /* <net/if.h>；隐式声明告警的教训见第 3 章 */

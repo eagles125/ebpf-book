@@ -112,7 +112,7 @@ XDP 与 TC 已同挂 lo，制造流量（如 ping 127.0.0.1、curl 本机服务�
 | `XDP attach 失败（需 root）` | 非 root 缺 `CAP_NET_ADMIN`；或该接口同模式已挂了其他 XDP 程序 | 先卸载已有程序（如 `ip link set dev lo xdp off`）或换空闲的 veth 接口实验 |
 | `clsact 创建失败（需 root）` | 非 root 缺 `CAP_NET_ADMIN`；或内核未开 `CONFIG_NET_CLS_ACT` | 用 `sudo`；确认内核配置（主流发行版默认开启） |
 | `TC attach 失败` | 相同 handle/priority 的 filter 已存在 | 换 handle/priority，或先 `sudo tc qdisc del dev lo clsact` 清理旧 filter |
-| lo 上 XDP 行为与预期不符（如无 native 模式） | lo 无驱动 XDP 支持，flags=0 时内核一般自动回退 generic（SKB）模式 | 属预期；具体行为随内核版本，以实测为准（运行级待验证） |
+| lo 上 XDP 行为与预期不符（如无 native 模式） | lo 无驱动原生 XDP 路径，flags=0 按 native 尝试、失败并不自动回退 generic（SKB）模式（正文 5.1 保守口径） | 属预期；需显式 SKB 模式时改用 `bpf_xdp_attach(ifindex, prog_fd, XDP_FLAGS_SKB_MODE, NULL)`（随内核版本，以实测为准，运行级待验证） |
 | `make` 报 `vmlinux.h` 生成失败 | 内核缺 BTF（`CONFIG_DEBUG_INFO_BTF` 未启用） | 参见附录 C 发行版 BTF 构建指南 |
 
 ## 验证状态

@@ -81,7 +81,7 @@ invalid bpf_context access off=0 size=4
   会落到其后对报文指针的解引用行（「invalid mem access」形态）——认的是
   「ctx 申报类型与程序类型错位」这一信号族与错位诊断三步，不认某一行具体
   措辞。
-- 修复版预期加载成功；按锚点②的挂载形态挂 lo 并造流量后读映射：
+- 修复版预期加载成功；见锚点②的 loader 流程（libbpf C loader，非 bpftool 命令链）挂 lo 并造流量后读映射：
 
 ```text
 $ sudo bpftool prog load fixed.bpf.o /sys/fs/bpf/ch04_ex2_fixed
@@ -92,7 +92,7 @@ Found 1 element
 ```
 
 （数值随负载，以实测为准；挂载与清理（`bpftool net detach`、
-`rm /sys/fs/bpf/ch04_ex2_*`）的完整命令链见锚点②
+`rm /sys/fs/bpf/ch04_ex2_*`）见锚点②的 loader 流程
 [`../../02-xdp-tc/`](../../02-xdp-tc/) 与 bpftool 手册页。）
 
 ---
