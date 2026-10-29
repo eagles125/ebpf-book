@@ -1145,19 +1145,21 @@ git commit -m "docs(ch04): 四、实战（五层环境与选型走读）"
 
 ### Task 9: 正文「可视化/常见问题与排错/课后扩展任务/总结/本章参考来源」
 
+- [x] Task 9: 正文「可视化/常见问题与排错/课后扩展任务/总结/本章参考来源」
+
 **tasks.md 条目**：「Add text comparison table for trigger source, context, helper set, return behavior, stability, and typical use case.」（表复核落位）＋「Add troubleshooting, summary, and references.」。
 
 **Files:**
 - Modify: `book/chapters/04-program-types-and-hook-points.md`
 
-- [ ] **Step 1: 写「可视化：类型谱系与挂载路径」（1.5–2k）**——图 1：`bpf_prog_type → bpf_attach_type → 挂载点`三层文本图（kprobe 族一型三 attach 的展开例）；图 2：同一事件五副眼镜数据流图（syscall→内核函数→五 hook→分镜 map→loader）。两图均配解读段。
-- [ ] **Step 2: 写「常见问题与排错」（2.5–3.5k）**——选型速查表（症状→类型规则→修复：SEC 名写错的加载报错形态[unknown prog type / unknown attach type]、ctx 字段访问被拒[invalid bpf_context access 回指第 3 章]、fentry 签名漂移[BTF 校验失败形态与解析法]、挂载点不存在[tracefs 缺事件/CONFIG_BPF_LSM 未开]、权限档位差异）；每条标注「预期日志 / 运行级待验证」。
-- [ ] **Step 3: 写「课后扩展任务」（含 C9 表逐字）+「总结」（含预告勾稽表：兑现 ch02/ch03 预告，给第 5/6/15/16/20 章留桥）+「本章参考来源」（kernel docs program-types/attach 文档、bpf_helpers/bpf_tracing 头文档、LWN XDP/LSM/fentry 系列、Andrii Nakryiko libbpf 系列）。
-- [ ] **Step 4: 核对（硬性）**
+- [x] **Step 1: 写「可视化：类型谱系与挂载路径」（1.5–2k）**——图 1：`bpf_prog_type → bpf_attach_type → 挂载点`三层文本图（kprobe 族一型三 attach 的展开例）；图 2：同一事件五副眼镜数据流图（syscall→内核函数→五 hook→分镜 map→loader）。两图均配解读段。
+- [x] **Step 2: 写「常见问题与排错」（2.5–3.5k）**——选型速查表（症状→类型规则→修复：SEC 名写错的加载报错形态[unknown prog type / unknown attach type]、ctx 字段访问被拒[invalid bpf_context access 回指第 3 章]、fentry 签名漂移[BTF 校验失败形态与解析法]、挂载点不存在[tracefs 缺事件/CONFIG_BPF_LSM 未开]、权限档位差异）；每条标注「预期日志 / 运行级待验证」。
+- [x] **Step 3: 写「课后扩展任务」（含 C9 表逐字）+「总结」（含预告勾稽表：兑现 ch02/ch03 预告，给第 5/6/15/16/20 章留桥）+「本章参考来源」（kernel docs program-types/attach 文档、bpf_helpers/bpf_tracing 头文档、LWN XDP/LSM/fentry 系列、Andrii Nakryiko libbpf 系列）。
+- [x] **Step 4: 核对（硬性）**
 
 Run: `grep -c "^## " book/chapters/04-program-types-and-hook-points.md && wc -m book/chapters/04-program-types-and-hook-points.md`
 Expected: `11`（C7 十一小节齐）；篇幅进入 35–54k 区间或记录差值待 Task 11 终检。
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add book/chapters/04-program-types-and-hook-points.md
