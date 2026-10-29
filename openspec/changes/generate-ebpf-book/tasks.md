@@ -189,13 +189,13 @@
 
 ### Chapter 4: Program Types and Hook Points
 
-- [ ] Write full chapter prose covering kprobe, kretprobe, tracepoint, raw tracepoint, fentry/fexit, uprobe, XDP, TC, cgroup skb, socket filter, sockops, sk_msg, LSM, and Netfilter where relevant.
-- [ ] Explain `bpf_prog_type` versus `bpf_attach_type`, context structure differences, return values, and helper availability.
-- [ ] Include at least two integrated hook examples from tracing, networking, or security categories.
-- [ ] Create standalone Chapter 4 examples under `book/examples/chapter-04/`.
-- [ ] Add text comparison table for trigger source, context, helper set, return behavior, stability, and typical use case.
-- [ ] Add troubleshooting, summary, and references.
-- [ ] Main-agent review to ensure the chapter explains selection boundaries, not just hook taxonomy.
+- [x] Write full chapter prose covering kprobe, kretprobe, tracepoint, raw tracepoint, fentry/fexit, uprobe, XDP, TC, cgroup skb, socket filter, sockops, sk_msg, LSM, and Netfilter where relevant.
+- [x] Explain `bpf_prog_type` versus `bpf_attach_type`, context structure differences, return values, and helper availability.
+- [x] Include at least two integrated hook examples from tracing, networking, or security categories.
+- [x] Create standalone Chapter 4 examples under `book/examples/chapter-04/`.
+- [x] Add text comparison table for trigger source, context, helper set, return behavior, stability, and typical use case.
+- [x] Add troubleshooting, summary, and references.
+- [x] Main-agent review to ensure the chapter explains selection boundaries, not just hook taxonomy.
 
 ### Chapter 5: eBPF Subsystem Kernel Code Structure
 
