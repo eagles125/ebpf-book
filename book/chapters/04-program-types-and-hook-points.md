@@ -275,17 +275,17 @@ bpftool btf dump file /sys/kernel/btf/vmlinux | grep -A4 "^\[64208\]"
 
 ## 三、类型画廊：十四类逐类走读
 
-一节建立了三元组与总表，二节拆开了内核机制，本节把十四类逐一请上展台。每类一张 card，体例固定六段：**背景问题** → **代码**（贴全文或关键段，路径随块标注）→ **预期输出/挂载形态** → **类型要点**（三元组哪个维度被点亮）→ **与相邻类型的选择边界** → **独立示例**；失败形态不展开，各 card 只回指第 3 章「三、失败画廊：七类典型拒绝」（[`book/examples/chapter-03/02-fail-gallery/`](../examples/chapter-03/02-fail-gallery/)）。
+一节立起三元组与总表，二节拆开内核机制，本节把十四类逐一请上展台。每类一张 card，体例固定六段：**背景问题** → **代码**（贴全文或关键段）→ **预期输出/挂载形态** → **类型要点**（三元组哪个维度被点亮）→ **与相邻类型的选择边界** → **独立示例**；失败形态不展开，各 card 只回指第 3 章「三、失败画廊：七类典型拒绝」（[`book/examples/chapter-03/02-fail-gallery/`](../examples/chapter-03/02-fail-gallery/)）。
 
 计数口径先互认：1.3 总表按**程序类型**合并——fentry/fexit 同属 `BPF_PROG_TYPE_TRACING`，合为一行（15−1=14）；本节 card 按**触发时机**拆卡——fentry 站函数入口、fexit 站返回处，各占一张（3.4/3.5），LSM 与 netfilter 同为「verdict 决策点」合并对照（3.14）。数 card 得 14、数表行也得 14——**总数相同，合并维度不同**，对位看维度、勿数条数；perf event 不入画廊（第 9 章主场）。
 
-卡片分三组：3.1–3.5 追踪五镜共用锚点①的对照讲解（全文与分镜读数在 3.1 上贴）；3.6/3.7 网络双 ctx 共用锚点②；3.8–3.14 走读画廊 8 实物（3.14 覆盖 07/08 两目录）。
+卡片分三组：3.1–3.5 五镜共用锚点①对照讲解（全文与读数在 3.1 上贴）；3.6/3.7 网络双 ctx 共用锚点②；3.8–3.14 走读画廊 8 实物（3.14 覆盖 07/08）。
 
 ### 3.1 tracepoint：带类型的事件布局（镜 0）
 
-**背景问题**：想在系统调用发生的瞬间记一笔，又不想随内核版本追符号——挂哪最稳？tracepoint 的答案是内核静态埋点：事件在 tracefs 注册，字段布局是内核对外的承诺，跨版本基本稳定（1.3 表）。
+**背景问题**：想在系统调用发生的瞬间记一笔，又不想随内核版本追符号——挂哪最稳？tracepoint 的答案：内核静态埋点，事件在 tracefs 注册，字段布局跨版本基本稳定（1.3 表）。
 
-对照实物是锚点①：五个程序共享一张分镜 map，观察同一个事件 `do_sys_openat2(int dfd, const char *filename, struct open_how *how)`（签名 5.10+ 稳定、本机 BTF 实证，2.4）。**代码**（贴全文）：下贴 `book/examples/chapter-04/01-multi-observe/multi_observe.bpf.c` 全文，3.2–3.5 逐镜指认：
+**代码**（贴全文）：锚点① 五个程序共享分镜 map，观察同一事件 `do_sys_openat2(dfd, filename, how)`（签名 5.10+ 稳定、本机 BTF 实证，2.4）；下贴 `book/examples/chapter-04/01-multi-observe/multi_observe.bpf.c` 全文，3.2–3.5 逐镜指认：
 
 ```c
 // SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause
@@ -398,9 +398,7 @@ int BPF_PROG(fx_entry, int dfd, const char *filename, struct open_how *how, int 
 char LICENSE[] SEC("license") = "GPL";
 ```
 
-五镜对照讲解——同一事件现场，类型化程度排成谱系：tracepoint 的 typed 事件布局（`args[]` 有名有位）→ raw_tp 的 `__u64 *` 原始数组（只有槽位）→ kprobe 的 `pt_regs *`（宏解包）→ fentry 的 BTF 类型化原型 → fexit 再加尾随返回值，3.2–3.5 逐镜展开。
-
-分镜 map 把谱系变成数字（预期输出示例 / 运行级待验证，摘自锚点① README）：
+五镜对照讲解——同一事件现场，类型化程度排成谱系：typed 布局（tracepoint）→ 原始 `__u64` 数组（raw_tp）→ `pt_regs` 解包（kprobe）→ BTF 原型（fentry）→ 加尾随返回值（fexit）。分镜读数（预期输出示例 / 运行级待验证，摘自锚点① README）：
 
 ```text
   [tracepoint] count=42     last_ret=0    name=/etc/ld.so.cache
@@ -410,7 +408,7 @@ char LICENSE[] SEC("license") = "GPL";
   [fexit    ] count=42     last_ret=3    name=(本镜不读文件名)
 ```
 
-五行 `count` 一致——同一事件；`last_ret` 同列不同义：只有 fexit 存真正返回值（`3` 即 fd），raw_tp 存 `ctx[1]` 原始值（syscall 类为系统调用号，openat2=437）；`name` 列只有三镜有值——**各镜只取自己类型下「拿得到」的信息**。
+挂载成功的镜 `count` 一致——同一事件；`last_ret` 同列不同义（fexit 存真返回值、raw_tp 存原始 `ctx[1]`，syscall 类为系统调用号 openat2=437）；`name` 列只有三镜有值——**各镜只取自己类型下「拿得到」的信息**。保守口径：raw_tp 镜的目标事件是否存在以本机 tracepoint 列表为准——per-syscall 事件若无 raw_tp 对应物（静态 tracepoint 与 ftrace 事件是两条注册路径），attach 按名查找即报 ENOENT；这本身是挂载查找路径差异的教学点，其余四镜读数不受影响。
 
 **预期输出/挂载形态**：五个 SEC 名携带全部挂载信息，loader 一个通用 `bpf_program__attach()` 挂 5 个 link（2.3「自动」列）；tracepoint 镜读数即上方第 1 行（预期输出示例 / 运行级待验证）。
 
@@ -420,15 +418,15 @@ char LICENSE[] SEC("license") = "GPL";
 
 ### 3.2 raw tracepoint：原始参数无类型（镜 1）
 
-**背景问题**：事件在埋点表里，但 typed 层还没覆盖它，或你想核对 typed 层转换有没有偏差——同一埋点的**原始参数**去哪拿？
+**背景问题**：事件在埋点表里但 typed 层未覆盖，或想核对 typed 层转换有无偏差——同一埋点的**原始参数**去哪拿？
 
 **代码**：上贴全文镜 1——`SEC("raw_tp/sys_enter_openat2")` 的 `int raw_entry(__u64 *ctx)`，核心行 `v->last_ret = (__s64)ctx[1];`：只读形状、不拆字段。
 
-**预期输出/挂载形态**：自动挂载（SEC 名即事件名）；读数即 3.1 第 2 行——`last_ret=437` 是系统调用号**不是**返回值（预期输出示例 / 运行级待验证）。
+**预期输出/挂载形态**：自动挂载（SEC 名即事件名；目标事件在场的保守口径见 3.1）；读数即 3.1 第 2 行——`last_ret=437` 是系统调用号**不是**返回值（预期输出示例 / 运行级待验证）。
 
 **类型要点**：ctx 维度的**反例**被点亮——`__u64 *` 无字段可名，syscall 类原始参数形状 `(regs, id)`（内核源码 `kernel/trace/trace_syscalls.c`）；返回值被忽略；helper 面同追踪族。
 
-**与相邻类型的选择边界**：typed 层在选 3.1；raw_tp 布局**无**稳定承诺、愿跟内核实现追字段才选它（1.3 表）。**失败形态回指**：第 3 章失败画廊 card ⑦——原始数值更没有指针资格。**独立示例**：[`01-multi-observe/`](../examples/chapter-04/01-multi-observe/)（镜 1）。
+**与相邻类型的选择边界**：typed 层在选 3.1；raw_tp 布局无稳定承诺才退而求其次（1.3 表）。**失败形态回指**：第 3 章失败画廊 card ⑦——原始数值更没有指针资格。**独立示例**：[`01-multi-observe/`](../examples/chapter-04/01-multi-observe/)（镜 1）。
 
 ### 3.3 kprobe：按符号动态挂入口（镜 2）
 
@@ -436,11 +434,11 @@ char LICENSE[] SEC("license") = "GPL";
 
 **代码**：上贴全文镜 2——`SEC("kprobe/do_sys_openat2")` 的 `int BPF_KPROBE(kp_entry, int dfd, const char *filename, struct open_how *how)`：宏按 C 原型从 pt_regs 解包参数（x86 展开，以所用架构为准）。
 
-**预期输出/挂载形态**：自动挂载，挂载点按内核符号解析；读数即 3.1 第 3 行（预期输出示例 / 运行级待验证）；符号不存在（过老或被内联）时 attach 阶段报错（锚点① README 排错表同口径）。
+**预期输出/挂载形态**：自动挂载，挂载点按内核符号解析；读数即 3.1 第 3 行（预期输出示例 / 运行级待验证）；符号被内联/不存在时 attach 报错（锚点① README 同口径）。
 
 **类型要点**：ctx 是 `pt_regs *`，宏把寄存器解包成有类型形参——「手工捞寄存器」变成「写 C 原型」；返回值被忽略；helper 面同追踪族，不依赖事件注册。
 
-**与相邻类型的选择边界**：不依赖事件注册、符号随时可换，代价是符号会内联/改名（本机 BTF 中 `do_unlinkat` 缺席实证）；临时调试选它，长期生产选 fentry（3.4）。**失败形态回指**：第 3 章失败画廊 card ①。**独立示例**：[`01-multi-observe/`](../examples/chapter-04/01-multi-observe/)（镜 2）。
+**与相邻类型的选择边界**：不依赖事件注册、符号随时可换，代价是会内联/改名（本机 BTF 中 `do_unlinkat` 缺席实证）；临时调试选它，长期生产选 fentry（3.4）。**失败形态回指**：第 3 章失败画廊 card ①。**独立示例**：[`01-multi-observe/`](../examples/chapter-04/01-multi-observe/)（镜 2）。
 
 ### 3.4 fentry：BTF 类型化直入函数入口（镜 3）
 
@@ -448,11 +446,11 @@ char LICENSE[] SEC("license") = "GPL";
 
 **代码**：上贴全文镜 3——`SEC("fentry/do_sys_openat2")` 的 `int BPF_PROG(fe_entry, int dfd, const char *filename, struct open_how *how)`：无 pt_regs 中转，原型即函数原型。
 
-**预期输出/挂载形态**：tracing link 自动挂载；签名加载期按本机 BTF 核对——函数不存在报 ENOENT 类、签名不匹配报 EINVAL 类（2.4 的 `vfs_unlink` 漂移例证）；读数即 3.1 第 4 行（预期输出示例 / 运行级待验证）。
+**预期输出/挂载形态**：tracing link 自动挂载；签名加载期按本机 BTF 核对——不存在报 ENOENT 类、不匹配报 EINVAL 类（2.4 漂移例证）；读数即 3.1 第 4 行（预期输出示例 / 运行级待验证）。
 
 **类型要点**：ctx 的**第三种形态**（2.2 末）——BTF 类型化的 C 原型直列；类型精确**不豁免 probe 界限**，`filename` 照走 `bpf_probe_read_user_str`。
 
-**与相邻类型的选择边界**：对 3.3——多要 `CONFIG_DEBUG_INFO_BTF` 与签名稳定，换来低开销与加载期签名校验；只看入口参数选它，读成败看 3.5。**失败形态回指**：第 3 章失败画廊 card ⑦；签名漂移见 2.4。**独立示例**：[`01-multi-observe/`](../examples/chapter-04/01-multi-observe/)（镜 3）。
+**与相邻类型的选择边界**：对 3.3——多要 `CONFIG_DEBUG_INFO_BTF` 与签名稳定，换来低开销与加载期校验；读成败看 3.5。**失败形态回指**：第 3 章失败画廊 card ⑦；签名漂移见 2.4。**独立示例**：[`01-multi-observe/`](../examples/chapter-04/01-multi-observe/)（镜 3）。
 
 ### 3.5 fexit：同型参数＋尾随返回值（镜 4）
 
@@ -460,19 +458,19 @@ char LICENSE[] SEC("license") = "GPL";
 
 **代码**：上贴全文镜 4——`SEC("fexit/do_sys_openat2")` 的 `int BPF_PROG(fx_entry, …, struct open_how *how, int ret)`：尾随 `ret` 即目标函数返回值，`v->last_ret = ret` 落账。
 
-**预期输出/挂载形态**：与 3.4 同走 BTF 签名校验与 tracing link 挂载；读数即 3.1 第 5 行——`last_ret=3`（成功 fd）（预期输出示例 / 运行级待验证）。
+**预期输出/挂载形态**：同 3.4 的 BTF 校验与挂载；读数即 3.1 第 5 行——`last_ret=3`（成功 fd）（预期输出示例 / 运行级待验证）。
 
-**类型要点**：fentry 全部＋尾随 `int ret`。1.3 表把 3.4/3.5 合成一行 TRACING 的理由在此——同 prog type、同 BTF 校验，只差一个尾随参数；本节拆两 card 也在此——入口与返回处是两个观测位。
+**类型要点**：fentry 全部＋尾随 `int ret`——同 prog type、只差一个尾随参数（表合行/本节拆卡的理由见节首口径互认）。
 
-**与相邻类型的选择边界**：长期统计成败分布首选 fexit（1.5 检查点第 2 问）；kretprobe 也能读返回值，但靠架构寄存器展开、校验弱于 BTF 路线（3.8）。**失败形态回指**：同 3.4。**独立示例**：[`01-multi-observe/`](../examples/chapter-04/01-multi-observe/)（镜 4）。
+**与相邻类型的选择边界**：长期统计成败分布首选 fexit（1.5 第 2 问）；kretprobe 也能读返回值，但靠架构寄存器展开、校验弱（3.8）。**失败形态回指**：同 3.4。**独立示例**：[`01-multi-observe/`](../examples/chapter-04/01-multi-observe/)（镜 4）。
 
 ### 3.6 XDP：驱动层最早时刻
 
 **背景问题**：报文刚进网卡就要裁决——丢包、转发、抗 DDoS，协议栈加工等不起。最早的裁决点在哪？
 
-**代码**（下贴 `book/examples/chapter-04/02-xdp-tc/xdp_count.bpf.c` 关键段；解析逻辑与 3.7 的 TC 侧逐行同构）：`SEC("xdp")` 的 `int xdp_entry(struct xdp_md *ctx)`，开头两行 `void *data = (void *)(long)ctx->data;` 与 `void *data_end = (void *)(long)ctx->data_end;`，此后每次指针推进都先 `(void *)(eth + 1) > data_end` 再解引用，恒 `return XDP_PASS;`（只观测不干预）。
+**代码**（下贴 `book/examples/chapter-04/02-xdp-tc/xdp_count.bpf.c` 关键段；解析逻辑与 3.7 的 TC 侧逐行同构）：`SEC("xdp")` 的 `int xdp_entry(struct xdp_md *ctx)`：开头取 `ctx->data`/`ctx->data_end` 两端指针，此后每次指针推进都先 `(void *)(eth + 1) > data_end` 再解引用，恒 `return XDP_PASS;`（只观测不干预）。
 
-**预期输出/挂载形态**：`bpf_program__attach_xdp(prog, ifindex)` 返回 link；挂 lo 一般自动回退 generic（SKB）模式，随内核版本以实测为准；读数为锚点② `[xdp]` 行（预期输出示例 / 运行级待验证）。实验只应挂 veth 或 lo（章级 README 安全警告）。
+**预期输出/挂载形态**：挂载走 `bpf_program__attach_xdp(prog, ifindex)`（返回 link）；挂 lo 一般自动回退 generic（SKB）模式（随内核版本）；读数为锚点② `[xdp]` 行（预期输出示例 / 运行级待验证）；实验只应挂 veth 或 lo（章级 README 安全警告）。
 
 **类型要点**：ctx 极简——`xdp_md` 只有 `data`/`data_end`/`data_meta` 与少量元数据，解析全手工，边界检查是 verifier 硬要求（card ② 正面用法）；返回值 `enum xdp_action`（`XDP_PASS` 在 BTF）；helper 面**没有**「当前进程」一族（card ⑥ 出处，1.2）。
 
@@ -482,11 +480,11 @@ char LICENSE[] SEC("license") = "GPL";
 
 **背景问题**：要协议栈加工后的 skb 元数据（`mark`/`len`/`protocol`），或者要分 ingress/egress 方向——报文已进协议栈，挂哪？
 
-**代码**（下贴 `book/examples/chapter-04/02-xdp-tc/tc_count.bpf.c` 关键段；与 `xdp_count.bpf.c` 逐行同构，差异只剩 SEC、ctx 与返回值）：程序自带 `#define TC_ACT_OK 0`（uapi `pkt_cls.h` 的 #define，不在 BTF/vmlinux.h），`SEC("tc")` 的 `int tc_entry(struct __sk_buff *skb)` 解析逻辑与 XDP 侧逐行同构，恒 `return TC_ACT_OK;`（verdict 在协议栈入口，与 `XDP_PASS` 对照）。
+**代码**（下贴 `book/examples/chapter-04/02-xdp-tc/tc_count.bpf.c` 关键段；与 `xdp_count.bpf.c` 逐行同构，差异只剩 SEC、ctx 与返回值）：程序自带 `#define TC_ACT_OK 0`（uapi `pkt_cls.h` 的 #define，不在 BTF/vmlinux.h），`SEC("tc")` 的 `int tc_entry(struct __sk_buff *skb)` 解析逻辑与 XDP 侧逐行同构，恒 `return TC_ACT_OK;`（与 `XDP_PASS` 对照）。
 
-**预期输出/挂载形态**：TC 没有 link 对应物——走 netlink 模型（`bpf_tc_hook_create` 建 clsact＋`bpf_tc_attach` 绑 ingress，2.4）；读数为锚点②两行并排，`udp` 一致、`packets` 接近但不必然相等——可见集合的差别本身是教学点（预期输出示例 / 运行级待验证）。
+**预期输出/挂载形态**：TC 没有 link 对应物——走 netlink 模型（`bpf_tc_hook_create` 建 clsact＋`bpf_tc_attach` 绑 ingress，2.4）；读数为锚点②两行并排，`udp` 一致、`packets` 接近但不必然相等（预期输出示例 / 运行级待验证）。
 
-**类型要点**：ctx 换 `__sk_buff`——两层皮（2.2）的申报面差异：协议栈字段现成可读，`xdp_md` 里一个都没有；返回值 `TC_ACT_*` 是 uapi `#define` 不在 BTF（手工定义实证；2.5 值域校验按值不按符号）。
+**类型要点**：ctx 换 `__sk_buff`——两层皮（2.2）申报面差异：协议栈字段现成可读，`xdp_md` 里没有；返回值 `TC_ACT_*` 是 uapi `#define` 不在 BTF（2.5 值域校验按值不按符号）。
 
 **与相邻类型的选择边界**：对 3.6——时机换字段；对 3.10——同为 `__sk_buff`，TC 挂 qdisc/filter、cgroup/skb 挂 cgroup fd。**失败形态回指**：第 3 章失败画廊 card ②。**独立示例**：[`02-xdp-tc/`](../examples/chapter-04/02-xdp-tc/)（TC 侧）。
 
@@ -500,7 +498,7 @@ char LICENSE[] SEC("license") = "GPL";
 
 **类型要点**：KPROBE 类型、返回处触发——与 3.3 同身份不同工位（1.1 实例）；返回值经 `BPF_KRETPROBE` 按架构展开读取（x86 由 `PT_REGS_RC`，以所用架构为准）；`ret>=0` 为 fd、负值为错误码。
 
-**与相邻类型的选择边界**：对 3.5——同样读返回值，不依赖 BTF 原型校验，代价是类型校验弱；对 3.3——入口/返回互补成对。**失败形态回指**：第 3 章失败画廊 card ①；符号被内联即无挂点（1.3 表）。**独立示例**：[`03-type-gallery/01-kretprobe/`](../examples/chapter-04/03-type-gallery/01-kretprobe/)。
+**与相邻类型的选择边界**：对 3.5——同样读返回值，不依赖 BTF 校验、类型校验弱；与 3.3 入口/返回互补。**失败形态回指**：第 3 章失败画廊 card ①。**独立示例**：[`03-type-gallery/01-kretprobe/`](../examples/chapter-04/03-type-gallery/01-kretprobe/)。
 
 ### 3.9 uprobe：探针下探用户态（画廊②）
 
@@ -512,29 +510,29 @@ char LICENSE[] SEC("license") = "GPL";
 
 **类型要点**：KPROBE 的用户态变体——ctx 仍是 `pt_regs`（被打断处的用户态现场）；用户内存读必须走 probe 系辅助函数。
 
-**与相邻类型的选择边界**：对 3.3——用户态 vs 内核态符号；`uretprobe` 是「办成了没有」的对称（同用 `BPF_KRETPROBE` 系宏，画廊不单列）。**失败形态回指**：第 3 章失败画廊 card ⑦（用户内存界限）；路径/偏移错 attach 才报错（2.3）。**独立示例**：[`03-type-gallery/02-uprobe/`](../examples/chapter-04/03-type-gallery/02-uprobe/)。
+**与相邻类型的选择边界**：对 3.3——用户态 vs 内核态符号；`uretprobe` 是其「办成了没有」的对称（画廊不单列）。**失败形态回指**：第 3 章失败画廊 card ⑦；路径/偏移错 attach 才报错（2.3）。**独立示例**：[`03-type-gallery/02-uprobe/`](../examples/chapter-04/03-type-gallery/02-uprobe/)。
 
 ### 3.10 cgroup/skb：按容器划线的网络 verdict（画廊③）
 
-**背景问题**：准入要按容器/进程组划线而不是按网卡——报文判决能跟着 cgroup 走吗？
+**背景问题**：准入要按容器/进程组划线而非按网卡——报文判决能跟着 cgroup 走吗？
 
-**代码**（下贴 `book/examples/chapter-04/03-type-gallery/03-cgroup-skb/cgroup_skb.bpf.c` 关键段）：`SEC("cgroup/skb")` 的 `int cg(struct __sk_buff *skb)`——`bpf_get_current_cgroup_id()` 演示 cgroup 上下文获取，恒 `return 1;`（1=放行 / 0=丢弃，裸二值非 `TC_ACT_*`）。
+**代码**（下贴 `book/examples/chapter-04/03-type-gallery/03-cgroup-skb/cgroup_skb.bpf.c` 关键段）：`SEC("cgroup/skb")` 的 `int cg(struct __sk_buff *skb)`——`bpf_get_current_cgroup_id()` 在场（独有维度见要点），恒 `return 1;`（1=放行 / 0=丢弃，非 `TC_ACT_*`）。
 
 **预期输出/挂载形态**：attach 对象是 cgroup fd（`bpf_program__attach_cgroup`，ingress/egress 两方向）；per-CPU map 读数按 CPU 分列、总数＝各 CPU 相加（预期输出示例 / 运行级待验证）。
 
-**类型要点**：三项同时被点亮——ctx 与 TC 同形 `__sk_buff`；返回值裸二值且是**加载期校验规则**（2.5：`return 2;` 加载即拒）；helper 面 `bpf_get_current_cgroup_id()` 是 cgroup 族独有维度。
+**类型要点**：三项同时被点亮——ctx 与 TC 同形 `__sk_buff`；返回值裸二值且是**加载期校验规则**（2.5：`return 2;` 加载即拒）；helper 面 `bpf_get_current_cgroup_id()` 为本类型独有。
 
-**与相邻类型的选择边界**：对 3.7——挂载对象 cgroup vs qdisc；对 3.11——同 ctx、verdict vs 拷贝字节数（1.2 对照本体）。**失败形态回指**：第 3 章失败画廊 card ①；「观测惯例 `return 0;` 带进 verdict 类＝丢弃全部流量」的预防针在 1.2。**独立示例**：[`03-type-gallery/03-cgroup-skb/`](../examples/chapter-04/03-type-gallery/03-cgroup-skb/)。
+**与相邻类型的选择边界**：对 3.7——挂载对象 cgroup vs qdisc；对 3.11——同 ctx、verdict vs 拷贝字节数（1.2 对照本体）。**失败形态回指**：第 3 章失败画廊 card ①；「`return 0;` 进 verdict 类＝全丢弃」见 1.2。**独立示例**：[`03-type-gallery/03-cgroup-skb/`](../examples/chapter-04/03-type-gallery/03-cgroup-skb/)。
 
 ### 3.11 socket filter：返回「拷几字节」的观测类（画廊④）
 
-**背景问题**：tcpdump 是怎么实现的？把过滤程序挂到某个 socket 上，内核把过路报文先喂给它——返回值决定拷什么给观察者。
+**背景问题**：tcpdump 怎么实现？过滤程序挂到某个 socket，内核把过路报文先喂给它——返回值决定拷什么给观察者。
 
 **代码**（下贴 `book/examples/chapter-04/03-type-gallery/04-socket-filter/socket_filter.bpf.c` 关键段）：`SEC("socket")` 的 `int sf(struct __sk_buff *skb)`，恒 `return 0;`——0=不投递给观测 socket，包本身不受影响。
 
 **预期输出/挂载形态**：`setsockopt(sock_fd, SOL_SOCKET, SO_ATTACH_BPF, &prog_fd, …)`——特有的 setsockopt 挂载，无 bpf_link 对应物；命中计数与实际投递无关（预期输出示例 / 运行级待验证）。
 
-**类型要点**：最古老的程序类型；ctx 与 TC/cgroup-skb 同形；返回值＝**接受拷贝的字节数**而非 verdict（0=该包对它不可见，报文照常走协议栈）——1.3 表「非 verdict」一格的本体；只读观测，不能丢包不能改包。
+**类型要点**：最古老的程序类型；ctx 与 TC/cgroup-skb 同形；返回值＝**接受拷贝的字节数**而非 verdict（0=该包对它不可见，报文照常走协议栈，1.3 表「非 verdict」本体）；只读观测，不能丢包不能改包。
 
 **与相邻类型的选择边界**：对 3.10——同 ctx 不同返回语义的最短对照；想在 socket 维度干预走 3.12/3.13。**失败形态回指**：第 3 章失败画廊 card ①。**独立示例**：[`03-type-gallery/04-socket-filter/`](../examples/chapter-04/03-type-gallery/04-socket-filter/)。
 
@@ -542,13 +540,13 @@ char LICENSE[] SEC("license") = "GPL";
 
 **背景问题**：XDP/TC 站在报文级，socket 级状态——两端地址端口、TCP 状态、`snd_cwnd`——谁看得见？
 
-**代码**（下贴 `book/examples/chapter-04/03-type-gallery/05-sockops/sockops.bpf.c` 关键段）：`SEC("sockops")` 的 `int so(struct bpf_sock_ops *ops)` 按事件码 `switch (ops->op)` 判别——`BPF_SOCK_OPS_PASSIVE_ESTABLISHED_CB`（服务端三次握手完成）计 key 0、`BPF_SOCK_OPS_ACTIVE_ESTABLISHED_CB`（客户端 connect 完成）计 key 1，`default: return 0;` 其余事件全交还默认路径。
+**代码**（下贴 `book/examples/chapter-04/03-type-gallery/05-sockops/sockops.bpf.c` 关键段）：`SEC("sockops")` 的 `int so(struct bpf_sock_ops *ops)` 按事件码 `switch (ops->op)` 判别——`BPF_SOCK_OPS_PASSIVE_ESTABLISHED_CB`/`BPF_SOCK_OPS_ACTIVE_ESTABLISHED_CB`（服务端/客户端连接建立）各计一个 key，`default: return 0;` 其余事件交还默认路径。
 
 **预期输出/挂载形态**：attach 到 cgroup（`BPF_CGROUP_SOCKOPS`），事件由内核 TCP 状态机驱动；`nc`/`curl` 触发两类建立计数（预期输出示例 / 运行级待验证）。
 
-**类型要点**：ctx 维度被点亮——`bpf_sock_ops` 的 socket 级字段直接可读，报文级类型没有的视角；返回值「1=已处理 / 0=交还默认」是**画廊教学约定**：内核实际消费面较窄——取值类回调（本机可复核出处 `include/net/tcp.h` 的 `tcp_call_bpf()`）返回 0 时取程序经 `sock_ops.reply` 传入的值、非 0 一律视为「未提供」，纯事件类回调（如本示例计数的两类 ESTABLISHED_CB）多忽略返回值；随内核版本演进，以所用内核源码为准——完整保守标注见 1.2 与 1.3 表，此处精简回指。
+**类型要点**：ctx 维度被点亮——`bpf_sock_ops` 的 socket 级字段直接可读（报文级类型没有的视角）；返回值「1=已处理 / 0=交还默认」是**画廊教学约定**：内核实际消费面较窄——取值类回调（出处 `include/net/tcp.h` 的 `tcp_call_bpf()`）返回 0 时取 `sock_ops.reply` 传入值、非 0 一律视为「未提供」，纯事件类回调多忽略；随内核版本演进以所用内核源码为准——完整保守标注见 1.2/1.3 表，此处精简回指。
 
-**与相邻类型的选择边界**：对 3.13——sockops 收 socket 进 sockmap、sk_msg 在转发路径判决，配对成体系；对 3.10——socket 级 vs 报文级。**失败形态回指**：第 3 章失败画廊 card ①。**独立示例**：[`03-type-gallery/05-sockops/`](../examples/chapter-04/03-type-gallery/05-sockops/)。
+**与相邻类型的选择边界**：对 3.13——sockops 收 socket 进 sockmap、sk_msg 判决转发，配对成体系；对 3.10——socket 级 vs 报文级。**失败形态回指**：第 3 章失败画廊 card ①。**独立示例**：[`03-type-gallery/05-sockops/`](../examples/chapter-04/03-type-gallery/05-sockops/)。
 
 ### 3.13 sk_msg：sockmap 上的转发判决（画廊⑥）
 
@@ -564,26 +562,26 @@ char LICENSE[] SEC("license") = "GPL";
 
 ### 3.14 LSM 与 netfilter：两类 verdict 决策点（画廊⑦⑧）
 
-**背景问题**：网络 verdict 管报文；「打开这个文件行不行」「过这条防火墙规则行不行」——对操作与对过点报文做裁决的是哪两类？两者同为 verdict 决策点，合并一 card 对照讲。
+**背景问题**：「打开这个文件行不行」「过这条防火墙规则行不行」——对操作与对过点报文做裁决的是哪两类？同为 verdict 决策点，合并对照。
 
-**代码**：下贴 [`07-lsm/lsm.bpf.c`](../examples/chapter-04/03-type-gallery/07-lsm/) 关键段——`SEC("lsm/file_open")` 的 `int BPF_PROG(lf, struct file *file)`，恒 `return 0;`（0=允许，只审计不拦截）；下贴 [`08-netfilter/netfilter.bpf.c`](../examples/chapter-04/03-type-gallery/08-netfilter/) 关键段——程序自带 `#define NF_ACCEPT 1`（uapi `netfilter.h` 的 #define，不在 BTF/vmlinux.h），`SEC("netfilter")` 的 `int nf(struct bpf_nf_ctx *ctx)` 恒 `return NF_ACCEPT;`。
+**代码**：下贴 [`07-lsm/lsm.bpf.c`](../examples/chapter-04/03-type-gallery/07-lsm/) 关键段——`SEC("lsm/file_open")` 的 `int BPF_PROG(lf, struct file *file)`，恒 `return 0;`（0=允许，只审计不拦截）；下贴 [`08-netfilter/netfilter.bpf.c`](../examples/chapter-04/03-type-gallery/08-netfilter/) 关键段——程序自带 `#define NF_ACCEPT 1`，`SEC("netfilter")` 的 `int nf(struct bpf_nf_ctx *ctx)` 恒 `return NF_ACCEPT;`。
 
 **预期输出/挂载形态**：LSM 三前提缺一 load 即拒——root＋`CONFIG_BPF_LSM=y`＋启动参数含 `lsm=bpf`（本机配置实证 =y、启动参数未启用，运行级待验证；`00-env/` 自检含检查项），load 后即进入该 hook 裁决链；netfilter 前提最轻（root＋内核 6.6+），`bpf_program__attach_netfilter(opts)` 显式指定协议族/hook 号/优先级；两目录读数各一行（预期输出示例 / 运行级待验证）。
 
-**类型要点**：LSM 的 ctx 是 hook 原型参数直列——`struct file *` 不经转接、内核对象直接可读，安全类的最大差别；与 fentry 镜共用 `BPF_PROG` 宏；裁决 0=允许/非 0=阻断，逐 hook 以 `include/linux/lsm_hook_defs.h` 为准。netfilter 的 ctx 是结构体 `bpf_nf_ctx{state, skb}`；`NF_ACCEPT`/`NF_DROP` 是 uapi `#define` 不在 BTF（同 `TC_ACT_OK`）。
+**类型要点**：LSM 的 ctx 是 hook 原型参数直列——`struct file *` 不经转接、内核对象直接可读，安全类的最大差别；与 fentry 镜共用 `BPF_PROG` 宏；逐 hook 裁决语义以 `include/linux/lsm_hook_defs.h` 为准。netfilter 的 ctx 是结构体 `bpf_nf_ctx{state, skb}`（本机 BTF 实证）；`NF_ACCEPT`/`NF_DROP` 是 uapi `#define` 不在 BTF（同 `TC_ACT_OK`）。
 
-**与相邻类型的选择边界**：同为 verdict 决策点故合卡——LSM 裁决「内核对象上的操作」（hook 全局生效），netfilter 裁决「过钩子点的报文」（显式选点）；按容器划线的网络准入回 3.10；完整可运行示例见第 9 章 `09-netfilter-go/`。**失败形态回指**：第 3 章失败画廊 card ①；LSM 前提缺失属预期失败。**独立示例**：[`03-type-gallery/07-lsm/`](../examples/chapter-04/03-type-gallery/07-lsm/) 与 [`08-netfilter/`](../examples/chapter-04/03-type-gallery/08-netfilter/)。
+**与相邻类型的选择边界**：合卡理由即同为 verdict 决策点——LSM 裁决「内核对象上的操作」（hook 全局生效），netfilter 裁决「过钩子点的报文」（显式选点）；按容器划线回 3.10；完整示例见第 9 章 `09-netfilter-go/`。**失败形态回指**：第 3 章失败画廊 card ①。**独立示例**：[`03-type-gallery/07-lsm/`](../examples/chapter-04/03-type-gallery/07-lsm/) 与 [`08-netfilter/`](../examples/chapter-04/03-type-gallery/08-netfilter/)。
 
 **教师视角**：画廊为什么用「同一事件五副眼镜」开篇？1.3 总表把差异压进了表格，而 ctx 差异、宏展开差异、读数差异不看实物永远停在表格层面——五个程序贴着同一事件逐镜 diff，三元组才从「背诵项」变成「看得见的字段」。读者最容易卡住的地方，是把「SEC 名字写错」当「类型选错」排错：SEC 串是 ELF 里的字符串，clang 不校验内容（2.3），拼错事件名、少一段、路径与偏移缺失时编译全过，load/attach 才报「查无此事件/符号」——现象与「类型选错」高度相似。分辨三步：先逐字符核对 SEC 串与 2.3 前缀表，再核对挂载目标是否存在（tracefs 事件目录、BTF 符号、二进制路径与偏移），最后才回头怀疑类型选型。
 
 **学生动手**：
 
-1. 逐目录 `make` 画廊 8 类（[`03-type-gallery/`](../examples/chapter-04/03-type-gallery/) 的 `01-` 至 `08-`）——全部 compile-only，验收口径是 8 个 `.bpf.o` 全部产出；同时读各目录 README 的「挂载方式与前提」，把每类加载前提抄进笔记。
-2. 跑锚点①读分镜计数：`make && sudo ./multi_observe`，另开终端跑几条 `ls`/`cat`，核对五行 `count` 一致、`last_ret` 三种语义、`name` 列只有三镜有值（预期输出示例 / 运行级待验证）。
-3. 把 14 类的返回值语义抄进自己的笔记——每类一行「返回什么算放行/算拷贝/被忽略」；抄完对照 1.3 表返回值列自查，两张口径对不上就是理解有洞。
+1. 逐目录 `make` 画廊 8 类（[`03-type-gallery/`](../examples/chapter-04/03-type-gallery/) `01-`–`08-`，compile-only，验收＝8 个 `.bpf.o` 产出）；读各目录 README「挂载方式与前提」，把加载前提抄进笔记。
+2. 跑锚点①读分镜计数：`make && sudo ./multi_observe`，另开终端跑几条 `ls`/`cat`，核对各行 `count` 一致、`last_ret` 三种语义（raw_tp 挂载性保守口径见 3.1）（预期输出示例 / 运行级待验证）。
+3. 把 14 类的返回值语义抄进笔记——每类一行「返回什么算放行/算拷贝/被忽略」，对照 1.3 表自查，口径对不上即理解有洞。
 
 检查点——先自答，再看提示：
 
-1. 同一个 `return 1;`，在 cgroup/skb 与 sockops 里含义分别是什么？（提示：前者是网络 verdict——1 放行/0 丢弃，加载期值域校验（2.5）；后者是回调应答——1=已处理、0=交还默认，且是画廊教学约定、内核实际消费面较窄（3.12 与 1.2）。）
-2. 3.4/3.5 拆两卡而表合一行，3.14 合一卡而表各一行——本章靠什么口径保证「数 card 得 14、数表行也得 14」？（提示：总数相同、合并维度不同——表按程序类型合（fentry/fexit 同属 TRACING），card 按触发时机拆、按职责合（lsm/netfilter 同为 verdict 决策点）；对位看维度，勿数条数。）
+1. 同一个 `return 1;`，在 cgroup/skb 与 sockops 里含义分别是什么？（提示：前者是网络 verdict——1 放行/0 丢弃，加载期值域校验（2.5）；后者是回调应答——1=已处理、0=交还默认，画廊教学约定、内核实际消费面较窄（3.12 与 1.2）。）
+2. 3.4/3.5 拆两卡而表合一行，3.14 合一卡而表各一行——本章靠什么保证「数 card 得 14、数表行也得 14」？（提示：完整口径见三节开头互认——表按程序类型合、card 按触发时机拆/按职责合，总数相同、维度不同，对位看维度勿数条数。）
 3. 一个 sk_msg 程序加载成功却从不触发，第一步查什么？（提示：体系性前提——sockmap 里有没有 socket（sockops 是否已收进连接）、是否 attach 到正确的 sockmap/sockhash（3.13）；「报文没到判决点」先于「程序写错」。）
