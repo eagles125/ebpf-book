@@ -1122,17 +1122,19 @@ git commit -m "docs(ch04): 三、类型画廊十四类走读"
 
 ### Task 8: 正文「四、实战：为任务选对类型并挂上钩子」
 
+- [x] Task 8: 正文「四、实战：为任务选对类型并挂上钩子」
+
 **tasks.md 条目**：「Main-agent review to ensure the chapter explains selection boundaries, not just hook taxonomy.」（实战落点前置）＋「Write full chapter prose covering …」（实战部分）。
 
 **Files:**
 - Modify: `book/chapters/04-program-types-and-hook-points.md`
 
-- [ ] **Step 1: 写「四、实战」（6–8k，5.1 五层环境紧凑版 3–4k + 5.2 代码走读 3–4k）**——5.1 五层：依赖（内核/BTF/tracefs/CONFIG_BPF_LSM 与 lsm=bpf/netfilter 6.6+/权限矩阵[非 root 只读、root 全家桶]→00-env 输出示例）；编译（clang/bpftool/libbpf 版本与验证命令）；部署（挂载即部署：tracepoint/kprobe/fentry 挂上即生效，XDP/TC 需接口[lo 或 veth]；安全警告统一措辞；多副眼镜同挂的注意点）；运行（`sudo ./multi_observe`、`sudo ./xdp_tc` 与制造流量命令）；效果与验证状态约定（分镜计数/双计数对照的预期输出示例，标注「运行级待验证」）。5.2 四段式：教师视角引入（选型是本章的最终产出：三步法——要什么数据→谁产生它→哪个类型的 ctx 给它）→ 核心代码原理讲解（走读 multi_observe.c 的 attach 循环与分镜读数、xdp_tc.c 的两种 attach 路径对照）→ 学生动手（跑两锚点、改镜编号加一镜[kretprobe]、观察 openat2 失败路径 ret<0 的计数）→ 检查点（3 问+提示，第 1 问指向「为什么五镜计数不完全相等」[raw_tp 不读文件名/计数时点不同]）。
-- [ ] **Step 2: 核对（硬性）**
+- [x] **Step 1: 写「四、实战」（6–8k，5.1 五层环境紧凑版 3–4k + 5.2 代码走读 3–4k）**——5.1 五层：依赖（内核/BTF/tracefs/CONFIG_BPF_LSM 与 lsm=bpf/netfilter 6.6+/权限矩阵[非 root 只读、root 全家桶]→00-env 输出示例）；编译（clang/bpftool/libbpf 版本与验证命令）；部署（挂载即部署：tracepoint/kprobe/fentry 挂上即生效，XDP/TC 需接口[lo 或 veth]；安全警告统一措辞；多副眼镜同挂的注意点）；运行（`sudo ./multi_observe`、`sudo ./xdp_tc` 与制造流量命令）；效果与验证状态约定（分镜计数/双计数对照的预期输出示例，标注「运行级待验证」）。5.2 四段式：教师视角引入（选型是本章的最终产出：三步法——要什么数据→谁产生它→哪个类型的 ctx 给它）→ 核心代码原理讲解（走读 multi_observe.c 的 attach 循环与分镜读数、xdp_tc.c 的两种 attach 路径对照）→ 学生动手（跑两锚点、改镜编号加一镜[kretprobe]、观察 openat2 失败路径 ret<0 的计数）→ 检查点（3 问+提示，第 1 问指向「为什么五镜计数不完全相等」[raw_tp 不读文件名/计数时点不同]）。
+- [x] **Step 2: 核对（硬性）**
 
 Run: `grep -c "^### 5\." book/chapters/04-program-types-and-hook-points.md`
 Expected: `2`。
-- [ ] **Step 3: 提交**
+- [x] **Step 3: 提交**
 
 ```bash
 git add book/chapters/04-program-types-and-hook-points.md
