@@ -711,3 +711,103 @@ XDP 与 TC 已同挂 lo，制造流量（如 ping 127.0.0.1、curl 本机服务�
 3. 任务改为「统计本机 TCP 连接建立次数」，用三步法落到哪里？（提示：要什么数据——连接建立事件；谁产生它——内核协议栈 connect 路径；哪个 ctx——追踪族看内核函数，fentry/kprobe 挂 `tcp_v4_connect` 一类符号（1.4「内核函数」叶子），符号以本机 BTF 为准。）
 
 **独立示例**：[`01-multi-observe/`](../examples/chapter-04/01-multi-observe/)（追踪类锚点：五镜对照与排错表）与 [`02-xdp-tc/`](../examples/chapter-04/02-xdp-tc/)（网络类锚点：两种 ctx 对照与两条挂载路线）；环境自检见 [`00-env/`](../examples/chapter-04/00-env/)；cgroup/LSM 等画廊类的部署前提已在三节各 card 的「预期输出/挂载形态」覆盖（[`03-type-gallery/`](../examples/chapter-04/03-type-gallery/)），不重复展开。
+
+## 可视化：类型谱系与挂载路径
+
+一节的两层模型与四节的五镜实操，各收成一张文本图。两图均为示意，图内读数与形态沿章首验证状态约定（预期输出示例 / 运行级待验证）。
+
+**图 1：`bpf_prog_type → bpf_attach_type → 挂载点` 三层图**（1.1 两层模型的图形版）：
+
+```text
+第一层  bpf_prog_type（身份）：ctx 布局＋辅助函数面＋返回值语义
+═══════════ 加载层（BPF_PROG_LOAD，第 3 章验证器守门）═══════════
+第二层  bpf_attach_type＋挂载参数（工位）：哪类对象、哪个方向、什么模式
+═══════════ 挂载层（BPF_LINK_CREATE／attach 一族，2.4）═══════════
+第三层  挂载点（事件现场）：tracefs 事件｜内核符号｜cgroup｜网卡｜sockmap｜安全 hook
+```
+
+**kprobe 族展开例——一个身份、三条挂载路线**（1.1 实例第一条）：
+
+```text
+BPF_PROG_TYPE_KPROBE（ctx 同为 pt_regs，1.3 表）
+  ├─ SEC("kprobe/<符号>")     → 内核函数入口（按符号解析，3.3）
+  ├─ SEC("kretprobe/<符号>")  → 同一符号的返回处（tracefs 生成返回事件，3.8）
+  └─ SEC("uprobe")            → 用户态二进制＋偏移（挂载期补参数，显式，3.9）
+```
+
+怎么读图 1：三层自上而下对应挂载的三个问题——「程序是什么」（第一层，加载进闸）、「挂到哪类对象、哪个方向」（第二层，挂载命令的属性）、「事件现场在哪」（第三层，触发源）。两条分隔线就是两次拒绝的落点：身份错在第一层被验证器拒掉（第 3 章），工位错在第二层才报（排错节）——「加载层只需要知道身份，挂载层才知道工位」（1.1）在图上即两条线。多数「换挂载点」在图上是跨行移动：身份跟着换、代码重写；kprobe 族是同一身份内的例外面——三条路线只动第二、三层，ctx 一个字不改。
+
+**图 2：同一事件五副眼镜的数据流**（锚点①，3.1 全文代码的图形版）：
+
+```text
+用户进程 openat("/etc/ld.so.cache")
+   ▼
+进入内核 → do_sys_openat2(dfd, filename, how)（签名本机 BTF 实证，2.4）
+   ▼
+同一调用路径上的五个钩子（SEC 名携带挂载信息，自动挂载，2.3）
+   [tracepoint] sys_enter_openat2   ctx=typed 布局（args[1]=filename）
+   [raw_tp    ] sys_enter_openat2   ctx=原始 u64 数组（syscall 类 (regs, id)）
+   [kprobe    ] do_sys_openat2      ctx=pt_regs（BPF_KPROBE 解包）
+   [fentry    ] do_sys_openat2      ctx=BTF 原型直列
+   [fexit     ] do_sys_openat2      ctx=BTF 原型＋尾随 ret
+   ▼
+五镜各写分镜 map 自己的槽（ARRAY 5 槽：count／last_name／last_ret）
+   ▼
+loader（multi_observe.c）每秒快照打印五镜读数（5.1 第五层）
+```
+
+怎么读图 2：五个钩子是**并列的五次挂载**，不是流水线五站——同一次 openat2 让五段程序各执行一遍、互不干扰，唯一交汇是分镜 map，loader 只从 map 读数。五段代码读同一现场、拿五种 ctx——1.3 表 ctx 列的图形版，类型化程度排成谱系（3.1 五镜对照讲解）；`count` 一致与 `name` 三镜有值都是**条件口径**——挂载成功的镜（raw_tp 镜的保守口径见 3.1）。
+
+## 常见问题与排错
+
+5.1 备齐环境、5.2 走通正常路径，本节收「非正常路径」：把全章触碰过的类型规则反转成速查表。口径沿第 3 章排错节：**表中日志均为预期日志 / 运行级待验证**（具体文本随内核与 libbpf 版本演进），查表认「症状 → 规则 → 修复」的映射，不背文本。
+
+| 症状（预期日志 / 运行级待验证） | 触碰的类型规则 | 修复方向 |
+|---|---|---|
+| SEC 名写错，加载报 `unknown prog type`／`unknown attach type` 一类（教学示例口径） | SEC 前缀决定程序类型与挂载类型（2.3）——前缀解析不出合法值，clang 零校验、加载期才爆 | 逐字符对照 2.3 前缀表核对 SEC 串 |
+| ctx 字段访问被拒：`invalid bpf_context access off=… size=…` | 字段不在本类型 `is_valid_access` 申报表内——两层皮申报面（2.2；机制正典第 3 章） | 回 1.3 表 ctx 列核对字段面；越界数据换 probe 系辅助函数（第 3 章界限） |
+| fentry/fexit 加载报 ENOENT 类：目标函数不在本机 BTF——`do_unlinkat` 因内联缺席即本机实证 | fentry/fexit 原型直接依赖本机 BTF 签名（2.4） | `bpftool btf dump` 核对在场性（2.4 两步命令）；换未内联符号 |
+| fentry/fexit 加载报 EINVAL 类：签名不匹配——`vfs_unlink` 第 4 参本机为 `struct delegated_inode *`、上游 6.x 为 `struct inode **`，漂移实证 | 同上：签名漂移即拒——校验在干活，不是 bug（2.4） | 按本机 BTF 改写程序原型；跨版本部署预期重验 |
+| attach 报 ENOENT／「查无此事件」：tracefs 缺对应事件；raw_tp 的 per-syscall 事件可能无 raw_tp 对应物（静态 tracepoint 与 ftrace 事件两条注册路径） | 挂载点按名查找，未注册即找不到——若遇 ENOENT，正是挂载查找路径差异的教学点（条件化口径，正典 3.1） | 挑本机 tracefs 事件表实际存在的事件，或换 tracepoint 路线 |
+| LSM 程序 load 被拒（本机：`CONFIG_BPF_LSM=y` 已满足、启动参数未含 `lsm=bpf`） | 三前提缺一不可：root＋`CONFIG_BPF_LSM=y`＋`lsm=bpf`（1.3 表；`00-env/` 检查项） | 以 `lsm=bpf` 启动内核并配合 root；无特权退回编译级 |
+| XDP attach 失败（驱动无 native 支持一类） | flags=0 按 native 尝试，失败**并不自动回退** generic（SKB）模式（5.1 保守口径） | 显式 SKB 模式：`bpf_xdp_attach(ifindex, prog_fd, XDP_FLAGS_SKB_MODE, NULL)`（libbpf 1.3 头文件实证，随版本演进以所用头文件为准） |
+| 加载报 `-EPERM`（非 root 且 `unprivileged_bpf_disabled=2`） | 权限档位先于一切类型规则——程序没进验证（第 3 章排错节第③组判别流程） | root／特权档；无特权环境退回编译级自查（5.1 权限矩阵） |
+
+判别流程一句话：先问权限（`-EPERM`——没进验证）、再问挂载目标（SEC 前缀与事件／符号在场性——「查无此物」）、最后读类型规则（ctx 申报、白名单、BTF 签名）。与第 3 章排错节叠用：那边精读「验证器拒绝」的日志信号，这边把「类型选错／挂错」的症状归位；「SEC 写错」与「类型选错」现象高度相似，分辨三步见三节末教师视角。
+
+## 课后扩展任务
+
+四节的三步法走通了「选对」的路径，两项课后扩展任务再练两个方向：任务 1 先选型后论证，任务 2 从错位诊断归位——与第 3 章课后任务「修复＋诊断」同构，考察面换成类型系统。任务表如下（与 [`exercises/`](../examples/chapter-04/exercises/) 总览表逐字一致；两项为计划内资产，随后续批次落地，按章首先例一并预告）：
+
+| 任务 | 扩展维度 | 任务描述 | 参考实现 |
+|---|---|---|---|
+| 1 | 选型决策 | 三个场景（容器内文件打开审计、TCP 连接建立观测、内核函数入口参数抓取）各选程序类型与挂载点并给出选型论证；参考实现按正确选型合并为单个可编译对象 | `book/examples/chapter-04/exercises/01-type-selection/` |
+| 2 | 类型错位修复 | 一段报文解析逻辑被放进 kprobe 程序且 ctx 声明为 `xdp_md`——编译通过但加载预期被拒；诊断并把类型与 SEC 归位 | `book/examples/chapter-04/exercises/02-type-mismatch/` |
+
+**任务 1（选型决策）**：三个场景各对应 1.4 决策树的不同叶子，先写选型论证再动代码——论证须过两道工序：三元组三问（1.2）与「怎么挂」（2.3 自动／显式之分）；「TCP 连接建立观测」与 5.2 检查点第 3 问同源，可直接对照三步法落点。参考实现见 [`exercises/01-type-selection/`](../examples/chapter-04/exercises/01-type-selection/)。
+
+**任务 2（类型错位修复）**：报文解析逻辑放进 kprobe 程序、ctx 却声明为 `xdp_md`——三元组 ctx 项错位（1.2 常见失败点小结）：字段面对不上，编译器无从比对、加载期才拒（1.4 教师视角「三道关卡都不在编译期」）；按排错节判别流程定位，把类型与 SEC 一并归位。参考实现见 [`exercises/02-type-mismatch/`](../examples/chapter-04/exercises/02-type-mismatch/)。
+
+**防剧透约定**沿第 3 章先例：任务描述与提示在前、参考实现思路独立成节放在后部；构建与主示例同构（各目录 `make`），验证状态以各目录 README 为准（编译级／运行级口径见 5.1）。
+
+## 总结
+
+本章正面回答了导读提出的问题——**同一个 BPF 程序为什么不能到处挂？** 答案落在类型系统上：程序类型决定三元组（ctx 布局、辅助函数面、返回值语义，1.2），三元组跟着挂载点走；attach type 再把同一类型下的「方向与工位」细分（1.1）。这套决定不在文档约定里、在内核实现里：注册表编译期展开每类型的 ops（2.1）、两层皮＋加载期改写保住 UAPI 稳定（2.2）、SEC 前缀解析落进 ELF（2.3）、`bpf_link` 与 BTF 签名校验管住挂载（2.4）、返回值校验收口输出侧（2.5）。现场与产出各就其位：三节十四类画廊逐类 diff，四节把选型收成三步法，可视化与排错收成两张图、一张速查表。
+
+第 2、3 章埋下的预告至此全部收口：
+
+| 预告 | 埋线 | 本章兑现 |
+|---|---|---|
+| ① | 第 2 章 1.4 末：完整谱系随内核版本增长，「第 4 章逐类展开」 | 1.3 十四类总对比表＋三节画廊逐类走读 |
+| ② | 第 3 章末桥：逐类展开，随身带 2.3 类型表（字典）与排错速查表（地图） | 字典＝1.3 表＋2.3 前缀表；地图＝排错节速查表与第 3 章「信号 → 根因」映射叠用 |
+| ③ | 第 3 章失败画廊 card ⑥：`bpf_get_current_pid_tgid()` 不在 XDP 白名单的反例 | 1.2 正面版——追踪族白名单之内可用，正反拼合「helper 面跟着执行现场走」 |
+
+通往后续章节的桥，本章留了五座：**第 5 章**（eBPF 子系统内核代码结构）把 2.1 的一行宏展开成源码地图；**第 6 章**（JIT 编译与性能优化）接手生命周期第三步——验证通过的字节码变成本机指令；**第 15 章**（XDP 深度实战）在 3.6 只开一扇门处展开驱动层模式、性能与真实部署；**第 16 章**（TC 与 eBPF）沿锚点②的 netlink 路线深入 clsact 体系；**第 20 章**（CO-RE）补全 `vmlinux.h` 与 BTF 的完整故事——fentry/fexit 依赖的本机 BTF 只是它的一个应用面。
+
+## 本章参考来源
+
+- Linux kernel documentation：BPF program types 与 attach 相关篇目（`Documentation/bpf/`——程序类型、挂载语义与 `verifier.rst` 等相邻文档的上游基准；随内核版本演进，以所用内核源码为准）；`include/uapi/linux/bpf.h` 枚举与辅助函数原型注释。
+- libbpf 头文档：`bpf_helpers.h`（SEC 命名法权威头注释，2.3 引）、`bpf_tracing.h`（`BPF_PROG`／`BPF_KPROBE`／`BPF_KRETPROBE` 宏文档）、`libbpf.h`（挂载 API——`bpf_program__attach_*` 一族与 `bpf_xdp_attach`，本机 1.3.0 头文件实证）。
+- LWN.net：XDP、LSM（BPF LSM）、fentry/fexit（BPF trampoline）系列文章（lwn.net）。
+- Andrii Nakryiko：libbpf 系列文章（SEC 命名与 libbpf 编程、`bpf_link` 挂载模型、libbpf 1.0 迁移、BTF/CO-RE；nakryiko.com）。
+- ebpf.top：BPF 入门系列相关文章（程序类型与挂载点的中文讲解）。
