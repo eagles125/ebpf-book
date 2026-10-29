@@ -585,3 +585,129 @@ char LICENSE[] SEC("license") = "GPL";
 1. 同一个 `return 1;`，在 cgroup/skb 与 sockops 里含义分别是什么？（提示：前者是网络 verdict——1 放行/0 丢弃，加载期值域校验（2.5）；后者是回调应答——1=已处理、0=交还默认，画廊教学约定、内核实际消费面较窄（3.12 与 1.2）。）
 2. 3.4/3.5 拆两卡而表合一行，3.14 合一卡而表各一行——本章靠什么保证「数 card 得 14、数表行也得 14」？（提示：完整口径见三节开头互认——表按程序类型合、card 按触发时机拆/按职责合，总数相同、维度不同，对位看维度勿数条数。）
 3. 一个 sk_msg 程序加载成功却从不触发，第一步查什么？（提示：体系性前提——sockmap 里有没有 socket（sockops 是否已收进连接）、是否 attach 到正确的 sockmap/sockhash（3.13）；「报文没到判决点」先于「程序写错」。）
+
+## 四、实战：为任务选对类型并挂上钩子
+
+一至三节走完类型系统、内核机制与十四类实物，本节收拢成本章最终产出：**为任务选对类型，并把它挂上钩子**。5.1 按五层把两个集成锚点的环境备齐（层序沿第 3 章四节先例）；5.2 以四段式走读两个锚点的 loader 代码与读数，把 1.4 决策树兑现成可操作的三步法。
+
+### 5.1 五层环境：两个锚点的运行前提
+
+**第一层：依赖环境。**内核 5.10+ 且 `CONFIG_DEBUG_INFO_BTF=y`（`vmlinux.h` 由 BTF 生成，缺失则编译停步，自建见附录 C）；tracefs（`/sys/kernel/tracing`）是 tracepoint/raw_tp 挂载点的运行时载体，需 root 读取；LSM 画廊条目另有 `CONFIG_BPF_LSM=y`＋启动参数含 `lsm=bpf` 双前提（本机前者实证 =y、后者未启用）；netfilter 需内核 6.6+。权限矩阵两档：非 root 只能编译级（本机 `unprivileged_bpf_disabled=2`）；root 可加载与挂载，XDP/TC 另需 `CAP_NET_ADMIN`。逐项自检：`bash book/examples/chapter-04/00-env/check-env.sh`（[`00-env/`](../examples/chapter-04/00-env/)，无 root 也可运行）按三段输出并附本章特有检查；前两段本机全 OK，后两段实测如下（本地验证）：
+
+```text
+== 权限分级（加载级/运行级） ==
+WARN  非 root 且无 CAP_BPF（unprivileged_bpf_disabled=2）：
+      - 可以完成：编译级验证（make / scripts/verify-build.sh）
+      - 不能完成：加载与挂载 XDP/TC/tracepoint、LSM 程序、bpftool prog/map 观察（需 sudo）
+OK    lo 接口存在（XDP/TC 锚点程序的推荐挂载目标）
+== 第 4 章特有检查（tracefs 与 LSM） ==
+WARN  tracefs 需 root 读取，加载级验证时使用（/sys/kernel/tracing/events 不可见：未挂载或非 root 不可遍历；编译级不受影响）
+OK    CONFIG_BPF_LSM=y：LSM 类型运行前提在内核侧满足（还需 lsm=bpf 启动参数与 root）
+INFO  启动参数未见 lsm=bpf：LSM 程序运行级还需以 lsm=bpf 启动内核并配合 root（不影响编译级）
+
+结论：编译级依赖齐备；加载级/运行级能力（含 tracefs 可读性与 lsm=bpf）见上方分级输出。
+```
+
+**第二层：编译环境。**四件工具一条链：clang/LLVM 18.x 以 `-target bpf` 编 BPF C，libbpf-dev 提供头文件与链接库，bpftool 生成 `vmlinux.h` 与 skeleton，gcc＋make 构建 loader。版本自检（本地验证）：
+
+```bash
+clang --version | head -1          # Ubuntu clang version 18.1.3
+bpftool version                    # bpftool v7.7.0（using libbpf v1.7 为其自带运行时）
+dpkg -s libbpf-dev | grep ^Version # Version: 1:1.3.0-2build2——编译 loader 以此为准
+```
+
+**第三层：部署环境。**追踪类是「挂载即部署」：tracepoint/kprobe/fentry/fexit 的 SEC 名携带全部挂载信息，load 通过后 attach 即生效（2.3「自动」列）——没有规则下发，loader 进程本身就是全部控制面。XDP/TC 需要一个网络接口作挂载目标，本章固定 lo（或自建 veth）。安全警告（本章示例统一措辞）：
+
+> XDP 程序直接作用于网卡收包路径——本章示例只应挂在 veth 或 lo 上实验；切勿在不了解影响前挂到生产物理网卡。
+
+XDP 挂载模式按保守口径：flags=0 在主流内核按 native 尝试、失败并不自动回退 generic（SKB）模式——lo 有无驱动原生路径随内核版本，实验时需显式指定 SKB 模式，或以所用内核实测为准。多镜同挂注意点：fentry/fexit 按本机 BTF 核签名、漂移即拒（2.4）；raw_tp 的 per-syscall 事件可能无对应物、attach 报 ENOENT（3.1 保守口径）；锚点②同接口同模式已挂他程序、TC 同 handle/priority 均会 attach 失败（锚点② README）。
+
+**第四层：运行环境。**两锚点各一条命令链（Ctrl-C 退出即卸载：link 逐个销毁、TC filter 显式 detach——第 2 章 4.4 生命周期回指）：
+
+```bash
+# book/examples/chapter-04/01-multi-observe/：追踪类锚点，五镜对照
+cd book/examples/chapter-04/01-multi-observe && make && sudo ./multi_observe
+# book/examples/chapter-04/02-xdp-tc/：网络类锚点，XDP+TC 同挂 lo
+cd book/examples/chapter-04/02-xdp-tc && make && sudo ./xdp_tc
+```
+
+制造流量：锚点①另开终端跑几条 `ls`/`cat`（凡打开文件的调用都走统一事件）；锚点②用走 lo 的流量，如 `ping 127.0.0.1`、`curl 本机服务`。
+
+**第五层：运行效果。**锚点①分镜读数（预期输出示例 / 运行级待验证，摘自锚点① README）：
+
+```text
+五副眼镜已挂上 openat2，随便跑几条命令（如 ls、cat）观察计数……
+  [tracepoint] count=42     last_ret=0    name=/etc/ld.so.cache
+  [raw_tp   ] count=42     last_ret=437  name=(本镜不读文件名)
+  [kprobe   ] count=42     last_ret=0    name=/usr/bin/ls
+  [fentry   ] count=42     last_ret=0    name=/etc/ld.so.cache
+  [fexit    ] count=42     last_ret=3    name=(本镜不读文件名)
+----
+```
+
+解读按 3.1 保守口径条件化：**挂载成功的镜** `count` 一致——同一事件；raw_tp 镜若因第三层的 ENOENT 未挂上，loader 失败分支即中止（注释该镜重跑，其余四镜读数不受影响）；`last_ret` 同列不同义、`name` 列只有三镜有值——各镜只取自己类型下拿得到的信息。锚点②双计数对照（预期输出示例 / 运行级待验证，摘自锚点② README）：
+
+```text
+XDP 与 TC 已同挂 lo，制造流量（如 ping 127.0.0.1、curl 本机服务）观察对照……
+  [xdp      ] packets=128      udp=12
+  [tc       ] packets=126      udp=12
+----
+```
+
+`udp` 两行应一致（同一段流量两挂载点各记一笔）；`packets` 接近但不必然相等——两挂载点可见报文的时机与集合有细微差别，差异本身是教学点。验证状态约定沿用章首：凡加载与运行的效果一律「预期输出示例 / 运行级待验证」，编译级结果才是本机可验证的事实。
+
+### 5.2 代码走读：三步法与两条挂载路线
+
+**教师视角**：选型是本章的最终产出，但「选对」不靠背表——1.4 决策树给的是路线，落地靠三步法：**要什么数据**（事件字段、函数返回值、报文本体还是 skb 元数据）→ **谁产生它**（内核函数、静态埋点、网卡驱动还是协议栈入口）→ **哪个类型的 ctx 给它**（回 1.3 表 ctx 列对三元组）。两个锚点即两次完整演练：观测 openat2 是追踪任务，落到锚点①的五镜对照；数 lo 上的包是网络任务，落到锚点②的双 ctx 对照。读者容易卡住的地方：选型只回答「程序是什么」，第二问「怎么挂」紧随其后——2.3 的自动/显式之分正有两个极端实物：锚点①五个 SEC 全自动、一个循环挂完；锚点②一个 loader 并存两条挂载路线。
+
+**核心代码走读。**先看锚点①的 attach 循环（`book/examples/chapter-04/01-multi-observe/multi_observe.c`，progs[] 五项赋值略）：
+
+```c
+    for (int i = 0; i < 5; i++) {
+        links[i] = bpf_program__attach(progs[i]);
+        if (!links[i]) {
+            fprintf(stderr, "attach %s 失败（需 root/特权档；fentry 还需签名匹配）\n",
+                    LENS_NAMES[i]);
+            err = 1;
+            goto out;
+        }
+    }
+```
+
+五个 SEC 全在 2.3 的「自动」列：挂载信息编译期就在 SEC 名里，loader 不含任何逐类型挂载代码——一个通用 `bpf_program__attach()` 让 libbpf 按 SEC 前缀分派到各自路径（tracefs 事件、内核符号、tracing link、原始 tracepoint）；任何一镜失败即 `goto out` 统一销毁已挂 link，是 2.4 末「逐个挂载、失败即清理」的实现本体。选型收益在此兑现：换观测对象只需改 SEC 名，循环一行不动——「类型决定挂载方式」从表格变成五行循环。
+
+再看锚点②的两条 attach 路径（`book/examples/chapter-04/02-xdp-tc/xdp_tc.c`，错误分支略）：
+
+```c
+    /* XDP 挂载：驱动层 hook，返回 bpf_link */
+    xdp_link = bpf_program__attach_xdp(xdp->progs.xdp_entry, (int)ifindex);
+
+    /* ……中略：TC skeleton 的 open/load…… */
+
+    /* TC 挂载：先建 clsact qdisc（已存在返回 -EEXIST，视为成功），再绑 ingress */
+    {
+        LIBBPF_OPTS(bpf_tc_hook, hook, .ifindex = ifindex,
+                    .attach_point = BPF_TC_INGRESS);
+        LIBBPF_OPTS(bpf_tc_opts, opts, .handle = 1, .priority = 1,
+                    .prog_fd = bpf_program__fd(tc->progs.tc_entry));
+        if (bpf_tc_hook_create(&hook) != 0 && errno != EEXIST) { …略… }
+        hook.attach_point = BPF_TC_INGRESS;
+        if (bpf_tc_attach(&hook, &opts)) { …略… }
+    }
+```
+
+两侧解析逻辑逐行同构（3.6/3.7），差异全在「站在哪、怎么挂」：XDP 一次调用返回 `bpf_link`——fd 化的挂载关系，进程退出即卸载（2.4）；TC 先 `bpf_tc_hook_create` 建 clsact、再 `bpf_tc_attach` 绑 ingress，退出时 `bpf_tc_detach` 显式摘 filter、qdisc 留置无害——loader 末尾不对称的清理代码就是两条路线生命周期的实物对照。三步法第③步在网络类的直接后果：ctx 选 `xdp_md` 还是 `__sk_buff`，挂载 API 跟着分叉。
+
+**学生动手**：
+
+1. 跑通两锚点并读数：按 5.1 第四层命令链运行两锚点并制造流量，对照第五层两块输出读数（预期输出示例 / 运行级待验证）。
+2. 给锚点①加第六面镜：把 3.8 的 kretprobe 镜并入 `multi_observe.bpf.c`——新增 `SEC("kretprobe/do_sys_openat2")` 的 `BPF_KRETPROBE` 镜（key=5，`v->last_ret = ret`），分镜映射 `max_entries` 改 6，loader 侧 `LENS_NAMES`/`progs[]`/`links[]` 与循环上界同步加一。预期编译通过（本机可验）；加载级经 tracefs 生成返回事件（3.8，运行级待验证）。
+3. 观察失败路径：跑一条必败的打开（如 `cat /no-such-file`），看 fexit 镜 `last_ret` 变为负错误码（-2=ENOENT），成功路径为 fd 正值（预期输出示例 / 运行级待验证）——画廊①的 `ret >= 0` 分桶在这里即「盯住 fexit 一列」。
+
+检查点——先自答，再看提示：
+
+1. 锚点①跑起来后，为什么五镜计数不完全相等？（提示：分列作答。`count` 列：只有**挂载成功的镜**才计数——raw_tp 镜可能因事件无对应物而挂载失败（3.1 保守口径）；挂载成功的镜同读一事件、读稳后一致，瞬时个位数差来自**计数时点**错位（每秒逐镜读映射）。`name` 列：raw_tp/fexit 两镜**不读文件名**；`last_ret` 列：同列不同义——「不完全相等」多数在这两列。）
+2. 锚点②的 `udp` 两行一致、`packets` 接近但不必然相等，各说明什么？（提示：`udp` 一致——同一段流量两个挂载点各记一笔；`packets` 有差——XDP 站驱动层、TC 站协议栈入口，可见报文的时机与集合有细微差别（3.6/3.7），以实测为准。）
+3. 任务改为「统计本机 TCP 连接建立次数」，用三步法落到哪里？（提示：要什么数据——连接建立事件；谁产生它——内核协议栈 connect 路径；哪个 ctx——追踪族看内核函数，fentry/kprobe 挂 `tcp_v4_connect` 一类符号（1.4「内核函数」叶子），符号以本机 BTF 为准。）
+
+**独立示例**：[`01-multi-observe/`](../examples/chapter-04/01-multi-observe/)（追踪类锚点：五镜对照表与排错表）与 [`02-xdp-tc/`](../examples/chapter-04/02-xdp-tc/)（网络类锚点：两种 ctx 对照表与两种挂载路线）；环境自检见 [`00-env/`](../examples/chapter-04/00-env/)；cgroup/LSM 等画廊类的部署前提已在三节各 card 的「预期输出/挂载形态」覆盖（[`03-type-gallery/`](../examples/chapter-04/03-type-gallery/)），不重复展开。
