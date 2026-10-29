@@ -8,7 +8,7 @@ base-ref: c9ae92e75a8ba0d5cfbde846f1f7660598f07d75
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**目标:** 将第 4 章《eBPF 程序类型与钩子点深入》从零写为 35–52k 字符的完整教学章节（机制章 + 类型画廊实战化），并落地 `book/examples/chapter-04/` 全部独立示例资产（00-env + 2 个集成锚点「同一事件五副眼镜」「同一报文两种 ctx」+ 类型画廊 8 类 compile-only + scripts 编译级验证）与 2 项课后练习的完整可编译参考实现（含防剧透 README）。
+**目标:** 将第 4 章《eBPF 程序类型与钩子点深入》从零写为 35–54k 字符的完整教学章节（机制章 + 类型画廊实战化），并落地 `book/examples/chapter-04/` 全部独立示例资产（00-env + 2 个集成锚点「同一事件五副眼镜」「同一报文两种 ctx」+ 类型画廊 8 类 compile-only + scripts 编译级验证）与 2 项课后练习的完整可编译参考实现（含防剧透 README）。
 
 **架构:** `01-multi-observe`（一个对象 5 个程序同挂 openat2 事件：tracepoint/raw_tp/kprobe/fentry/fexit，共享分镜 map）承载「同一事件多副眼镜」教学主轴；`02-xdp-tc`（XDP 与 TC 同挂 lo）承载「同一报文两种 ctx」；`03-type-gallery/` 8 类 compile-only 目录承载目录级覆盖；正文按「完整章节模板」组织为 类型系统→内核注册机制→画廊逐类→实战选型 四段；课后练习（选型决策、类型错位修复）各带完整参考实现；`scripts/verify-build.sh` 做单章编译级汇总验证。
 
@@ -28,7 +28,7 @@ base-ref: c9ae92e75a8ba0d5cfbde846f1f7660598f07d75
 1. **语言**：全书与全部代码注释使用中文（`Language: zh-CN`）；术语遵循 `book/STYLE.md`（map=映射、helper=辅助函数、program type=程序类型、attachment point=挂载点）；术语首次出现用「英文（中文解释）」或「中文（English）」格式。
 2. **验证策略（硬性验收）**：编译级真实验证在本机执行——clang 18.1.3、bpftool 7.7.0（libbpf 1.3 系统头）、gcc、BTF（`/sys/kernel/btf/vmlinux` 存在）齐备，本章无 Go、无网络依赖；**无 root，`kernel.unprivileged_bpf_disabled=2`**。凡涉及加载/运行的效果一律写「预期输出示例」并标注「运行级待验证」，不得写成「已验证通过」。
 3. **画廊 compile-only 口径（本章硬性验收）**：画廊 8 类与练习 broken/fixed/solution 程序**必须全部 clang 编译通过**；两个锚点为全链（BPF 编译 + skeleton + loader gcc 链接全部通过）。加载级行为（实际挂载、事件触发、ctx 访问拒绝）本机不可实测，预期日志一律标注「预期输出示例 / 运行级待验证」。
-4. **篇幅**：章节正文目标 35–52k 字符（`wc -m` 口径）；分节预算按设计 §3.3：目标+导读 2–2.5k、一（类型系统）6–8k、二（内核实现）8–10k、三（画廊走读）12–15k、四（实战含五层）6–8k、可视化 1.5–2k、排错 2.5–3.5k、课后任务与总结/参考 2.5–3.5k。
+4. **篇幅**：章节正文目标 35–54k 字符（`wc -m` 口径）【Task 7 实现期回写：三节 brief 硬性结构（109 行全文贴入+14 card×六段+三协调点）两轮压缩后实测 wc 17.0k 超 §3.3 预算 ~2k，裁定放宽章级上限保结构完整，分节预算不动】；分节预算按设计 §3.3：目标+导读 2–2.5k、一（类型系统）6–8k、二（内核实现）8–10k、三（画廊走读）12–15k、四（实战含五层）6–8k、可视化 1.5–2k、排错 2.5–3.5k、课后任务与总结/参考 2.5–3.5k。
 5. **叙事**：双视角落「一（类型系统）、三（画廊）、四（实战）」三节——各节内用「**教师视角**」「**学生动手**」加粗引导段，检查点用编号列表（2–4 个自测问题 + 答案提示）。本章非渐进阶段章节，「四段式阶段教学节奏」不约束一/二/三节；「四、实战」5.2 内以教师视角引入/核心代码原理讲解/学生动手/检查点四段组织（设计 §3.2）。
 6. **代码注释**：所有 `.bpf.c` 与 loader C 源文件中文注释，覆盖五类要点：数据结构字段语义、verifier 边界检查原因、helper 选型原因、map 类型选型原因、失败模式。loader 注释覆盖 attach 选型与失败模式。
 7. **内核兼容**：helper/特性保守选择，5.10+ 兼容优先；签名/参数形状以**本机 BTF 解析**为准并注明「随内核版本演进，加载期由 BTF 校验」；netfilter 需 6.6+、LSM 需 CONFIG_BPF_LSM+y 与 `lsm=bpf` 启动参数（本机 =y 实证）——全部保守措辞并注明。本机内核 7.0.0-38 仅作编译口径参考，不作日志事实来源。
@@ -1086,7 +1086,7 @@ git commit -m "feat(ch04): 类型画廊后四类（sockops/sk-msg/lsm/netfilter�
 - [x] **Step 4: 核对（硬性）**
 
 Run: `grep -c "^## " book/chapters/04-program-types-and-hook-points.md && grep -c "^### 1\." book/chapters/04-program-types-and-hook-points.md && grep -c "^### 2\." book/chapters/04-program-types-and-hook-points.md && wc -m book/chapters/04-program-types-and-hook-points.md`
-Expected: `4`（学习目标/导读/一/二）、`5`、`6`；`wc -m ≥ 16000`（本任务中段值参考；Task 11 终检 35–52k）。
+Expected: `4`（学习目标/导读/一/二）、`5`、`6`；`wc -m ≥ 16000`（本任务中段值参考；Task 11 终检 35–54k）。
 - [x] **Step 5: 提交**
 
 ```bash
@@ -1152,7 +1152,7 @@ git commit -m "docs(ch04): 四、实战（五层环境与选型走读）"
 - [ ] **Step 4: 核对（硬性）**
 
 Run: `grep -c "^## " book/chapters/04-program-types-and-hook-points.md && wc -m book/chapters/04-program-types-and-hook-points.md`
-Expected: `11`（C7 十一小节齐）；篇幅进入 35–52k 区间或记录差值待 Task 11 终检。
+Expected: `11`（C7 十一小节齐）；篇幅进入 35–54k 区间或记录差值待 Task 11 终检。
 - [ ] **Step 5: 提交**
 
 ```bash
