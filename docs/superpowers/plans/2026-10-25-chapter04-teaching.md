@@ -1330,6 +1330,8 @@ git commit -m "feat(ch04): 课后练习参考实现（选型决策与类型错�
 
 ### Task 11: scripts/verify-build.sh、全量编译验证、正文交叉链接与篇幅终检
 
+- [x] Task 11: scripts/verify-build.sh、全量编译验证、正文交叉链接与篇幅终检
+
 **tasks.md 条目**：「Create standalone Chapter 4 examples under `book/examples/chapter-04/`.」（scripts 部分）＋「Add troubleshooting, summary, and references.」（验证状态全量标注收口）。
 
 **Files:**
@@ -1337,27 +1339,27 @@ git commit -m "feat(ch04): 课后练习参考实现（选型决策与类型错�
 - Modify: `book/chapters/04-program-types-and-hook-points.md`（交叉链接）
 - Modify: `book/examples/chapter-04/README.md`（回填验证摘要）
 
-- [ ] **Step 1: 创建 `scripts/verify-build.sh`**——模式逐字沿用第 3 章 verify-build.sh（`book/examples/chapter-03/scripts/verify-build.sh` 为基底），替换 run 项为：`00-env`、`01-multi-observe`、`02-xdp-tc`、`03-type-gallery/01-kretprobe … 08-netfilter`（8 项）、`exercises/01-type-selection`、`exercises/02-type-mismatch`（共 13 项 run）；头部注释改第 4 章（「类型画廊与锚点全链」口径）。
+- [x] **Step 1: 创建 `scripts/verify-build.sh`**——模式逐字沿用第 3 章 verify-build.sh（`book/examples/chapter-03/scripts/verify-build.sh` 为基底），替换 run 项为：`00-env`、`01-multi-observe`、`02-xdp-tc`、`03-type-gallery/01-kretprobe … 08-netfilter`（8 项）、`exercises/01-type-selection`、`exercises/02-type-mismatch`（共 13 项 run）；头部注释改第 4 章（「类型画廊与锚点全链」口径）。
 
-- [ ] **Step 2: 首次全量运行（硬性验收）**
+- [x] **Step 2: 首次全量运行（硬性验收）**
 
 Run: `bash book/examples/chapter-04/scripts/verify-build.sh`
 Expected: `PASS 00-env`、`PASS 01-multi-observe`、`PASS 02-xdp-tc`、`PASS 03-type-gallery/01..08`（八行）、`PASS exercises/01-type-selection`、`PASS exercises/02-type-mismatch`；汇总 `FAIL=0`，退出码 0。任何 FAIL 回到对应任务修复后重跑。
 记录：把本次运行摘要（PASS/FAIL 数与工具版本实测值）替换进 `book/examples/chapter-04/README.md` 验证状态说明区的占位句。
 
-- [ ] **Step 3: 正文交叉链接**（C8 惯例）：章首「本章独立示例已全部落地到 [`book/examples/chapter-04/`](../examples/chapter-04/)」与目录总览；5.2 与三节每个代码块前后标注对应文件路径；「一/二/三/四」各节末尾「**独立示例**」链接（二节末为附录 B/C 链接）；三节各 card 链接画廊/锚点目录；课后扩展任务节链接 exercises/ 两目录与总览 README。
+- [x] **Step 3: 正文交叉链接**（C8 惯例）：章首「本章独立示例已全部落地到 [`book/examples/chapter-04/`](../examples/chapter-04/)」与目录总览；5.2 与三节每个代码块前后标注对应文件路径；「一/二/三/四」各节末尾「**独立示例**」链接（二节末为附录 B/C 链接）；三节各 card 链接画廊/锚点目录；课后扩展任务节链接 exercises/ 两目录与总览 README。
 
-- [ ] **Step 4: 交叉链接核对（硬性）**
+- [x] **Step 4: 交叉链接核对（硬性）**
 
 Run: `grep -c "](../examples/chapter-04/" book/chapters/04-program-types-and-hook-points.md && grep -c "](../appendix/" book/chapters/04-program-types-and-hook-points.md`
 Expected: `≥ 12`（锚点 2 + 画廊 8 + exercises 2 + 顶层/画廊 README）；`≥ 1`。
 
-- [ ] **Step 5: 篇幅终检（硬性）**
+- [x] **Step 5: 篇幅终检（硬性）**
 
 Run: `wc -m book/chapters/04-program-types-and-hook-points.md`
 Expected: 35000–52000。低于下限：优先补原理讲解而非注水（写作纪律——每个概念钉回读者已见过的代码）；高于上限：压缩重复叙述，不删原理。
 
-- [ ] **Step 6: 提交**
+- [x] **Step 6: 提交**
 
 ```bash
 git add book/examples/chapter-04/ book/chapters/04-program-types-and-hook-points.md
