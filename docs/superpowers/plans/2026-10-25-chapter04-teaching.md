@@ -1370,19 +1370,21 @@ git commit -m "docs(ch04): 交叉链接示例资产并完成全量编译级验�
 
 ### Task 12: 主审（teaching completeness）与 tasks.md 勾选（收口）
 
+- [x] Task 12: 主审（teaching completeness）与 tasks.md 勾选（收口）
+
 **tasks.md 条目**：「Main-agent review to ensure the chapter explains selection boundaries, not just hook taxonomy.」；同时统一勾选「Chapter 4」全部 7 条。
 
 **Files:**
 - Modify: `openspec/changes/generate-ebpf-book/tasks.md`（勾选）
 - 产出：审查结论进入最终回复（不创建报告文件）
 
-- [ ] **Step 1: 逐项审计并记录结论**（发现问题回对应任务修复后复验；全绿才进 Step 2）：
+- [x] **Step 1: 逐项审计并记录结论**（发现问题回对应任务修复后复验；全绿才进 Step 2）：
   1. 教学完整性四条（STYLE.md 实战模板）：五层环境（5.1 五个 `####` 层落到命令/脚本/表格；tracefs/LSM/netfilter 特有检查在场）；核心代码原理注释（抽查 `multi_observe.bpf.c`、画廊若干：五类注释在场）；双视角（一/三/四节「教师视角」「学生动手」+检查点齐备）；课后练习（2 项目录、防剧透七段 README、参考实现可编译、验证状态标注）。
   2. 结构级（设计 §8）：C7 十一小节齐备；三节 14 card 与画廊/锚点目录一一对应；5.2 代码块与示例文件一一对应（抽查 3 处路径）；可视化两图均有解读段；十四类总对比表六列齐备（矩阵第 5 条）。
   3. 术语与保守措辞：译名一致；「英文（中文解释）」首现格式；「预期输出示例 / 运行级待验证」统一口径；签名「以本机 BTF 为准、随内核版本演进」保守措辞；全文零「已验证通过」式运行级表述（grep 复核，排除约定表原文自引）。
   4. 矩阵专项核对：七条逐条有交付物；**选型边界审查**（矩阵第 7 条）：一节决策树/三节各 card 选择边界段/练习 1 论证表三处在场——「解释选择边界，而非只给分类学」。
-- [ ] **Step 2: 勾选 tasks.md**：将「Chapter 4: Program Types and Hook Points」7 条全部置为 `[x]`（仅当对应交付物真实存在且验收通过）。
-- [ ] **Step 3: 最终提交与交付报告**
+- [x] **Step 2: 勾选 tasks.md**：将「Chapter 4: Program Types and Hook Points」7 条全部置为 `[x]`（仅当对应交付物真实存在且验收通过）。
+- [x] **Step 3: 最终提交与交付报告**
 
 ```bash
 git add openspec/changes/generate-ebpf-book/tasks.md
