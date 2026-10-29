@@ -1170,6 +1170,8 @@ git commit -m "docs(ch04): 可视化/排错/课后任务/总结/参考来源"
 
 ### Task 10: 练习参考实现（01-type-selection、02-type-mismatch）与 exercises 总览
 
+- [x] Task 10: 练习参考实现（01-type-selection、02-type-mismatch）与 exercises 总览
+
 **tasks.md 条目**：「Create standalone Chapter 4 examples under `book/examples/chapter-04/`.」（exercises 部分）＋ STYLE.md 实战模板规则 4。
 
 **Files:**
@@ -1177,7 +1179,7 @@ git commit -m "docs(ch04): 可视化/排错/课后任务/总结/参考来源"
 - Create: `book/examples/chapter-04/exercises/01-type-selection/{solution.bpf.c,Makefile,README.md}`
 - Create: `book/examples/chapter-04/exercises/02-type-mismatch/{broken.bpf.c,fixed.bpf.c,Makefile,README.md}`
 
-- [ ] **Step 1: 创建 `01-type-selection/solution.bpf.c`**（逐字如下——三场景的正确选型合并对象）
+- [x] **Step 1: 创建 `01-type-selection/solution.bpf.c`**（逐字如下——三场景的正确选型合并对象）
 
 ```c
 // SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause
@@ -1239,7 +1241,7 @@ int BPF_PROG(grab_params, int dfd, const char *filename, struct open_how *how)
 char LICENSE[] SEC("license") = "GPL";
 ```
 
-- [ ] **Step 2: 创建 `02-type-mismatch/broken.bpf.c` 与 `fixed.bpf.c`**（逐字如下）
+- [x] **Step 2: 创建 `02-type-mismatch/broken.bpf.c` 与 `fixed.bpf.c`**（逐字如下）
 
 ```c
 // SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause
@@ -1310,14 +1312,14 @@ int probe_fixed(struct xdp_md *ctx)
 char LICENSE[] SEC("license") = "GPL";
 ```
 
-- [ ] **Step 3: 创建两个练习 `Makefile`**——C2 模板替换：练习 1 `<SRCS> := solution.bpf.c`；练习 2 `<SRCS> := broken.bpf.c fixed.bpf.c`。
-- [ ] **Step 4: 创建两个练习 `README.md`**——按 C5 防剧透七段结构。关键口径：练习 1 `## 提示`：三元组三问（要什么数据/谁产生/哪个 ctx 给它）+ 三场景各自的候选类型集合；`## 参考实现思路`（分界线后）：选型论证表（场景→选型→错误选项为何不行：场景A 用 kprobe 行不行[能拿到参数但拿不到 LSM 决策点语义与 audit 语义]、场景B 用 XDP 行不行[看不见 socket 状态]等）；练习 2 `## 提示`：从日志第一处 ctx 访问拒绝入手（回指第 3 章排错节）；`## 参考实现思路`：错位诊断三步（看 SEC→看 ctx 类型→看 is_valid_access 白名单）；两者 `## 预期输出示例`（运行级待验证；练习 2 给完整预期拒绝日志并标注「随内核版本略有差异」）；`## 验证状态` 按 C6。
-- [ ] **Step 5: 创建 `exercises/README.md`**：C9 逐字任务总览表 + 防剧透阅读法 + 各练习构建命令（各目录 `make`）+ 验证状态汇总表（按 C6）。
+- [x] **Step 3: 创建两个练习 `Makefile`**——C2 模板替换：练习 1 `<SRCS> := solution.bpf.c`；练习 2 `<SRCS> := broken.bpf.c fixed.bpf.c`。
+- [x] **Step 4: 创建两个练习 `README.md`**——按 C5 防剧透七段结构。关键口径：练习 1 `## 提示`：三元组三问（要什么数据/谁产生/哪个 ctx 给它）+ 三场景各自的候选类型集合；`## 参考实现思路`（分界线后）：选型论证表（场景→选型→错误选项为何不行：场景A 用 kprobe 行不行[能拿到参数但拿不到 LSM 决策点语义与 audit 语义]、场景B 用 XDP 行不行[看不见 socket 状态]等）；练习 2 `## 提示`：从日志第一处 ctx 访问拒绝入手（回指第 3 章排错节）；`## 参考实现思路`：错位诊断三步（看 SEC→看 ctx 类型→看 is_valid_access 白名单）；两者 `## 预期输出示例`（运行级待验证；练习 2 给完整预期拒绝日志并标注「随内核版本略有差异」）；`## 验证状态` 按 C6。
+- [x] **Step 5: 创建 `exercises/README.md`**：C9 逐字任务总览表 + 防剧透阅读法 + 各练习构建命令（各目录 `make`）+ 验证状态汇总表（按 C6）。
 - [x] **Step 6: 编译验证（本机真实执行，硬性）**
 
 Run: `make -C book/examples/chapter-04/exercises/01-type-selection && make -C book/examples/chapter-04/exercises/02-type-mismatch`
 Expected: 退出码均 0（练习 2 生成 `broken.bpf.o` 与 `fixed.bpf.o`——broken 也必须编译通过）。失败即修代码重跑。
-- [ ] **Step 7: 提交**
+- [x] **Step 7: 提交**
 
 ```bash
 git add book/examples/chapter-04/exercises/
