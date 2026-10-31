@@ -195,7 +195,7 @@ git commit -m "feat(ch05): 源码树地图资产与全量引用锚点清单"
 
 ### Task 3: verify-citations.sh 符号机检(本章「编译级」等价物)
 
-- [ ] Task 3: verify-citations.sh 符号机检(本章「编译级」等价物)
+- [x] Task 3: verify-citations.sh 符号机检(本章「编译级」等价物)
 **tasks.md 条目**:「Main-agent review for kernel path accuracy and conservative version language.」的机检基座。
 
 **Files:**
