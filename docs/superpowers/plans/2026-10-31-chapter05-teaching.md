@@ -298,7 +298,7 @@ git commit -m "docs(ch05): 目标导读与一节(源码地图与所有权边界)
 
 ### Task 7: 正文——「二、加载路径追踪」
 
-- [ ] Task 7: 正文——「二、加载路径追踪」
+- [x] Task 7: 正文——「二、加载路径追踪」
 **tasks.md 条目**:「Trace the load path from `BPF_PROG_LOAD` through `kernel/bpf/syscall.c`, verifier, JIT selection, and attach setup.」(正文);回收 ch02:131。
 
 **Files:**
