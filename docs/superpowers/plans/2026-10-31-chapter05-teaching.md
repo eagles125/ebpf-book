@@ -152,7 +152,7 @@ include/linux/filter.h|struct bpf_binary_header|JIT 映像头
 **Interfaces:**
 - Produces: check-env.sh 分级输出(编译级/机检级/加载级三档),供正文四节引用其输出示例;README 骨架含验证状态占位段(Task 11 回填)。
 
-- [ ] **Step 1: 写 `check-env.sh`**——分级诊断:①走读树:`WALK_TREE` 默认 `/work/linux/linux-6.6.78`,检查 `Makefile` 存在并 grep `^SUBLEVEL` 打印版本、`kernel/bpf/syscall.c|verifier.c` 在场性;②工具:grep/sed/wc/bpftool(缺失给降级提示:仅影响四节 introspection 预期输出);③BTF:`/sys/kernel/btf/vmlinux` 与 `CONFIG_DEBUG_INFO_BTF`(读 /boot/config-*);④权限档位:uid、`kernel.unprivileged_bpf_disabled` 值(打印并解释 2=非特权禁用,回指正文一节)。全部只读;无走读树时打印 kernel.org 获取指引(git clone/tar 两种)并退出码 2。
+- [x] **Step 1: 写 `check-env.sh`**——分级诊断:①走读树:`WALK_TREE` 默认 `/work/linux/linux-6.6.78`,检查 `Makefile` 存在并 grep `^SUBLEVEL` 打印版本、`kernel/bpf/syscall.c|verifier.c` 在场性;②工具:grep/sed/wc/bpftool(缺失给降级提示:仅影响四节 introspection 预期输出);③BTF:`/sys/kernel/btf/vmlinux` 与 `CONFIG_DEBUG_INFO_BTF`(读 /boot/config-*);④权限档位:uid、`kernel.unprivileged_bpf_disabled` 值(打印并解释 2=非特权禁用,回指正文一节)。全部只读;无走读树时打印 kernel.org 获取指引(git clone/tar 两种)并退出码 2。
 - [ ] **Step 2: 实跑验证(硬性)**
 
 Run: `bash -n book/examples/chapter-05/00-env/check-env.sh && bash book/examples/chapter-05/00-env/check-env.sh; echo "exit=$?"`
