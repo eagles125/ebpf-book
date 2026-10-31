@@ -199,13 +199,13 @@
 
 ### Chapter 5: eBPF Subsystem Kernel Code Structure
 
-- [ ] Write full chapter prose introducing eBPF subsystem source layout and ownership boundaries.
-- [ ] Trace the load path from `BPF_PROG_LOAD` through `kernel/bpf/syscall.c`, verifier, JIT selection, and attach setup.
-- [ ] Explain map create, lookup, update, delete, freeze, pin, and reference lifecycle at a source-code level.
-- [ ] Include a source-reading walkthrough with commands for navigating a local Linux tree.
-- [ ] Add text source tree and call-flow visualization.
-- [ ] Add troubleshooting, summary, and references.
-- [ ] Main-agent review for kernel path accuracy and conservative version language.
+- [x] Write full chapter prose introducing eBPF subsystem source layout and ownership boundaries.
+- [x] Trace the load path from `BPF_PROG_LOAD` through `kernel/bpf/syscall.c`, verifier, JIT selection, and attach setup.
+- [x] Explain map create, lookup, update, delete, freeze, pin, and reference lifecycle at a source-code level.
+- [x] Include a source-reading walkthrough with commands for navigating a local Linux tree.
+- [x] Add text source tree and call-flow visualization.
+- [x] Add troubleshooting, summary, and references.
+- [x] Main-agent review for kernel path accuracy and conservative version language.
 
 ### Chapter 6: JIT Compilation and Performance Optimization
 
