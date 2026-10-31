@@ -367,7 +367,7 @@ git commit -m "docs(ch05): 四节(走读实战五层)"
 
 ### Task 10: 正文——可视化、排错、课后任务、总结、参考
 
-- [ ] Task 10: 正文——可视化、排错、课后任务、总结、参考
+- [x] Task 10: 正文——可视化、排错、课后任务、总结、参考
 **tasks.md 条目**:「Add text source tree and call-flow visualization.」+「Add troubleshooting, summary, and references.」
 
 **Files:**
