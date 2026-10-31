@@ -210,7 +210,210 @@ static const char *bpf_link_type_strs[] = {
 
 **独立示例**：[`01-source-map/`](../examples/chapter-05/01-source-map/)——45 个 .c 文件六分区全量表、三层 include 与双展开的文字版、`citations.txt` 引用锚点清单（本章每条「文件：行号」都能对上号），机检脚本逐条核对（用法见四节）。
 
-<!-- 二节（T7）：## 二、加载路径追踪：BPF_PROG_LOAD 的一站一停 -->
+## 二、加载路径追踪：BPF_PROG_LOAD 的一站一停
+
+背景问题：第 1 章你按下回车，`bpftool prog load` 把一段 ELF（Executable and Linkable Format，可执行与链接格式）递给内核，几毫秒后 fd 回到你手里——这中间走了哪几站、失败落在哪一行？本节沿 `BPF_PROG_LOAD` 设六个站，一站一停，每站四要素：函数签名（标注 v6.6.78 行号）→ 职责 → 关键代码段（≤25 行，与走读树逐字一致）→ 失败出口；六站与 [`02-load-path/`](../examples/chapter-05/02-load-path/) 切片器的输出一一对应，行号即切片器实测行号，新引入的引用同样全部在树上 grep 实测。六站一行链：入口分发（`syscall.c:5464`）→ 业务入口 `bpf_prog_load`（:2586）→ 验证 `bpf_check`（:2743 → `verifier.c:20222`）→ 选执行引擎 `bpf_prog_select_runtime`（:2747 → `core.c:2357`）→ 编号与发 fd（:2751/:2773）→ 「加载 ≠ 挂载」与释放链（:2181 起）。贴码头注的「文件：起-止行（v6.6.78）」都能用一条 `sed -n 'A,Bp'` 重现；失败出口落到具体 errno（错误码）与行号，2.6 末尾收成总表。
+
+### 2.1 站 1：入口分发——`bpf(2)` 如何选中 `BPF_PROG_LOAD`
+
+背景问题：一个 `bpf(2)` 服务几十个命令字，加载命令凭什么被挑中？真入口在 `syscall.c:5567`（v6.6.78）：
+
+```c
+/* kernel/bpf/syscall.c:5567-5570（v6.6.78） */
+SYSCALL_DEFINE3(bpf, int, cmd, union bpf_attr __user *, uattr, unsigned int, size)
+{
+	return __sys_bpf(cmd, USER_BPFPTR(uattr), size);
+}
+```
+
+`SYSCALL_DEFINE3` 展开成名为 `bpf` 的系统调用，只做一件事：把用户态指针包成 `USER_BPFPTR` 转交 `__sys_bpf`（:5426）。后者过三道前置工序（一节区 1 已点名：:5431/:5438/:5441），随后 `switch (cmd)`（:5445）分发，加载分支在 :5464：
+
+```c
+/* kernel/bpf/syscall.c:5464-5466（v6.6.78） */
+	case BPF_PROG_LOAD:
+		err = bpf_prog_load(&attr, uattr, size);
+		break;
+```
+
+失败出口：属性拷贝失败 `-EFAULT`（:5438-5439）；未知命令落 `default: err = -EINVAL`（:5559-5560）。容易误读的细节：`case BPF_PROG_LOAD:` 全文件出现两次（:5464 与 :5592）——第二处在 `bpf_sys_bpf`（:5584，BPF 程序运行期再调 bpf(2) 的命令白名单）的 switch 里，不是加载路径本体；切片器把两处都列进定位行，读时认第一处。
+
+### 2.2 站 2：`bpf_prog_load`——业务入口与属性处理
+
+背景问题：分发只是传球，业务函数接球第一件事不是验证，是逐项审参数。`bpf_prog_load` 定义在 `syscall.c:2586`（v6.6.78），切片器站 2 切头 24 行（:2586-2609），正文摘签名段：
+
+```c
+/* kernel/bpf/syscall.c:2586-2592（v6.6.78） */
+static int bpf_prog_load(union bpf_attr *attr, bpfptr_t uattr, u32 uattr_size)
+{
+	enum bpf_prog_type type = attr->prog_type;
+	struct bpf_prog *prog, *dst_prog = NULL;
+	struct btf *attach_btf = NULL;
+	int err;
+	char license[128];
+```
+
+逐段读：签名后的第一道闸是 `CHECK_ATTR(BPF_PROG_LOAD)`（:2594-2595），要求属性块中本命令之后的所有填充位为零——UAPI 向后兼容的地基：未来内核新增字段，老 loader 置零即可不报错；`prog_flags` 掩码（:2597-2604）与对齐类检查（:2606-2609）把标志位审死，越位同样 `-EINVAL`/`-EPERM`。紧接三道权限闸，全在 :2743 的验证调用**之前**：:2618-2619 非特权开关（一节 1.3 已拆）；:2621-2623 指令条数为 0 或超限即 `-E2BIG`，上限分档——特权 `BPF_COMPLEXITY_LIMIT_INSNS`（100 万条，`include/linux/bpf.h:1769`，v6.6.78）、非特权 `BPF_MAXINSNS`（4096 条，`include/uapi/linux/bpf_common.h:54`）；:2624-2627 类型白名单一句回指——非特权仅 SOCKET_FILTER 与 CGROUP_SKB（一节 1.3 贴过码）；:2629-2632 分档查 `CAP_NET_ADMIN`/`CAP_PERFMON`。位置关系要记牢：权限闸在验证之前——第 3 章排错节第三组「先答一个问题：进没进验证」的源码出处就是 :2618-2632 与 :2743 的先后。
+
+### 2.3 站 3：验证调用点——`bpf_check` 的唯一入口
+
+背景问题：第 3 章整章的验证器，在加载路径里占几行？切片器站 3 切出 `syscall.c:2736-2749`——验证只占两行：
+
+```c
+/* kernel/bpf/syscall.c:2736-2749（v6.6.78） */
+	prog->aux->load_time = ktime_get_boottime_ns();
+	err = bpf_obj_name_cpy(prog->aux->name, attr->prog_name,
+			       sizeof(attr->prog_name));
+	if (err < 0)
+		goto free_prog_sec;
+
+	/* run eBPF verifier */
+	err = bpf_check(&prog, attr, uattr, uattr_size);
+	if (err < 0)
+		goto free_used_maps;
+
+	prog = bpf_prog_select_runtime(prog, &err);
+	if (err < 0)
+		goto free_used_maps;
+```
+
+这 14 行是后三拍的总谱：:2743 验证、:2747 选引擎、下一拍 :2751 领编号，首尾相接。`bpf_check` 定义在 `verifier.c:20222`（v6.6.78，一节区 2 贴过签名）。本站只讲边界——输入：已填好指令与类型的 `struct bpf_prog *` 加用户属性；返回：0 放行，负值拒绝；内部机制是第 3 章整章的内容，不重复。失败出口：拒绝以 `return -EACCES` 落地（`verifier.c` 全文件 126 处，v6.6.78 实测），另有白名单落空（`unknown func`）、回边一类 `-EINVAL` 形态——两类都带完整验证日志，信号对根因的速查表见第 3 章排错节第一组。失败后 `goto free_used_maps`（:2745），沿站 6 释放链回收——「每拍失败都干净退出」第一拍。
+
+### 2.4 站 4：JIT 选择——`bpf_prog_select_runtime`
+
+背景问题：验证通过的是 eBPF 指令，执行时跑的可能是本机机器码——形态在哪一站定下来？就在 :2747，验证的下一行。定义在 `core.c:2357`（v6.6.78），文档注释（:2347 起）一句定职责：「Try to JIT eBPF program, if JIT is not available, use interpreter」。切片器站 4 从文档注释切起（正文摘签名段）：
+
+```c
+/* kernel/bpf/core.c:2357-2369（v6.6.78） */
+struct bpf_prog *bpf_prog_select_runtime(struct bpf_prog *fp, int *err)
+{
+	/* In case of BPF to BPF calls, verifier did all the prep
+	 * work with regards to JITing, etc.
+	 */
+	bool jit_needed = false;
+
+	if (fp->bpf_func)
+		goto finalize;
+
+	if (IS_ENABLED(CONFIG_BPF_JIT_ALWAYS_ON) ||
+	    bpf_prog_has_kfunc_call(fp))
+		jit_needed = true;
+```
+
+函数体 :2384 调架构 JIT：
+
+```c
+/* kernel/bpf/core.c:2384-2389（v6.6.78） */
+		fp = bpf_int_jit_compile(fp);
+		bpf_prog_jit_attempt_done(fp);
+		if (!fp->jited && jit_needed) {
+			*err = -ENOTSUPP;
+			return fp;
+		}
+```
+
+失败出口两种。其一，回退不是失败：`bpf_int_jit_compile` 是 `__weak` 兜底桩（:2884，一节区 3 贴过），架构没提供强符号时原样返回，程序保持指令形态走解释器——设计好的回退，`*err` 为 0。其二，禁止回退时才失败：`jit_needed` 为真（`CONFIG_BPF_JIT_ALWAYS_ON`，或程序含 kfunc 调用——BPF 直接调用内核函数的机制，:2367-2369；头注释 :2359-2361 说明原因：此类程序验证器已按 JIT 前提做完准备）而 `fp->jited` 仍为假，即 `-ENOTSUPP`（:2386-2388）。finalize 段（:2396-2406）两件收尾：`bpf_prog_lock_ro`（:2397）把程序内存锁定只读——验证期可改写、运行期只读的边界画在这一行；`bpf_check_tail_call`（:2404）做尾调用兼容检查。
+
+第 2 章 1.8 的预告「JIT 编译为本机指令，架构相关（第 6 章，源码地图见第 5 章）」至此兑现：通用骨架在本函数，`__weak` 兜底在 :2884，架构强符号在各架构目录（x86-64 为 `arch/x86/net/bpf_jit_comp.c`）；eBPF 指令如何逐条翻成本机码，深挖留第 6 章。
+
+### 2.5 站 5：编号与发 fd——`prog_idr` 与 `bpf_prog_new_fd`
+
+背景问题：程序已验证、已选好引擎，但用户态还看不见它——「看得见」从哪一行开始？两步：先领全局编号，再领 fd。切片器站 5 的定位行给出两个函数与两个调用点：`bpf_prog_alloc_id`（`syscall.c:2099`，调用点 :2751）、`bpf_prog_new_fd`（`syscall.c:2293`，调用点 :2773）。编号的家是文件头部 `static DEFINE_IDR(prog_idr)`（:53，配套自旋锁 :54）——IDR（ID-to-pointer 编号表）。
+
+```c
+/* kernel/bpf/syscall.c:2099-2109（v6.6.78） */
+static int bpf_prog_alloc_id(struct bpf_prog *prog)
+{
+	int id;
+
+	idr_preload(GFP_KERNEL);
+	spin_lock_bh(&prog_idr_lock);
+	id = idr_alloc_cyclic(&prog_idr, prog, 1, INT_MAX, GFP_ATOMIC);
+	if (id > 0)
+		prog->aux->id = id;
+	spin_unlock_bh(&prog_idr_lock);
+	idr_preload_end();
+```
+
+职责：`idr_alloc_cyclic` 从 1 起循环发号写入 `prog->aux->id`（:2105-2107），全程持自旋锁（:2104/:2108）——`bpftool prog show` 里那个 ID 的源码出处就在这里；编号耗尽兜底 `WARN_ON_ONCE` 加 `-ENOSPC`（:2112-2113）。编号在场不等于可见：发 fd 才算「对用户态存在」。
+
+```c
+/* kernel/bpf/syscall.c:2293-2303（v6.6.78） */
+int bpf_prog_new_fd(struct bpf_prog *prog)
+{
+	int ret;
+
+	ret = security_bpf_prog(prog);
+	if (ret < 0)
+		return ret;
+
+	return anon_inode_getfd("bpf-prog", &bpf_prog_fops, prog,
+				O_RDWR | O_CLOEXEC);
+}
+```
+
+`security_bpf_prog`（:2297）是 LSM 闸；`anon_inode_getfd`（:2301-2302）发放匿名 inode 的 fd（名字 `bpf-prog`，`O_CLOEXEC` 防跨 exec 泄漏）。站 5 同时是释放链的起点：加载体内 `atomic64_set(&prog->aux->refcnt, 1)`（:2716）把引用计数置 1，fd 是第一位持有者。失败出口：编号路径 `WARN_ON_ONCE(!id)` → `-ENOSPC`（:2112-2113）；fd 分配失败（fd 表满一类标准错误随返回值传出）→ :2774-2775 `bpf_prog_put(prog)`——编号已发、通告已登记（kallsyms/perf/audit 三件套，:2769-2771），善后必须走释放链。
+
+### 2.6 站 6：「加载 ≠ 挂载」与释放链
+
+背景问题：fd 到手，程序开始干活了吗？没有。
+
+「加载 ≠ 挂载」的证据数得出来：`bpf_prog_load` 从 :2586 到函数尾 :2793 没有一次执行挂载——它只处理 attach 元数据（`attach_btf_id` 目标核对 :2637-2659、`expected_attach_type` 补全与校验 :2662-2671），装进 `prog->aux` 就收工。真正的挂载是同一个 switch 里两条平级的独立命令：`case BPF_PROG_ATTACH:`（:5473-5475，实体 `bpf_prog_attach` :3911）与 `case BPF_LINK_CREATE:`（:5534-5536，实体 `link_create` :5010）。第 4 章 2.3 的 SEC 挂载路线表按类型给出各自走哪条命令，第 4 章 2.4 讲 `bpf_link`（BPF 链接对象——挂载关系的 fd 形态）机制；本站的补充：三条命令共享一个入口 switch、互不调用——fd 返回时程序未挂任何钩子。加载时登记的引用总要有出口，切片器站 6 切出释放链骨架：
+
+```c
+/* kernel/bpf/syscall.c:2181-2193（v6.6.78） */
+static void __bpf_prog_put(struct bpf_prog *prog)
+{
+	struct bpf_prog_aux *aux = prog->aux;
+
+	if (atomic64_dec_and_test(&aux->refcnt)) {
+		if (in_irq() || irqs_disabled()) {
+			INIT_WORK(&aux->work, bpf_prog_put_deferred);
+			schedule_work(&aux->work);
+		} else {
+			bpf_prog_put_deferred(&aux->work);
+		}
+	}
+}
+```
+
+职责：引用计数归零（:2185）才启动分级释放——入口 `bpf_prog_put`（:2195-2199，导出符号）→ `__bpf_prog_put`（:2181，中断上下文转工作队列 :2186-2188）→ `bpf_prog_put_deferred`（:2168）卸 :2769-2771 登记的三件套、把编号还给 IDR（:2175-2177）→ `__bpf_prog_put_noref`（:2147）注销 BTF/模块引用后按 sleepable 与否走两种 RCU 回收（:2158-2165）。常态入口是 fd 关闭：`bpf_prog_release`（:2201）在 `->release` 回调里调 `bpf_prog_put`（:2205）——第 2 章 1.8 的「Ctrl-C 退出即卸载」源码出处就在这一行。map 侧的完整释放故事在三节；prog 侧到此一段带过。
+
+六站失败出口收成总表（行号 v6.6.78 实测；`-EACCES`/`-EPERM` 日志排错见第 3 章排错节第一、三组）：
+
+| errno | 拦截点 | 触发条件 |
+|---|---|---|
+| `-EFAULT` | `syscall.c:5438-5439`、:2698-2702 | 属性块或指令流拷贝失败 |
+| `-EINVAL` | :5559-5560；:2594-2595；:2597-2604；:2670；验证期 | 未知命令；属性填充位/标志越界；attach 校验失败；验证期 `unknown func`、回边等 |
+| `-E2BIG` | :2621-2623 | 指令条数为 0 或超档（特权 100 万/非特权 4096） |
+| `-EPERM` | :2618-2619、:2624-2627、:2629-2632、:2606-2609 | 非特权开关、类型白名单、NET_ADMIN/PERFMON 档位等——均未进验证即拦 |
+| `-EACCES` | `verifier.c` 全文件 126 处 `return -EACCES` | 验证器拒绝，带完整日志 |
+| `-ENOMEM` | :2674-2681 | `bpf_prog_alloc` 失败 |
+| `-ENOTSUPP` | `core.c:2386-2388` | 必须 JIT（JIT_ALWAYS_ON 或含 kfunc 调用）而架构未提供 |
+
+判别口径沿用第 3 章排错节第三组：`-EPERM` 没进验证（查权限档位），`-EACCES`/`-EINVAL` 已进（读验证日志）——现在这句话能对回 :2618-2632 与 :2743 的先后顺序。
+
+**教师视角**：为什么拆成「验证 → 选执行 → 编号 → 发 fd」四拍，而不是一口气做完？看四拍的失败代价。验证失败（:2744）与选引擎失败（:2748）：程序还没领编号、没对用户态可见，`goto free_used_maps` 清完即走，不留「半个程序」；领编号失败（:2752）同样不可见；发 fd 失败（:2774-2775）是唯一需要善后的——编号已发、通告已登记，必须 `bpf_prog_put` 走释放链。四拍次序保证每个失败出口干净：不可见的对象用 `goto` 清理，可见的对象用引用计数清理。类比：安检 → 挑发动机 → 发工牌 → 发门禁卡——门禁卡是外人唯一认得的东西，发卡前的失败悄悄退场，发卡后的失败才要刷卡注销。四拍不是人为划分，是 :2743/:2747/:2751/:2773 四个调用点的天然分界。
+
+**学生动手**：用切片器逐站对照。三条命令（走读树路径约定见 [`01-source-map/`](../examples/chapter-05/01-source-map/)）：
+
+```bash
+bash book/examples/chapter-05/02-load-path/trace-load-path.sh    # 全量六站
+bash book/examples/chapter-05/02-load-path/trace-load-path.sh | grep "^## 站"   # 站目录
+WALK_TREE=/path/to/your/tree bash book/examples/chapter-05/02-load-path/trace-load-path.sh
+```
+
+预期输出示例（第一、二条为 v6.6.78 树本机实跑，机检级）：第一条共 307 行、六站齐全，末行 `TREE_VERSION=v6.6.78 STATIONS=6`；第二条命中 6 行站标题；第三条换树时 stderr 出版本 WARN（其 README 失败模式 3），行号仅供参考。对照方法：每段贴码的行号区间都取自切片器同站的 `sed -n 'A,Bp'` 命令（如站 3 的 2736-2749）——对不上的那处就是行号漂移，复核见四节的 `verify-citations.sh`。
+
+### 2.7 检查点
+
+先自答，再看提示：
+
+1. `bpftool prog load` 返回 `-E2BIG`，程序进验证了吗？对回源码行号。（提示：没进——:2621-2623 在 :2743 之前；上限分档见 2.2 与总表。）
+2. 站 4 说「JIT 失败回退解释器不是错误」，什么条件下回退会变成加载失败？（提示：`jit_needed` 为真——`CONFIG_BPF_JIT_ALWAYS_ON` 或含 kfunc 调用——而 `fp->jited` 仍为假，即 `-ENOTSUPP`（`core.c:2386-2388`）。）
+3. fd 拿到后立刻 `close`，内核里发生什么？连带回答「此刻程序挂在钩子上吗」。（提示：`close` 触发 `bpf_prog_release`（:2201）→ `bpf_prog_put`，引用计数归零才分级释放（2.6）；fd 返回时程序未挂任何钩子——挂载是 `BPF_LINK_CREATE`/`BPF_PROG_ATTACH` 的独立命令。）
+
+**独立示例**：[`02-load-path/`](../examples/chapter-05/02-load-path/)——本节六站的切片器（`trace-load-path.sh`），每站「定位 → 代码段 → 职责注」三层输出，正文行号与其一一对应；README 记录调用方法、实跑摘录与失败模式。
+
 <!-- 三节（T7）：## 三、映射生命周期：从一个 fd 到一块内存 -->
 <!-- 四节（T8）：## 四、实战：把走读变成可复现的动作 -->
 <!-- 可视化（T8）：## 可视化：源码树全景与加载调用流 -->
