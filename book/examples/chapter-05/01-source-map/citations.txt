@@ -1,0 +1,44 @@
+# 第 5 章引用锚点机检清单(v6.6.78)——格式:文件|符号|说明
+kernel/bpf/syscall.c|SYSCALL_DEFINE3(bpf,|系统调用入口
+kernel/bpf/syscall.c|__sys_bpf|命令分发总入口
+kernel/bpf/syscall.c|bpf_map_types[]|映射类型注册表(第一次展开)
+kernel/bpf/syscall.c|bpf_prog_types[]|程序类型注册表(第二次展开)
+kernel/bpf/syscall.c|sysctl_unprivileged_bpf_disabled|非特权开关(本机=2 的内核出处)
+kernel/bpf/syscall.c|map_create|映射创建
+kernel/bpf/syscall.c|array_index_nospec|类型索引侧信道防护
+kernel/bpf/syscall.c|bpf_prog_load|程序加载
+kernel/bpf/syscall.c|bpf_prog_new_fd|程序 fd 分配
+kernel/bpf/syscall.c|bpf_check(&prog|验证调用点
+kernel/bpf/verifier.c|int bpf_check(|验证入口
+kernel/bpf/core.c|bpf_prog_select_runtime|JIT/解释器选择
+kernel/bpf/core.c|bpf_int_jit_compile|架构 JIT 入口
+kernel/bpf/syscall.c|__bpf_prog_put|程序引用释放
+kernel/bpf/syscall.c|bpf_prog_put|程序引用释放(对外)
+kernel/bpf/syscall.c|bpf_map_update_value|映射更新通用层
+kernel/bpf/syscall.c|bpf_map_copy_value|映射查找通用层
+kernel/bpf/syscall.c|__bpf_map_get|fd 取映射(命令层公共第一步)
+kernel/bpf/syscall.c|map_lookup_elem|查找命令包装
+kernel/bpf/syscall.c|map_update_elem|更新命令包装
+kernel/bpf/syscall.c|map_delete_elem|删除命令包装
+kernel/bpf/syscall.c|map_freeze|冻结(自包含,无 ops 回调)
+kernel/bpf/syscall.c|bpf_map_write_active|冻结并发边界
+kernel/bpf/syscall.c|bpf_map_put_uref|映射用户引用递减
+kernel/bpf/syscall.c|bpf_map_free_deferred|工作队列延迟释放
+kernel/bpf/syscall.c|bpf_map_free_rcu_gp|RCU 宽限期释放
+kernel/bpf/syscall.c|bpf_map_put|映射引用释放(对外)
+kernel/bpf/syscall.c|bpf_obj_pin|pin 到文件系统
+kernel/bpf/syscall.c|bpf_obj_get|从路径取回 fd
+kernel/bpf/syscall.c|bpf_btf_load|BTF 加载(练习②)
+kernel/bpf/syscall.c|prog_idr|程序 id 注册表
+kernel/bpf/syscall.c|map_idr|映射 id 注册表
+kernel/bpf/arraymap.c|array_map_ops|数组映射 ops
+kernel/bpf/hashtab.c|htab_map_ops|哈希映射 ops
+kernel/bpf/btf.c|btf_parse|BTF 解析入口
+include/linux/bpf_types.h|BPF_PROG_TYPE(BPF_PROG_TYPE_SOCKET_FILTER|一行宏的实例
+include/linux/bpf_types.h|BPF_MAP_TYPE(BPF_MAP_TYPE_ARRAY|一张 ops 表的实例
+include/uapi/linux/bpf.h|BPF_PROG_LOAD|UAPI 命令字
+include/uapi/linux/bpf.h|union bpf_attr|UAPI 属性联合
+include/linux/bpf.h|struct bpf_prog|程序内核对象
+include/linux/bpf.h|struct bpf_map|映射内核对象
+include/linux/bpf.h|struct bpf_map_ops|映射操作回调表
+include/linux/filter.h|struct bpf_binary_header|JIT 映像头
