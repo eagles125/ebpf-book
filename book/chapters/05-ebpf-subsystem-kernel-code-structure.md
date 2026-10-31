@@ -548,7 +548,188 @@ WALK_TREE=/path/to/your/tree bash book/examples/chapter-05/03-map-ops/trace-map-
 3. 被程序引用的映射，close 光所有 fd、删光 pin，为何还不释放？（提示：程序登记 `used_maps` 走 `bpf_map_inc`（`verifier.c:17748`）只加 refcnt；归零才 `bpf_map_put`（:750），经 RCU 宽限期进工作队列（:758-762），`ops->map_free` 在 `bpf_map_free_deferred`（:691）执行——直接 free 会踩到还在读的 CPU（3.5）。）
 
 **独立示例**：[`03-map-ops/`](../examples/chapter-05/03-map-ops/)——六站切片器（`trace-map-ops.sh`），每站「定位→代码段→职责注」三层输出；README 第四节三层表是节首模型图的底稿，第五、六节为实跑摘录与失败模式。
-<!-- 四节（T8）：## 四、实战：把走读变成可复现的动作 -->
+## 四、实战：把走读变成可复现的动作
+
+**教师视角**：源码走读的生命线是「可复现」——正文每条「文件：行号」都应当能用一条命令重现。三个月后内核演进几十个版本，行号几乎必漂；行号一旦成了无法核实的孤证，本章就从教材退化成小说。一至三节已把走读做成三类可复跑资产：环境自检（[`00-env/`](../examples/chapter-05/00-env/)）、机检脚本（[`scripts/`](../examples/chapter-05/scripts/)）、两个切片器（`02-load-path/`、`03-map-ops/`），本节把它们装回五层环境阐述——走读章的口径与实验章不同，逐层换档：**依赖环境**是走读树本身；「编译环境」是机检（本章不编译 BPF 程序，机检即编译级等价物）；「部署环境」是定位手法；「运行环境」是切片器实跑；「运行效果」是汇总行与 introspection（内省查询）读数。读者容易卡住的地方：以为「照着书抄行号」就是走读——错，行号是快照，符号才是锚点，本节教你把每张快照重新对回锚点。
+
+### 4.1 核心命令原理：机检两步法与切片器两步法
+
+全节的命令只有两组惯用法，先讲透原理，五层里反复出现时不再解释。
+
+**机检两步法**：`verify-citations.sh` 以 `01-source-map/citations.txt`（每行 `文件|符号|说明`）为唯一数据源，对每条引用只做两步只读检查——第一步测文件在树里存在，第二步用 `grep -F -q` 定长匹配符号仍在该文件中。**为什么按符号不按行号**：行号随每条 commit 漂移，是版本快照；符号改名、删除才是引用真正的破坏，而符号是语义单元，跨版本存活期长得多。机检能抓住：文件消失（树版本不符、`WALK_TREE` 指错、清单拼写错）、符号改名或删除、清单行本身写错；抓不住：符号还活着但行号漂了（机检不看行号）、符号还在但语义变了（要靠读代码，机器替不了）——所以正文每条行号都同时标注版本「（v6.6.78）」：机检守符号底线，行号靠第三层手法随时复核。
+
+**切片器两步法**：`grep -n` 先定位（输出「行号：内容」），`sed -n 'A,Bp'` 再切区间（逐字贴码），`wc -l` 看规模。切片器把这两步固化成六站输出，正文二、三节每段贴码的行号区间都取自同站的 `sed` 命令——「引用皆可一条命令重现」说的就是这两步。
+
+机检出现 FAIL 时按三类对号处置（完整排错路径见排错节）：
+
+| FAIL 原因 | 含义 | 处置 |
+|---|---|---|
+| 文件不在树 | 树版本不符、`WALK_TREE` 指错目录或清单路径拼写错 | 先核对 `WALK_TREE` 与树版本，再查清单 |
+| 符号未命中 | 内核改名、内联或宏展开，或清单写的形态与源码不一致 | 回修 `citations.txt`，不放水改脚本 |
+| 格式错 | 清单行不是三段（分隔符不是恰好 2 个，或文件/符号字段为空） | 修清单后重跑 |
+
+### 4.2 学生动手：按五层把走读跑一遍
+
+按层序完整跑一遍：装树 → 过机检 → 练定位 → 跑切片 → 读数。全部动作只读源码树，不构建、不加载；机检级输出为本机 v6.6.78 树实测，预期输出逐一标注。
+
+#### 第一层：依赖环境——走读树从哪来
+
+走读树获取两法任选其一（与 `00-env/check-env.sh` 缺树提示中的指引一致）：
+
+```bash
+# 法一:tar 包(稳定版源码,一次到位)
+curl -LO https://cdn.kernel.org/pub/linux/kernel/v6.x/linux-6.6.78.tar.xz
+tar xf linux-6.6.78.tar.xz
+
+# 法二:git 浅克隆指定 tag(省磁盘与时间,可换成任意 v6.6.x)
+git clone --branch v6.6.78 --depth 1 \
+  https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git linux-6.6.78
+```
+
+拿到树先核对版本：`grep ^SUBLEVEL Makefile` 在本机走读树实测输出 `SUBLEVEL = 78`（连同 `VERSION = 6`、`PATCHLEVEL = 6` 即 v6.6.78）。你的树不必与本机同版——行号引用随内核版本演进，以所用内核源码为准。工具清单与各层用途的映射（grep/sed/wc 属系统包，`bpftool` 在 Debian/Ubuntu 装在 `/usr/sbin`）：
+
+| 工具 | 服务的层 | 缺失时的降级（check-env.sh 逐项声明） |
+|---|---|---|
+| grep | 机检与切片器的硬依赖（第二、四层） | 全部脚本拒绝运行，不产出假 PASS |
+| sed | 切片器区间提取（第四层） | 切片降级，机检不受影响 |
+| wc | 行数规模（第一、三层） | 行数统计降级 |
+| bpftool | 仅第五层 introspection | 机检与切片完全不受影响 |
+
+自检一条命令：`bash book/examples/chapter-05/00-env/check-env.sh`。输出四个检查区加三档结论，摘录第一区与结论段（本机实测，机检级）：
+
+```text
+== ① 走读树(本章机检与切片的唯一数据源) ==
+OK    WALK_TREE=/work/linux/linux-6.6.78(可用 WALK_TREE=<路径> 换树自检)
+OK    树版本:v6.6.78(VERSION=6 PATCHLEVEL=6 SUBLEVEL=78)
+OK    kernel/bpf/syscall.c 在场(5823 行)
+OK    kernel/bpf/verifier.c 在场(20459 行)
+……
+== 结论(三档口径,正文「四、实战」逐档引用) ==
+[1] 编译级             PASS  走读树 v6.6.78 齐备 + grep/sed/wc 在场(本章无 BPF 程序,树+工具即编译级前提)
+[2] 机检级(脚本与机检) PASS  check-env.sh 实跑通过;verify-citations.sh 与两个切片器对同一棵树实跑即机检级
+[3] 加载级与特权查询    需要特权,输出为预期示例(运行级待验证):bpftool prog show / feature probe 等需 root
+```
+
+其余检查区（工具链、内核 BTF、权限档位）的输出见 [`00-env/`](../examples/chapter-05/00-env/)；换树自检加 `WALK_TREE=<你的树路径>` 前缀。
+
+#### 第二层：「编译」环境=机检
+
+```bash
+bash book/examples/chapter-05/scripts/verify-citations.sh
+```
+
+每条锚点一行 PASS/FAIL，末尾汇总行（本机实测，机检级；节选）：
+
+```text
+PASS kernel/bpf/verifier.c|int bpf_check(
+PASS include/linux/bpf_types.h|BPF_MAP_TYPE(BPF_MAP_TYPE_ARRAY
+TOTAL=43 PASS=43 FAIL=0 WALK_TREE=/work/linux/linux-6.6.78 TREE_VERSION=v6.6.78
+```
+
+读法：43 条即正文全部「文件：行号」引用背后的符号锚点（清单见 [`01-source-map/`](../examples/chapter-05/01-source-map/)）；`TREE_VERSION=v6.6.78` 是书稿锁定常量而非自动探测，若你的 `WALK_TREE` 不是该版本，机检结果不可信——先换树，再谈对照。退出码可作门禁：FAIL=0 返回 0，否则返回 1。FAIL 时按 4.1 三类表处置：先查树与 `WALK_TREE`，再回修清单——机检的纪律是「修清单，不改脚本放水」。
+
+#### 第三层：部署环境=定位
+
+「部署」在走读章换档为：把自己部署到正确的目录、正确的符号前。命令目录表（前三行的输出为 v6.6.78 实测）：
+
+| 目的 | 命令 | 输出读法 |
+|---|---|---|
+| 找符号在哪一行 | `grep -n 'SYSCALL_DEFINE3(bpf' kernel/bpf/syscall.c` | `5567:SYSCALL_DEFINE3(bpf, ...`——行号起读 |
+| 切出一段原文 | `sed -n '5567,5570p' kernel/bpf/syscall.c` | 逐字四行，即 2.1 站 1 的贴码 |
+| 估一个文件的阅读量 | `wc -l kernel/bpf/syscall.c` | `5823`——一次该读多少心里有数 |
+| 可选：ctags 建索引 | 装 `universal-ctags` 后 `ctags -R kernel/bpf include/linux` | 编辑器对符号名一键跳转，适合反复走读 |
+| 可选：cscope 查调用者 | 装 `cscope` 后 `cscope -Rbq` 建索引、`cscope -dL4 'bpf_check'` | 查询 4 列出谁调用该函数，适合逆向追链 |
+
+两个提醒。其一，grep 检索的是源码文本，不存在「被编译器内联了搜不到」的问题；真正的坑在**源码里就找不到**：符号在 `#ifdef` 分支里（如 1.2 第三处展开的 `CONFIG_PROC_FS`），或藏在宏展开背后（`bpf_map_types[]` 的下标要等预处理才出现）——换关键词、回注册表是第一反应；`grep -n` 落空且机检同时报「符号未命中」时，完整排错路径见排错节。其二，定位到手别急着抄行号——先 `sed -n` 读上下文，确认符号语义与正文一致，再更新行号与版本标注。
+
+#### 第四层：运行环境=两个切片器实跑与总装
+
+切片器命令与输出全貌已在二、三节末的学生动手给过（v6.6.78 树本机实跑：加载链 307 行、映射链 427 行，末行同为 `TREE_VERSION=v6.6.78 STATIONS=6`），这里补**输出阅读法**——每站固定三层：`### 定位`（`grep -n` 实测的行号与函数）→ 代码段（`sed -n` 切出的原文）→ 职责注（该站职责与失败出口，回连正文小节）。读法一句话：先借定位行拿坐标，再对代码段核原文，最后沿职责注跳回正文对应小节。
+
+总装演示：一条管道把两条链的站目录接起来，得到全章 12 站的走读地图目录：
+
+```bash
+{ bash book/examples/chapter-05/02-load-path/trace-load-path.sh | grep '^## 站' | sed 's/^## 站/加载链·站/';
+  bash book/examples/chapter-05/03-map-ops/trace-map-ops.sh | grep '^## 站' | sed 's/^## 站/映射链·站/'; }
+```
+
+预期输出示例（v6.6.78 树本机实跑，机检级，12 行）：
+
+```text
+加载链·站 1:系统调用入口与分发
+加载链·站 2:bpf_prog_load 签名与属性处理
+加载链·站 3:验证调用点 bpf_check
+加载链·站 4:JIT 选择 bpf_prog_select_runtime
+加载链·站 5:fd 分配 bpf_prog_new_fd 与 prog_idr
+加载链·站 6:释放链 __bpf_prog_put / bpf_prog_put
+映射链·站 1:入口分发与 bpf_map_types[] 注册表
+映射链·站 2:map_create 与类型查找(array_index_nospec)
+映射链·站 3:通用层 bpf_map_update_value / bpf_map_copy_value 与 array_map_ops 对照
+映射链·站 4:命令包装 map_lookup_elem / map_update_elem / map_delete_elem
+映射链·站 5:freeze 与 pin(map_freeze / bpf_obj_pin)
+映射链·站 6:释放链 bpf_map_put / bpf_map_free_deferred / bpf_map_free_rcu_gp
+```
+
+12 行即两次走读的全部停靠点：前 6 行是「加载 ≠ 挂载」的 fd 之旅，后 6 行是「fd ↔ 内存」的映射之旅；两条链在第 1 站共用同一个入口 switch，在第 6 站各走一条释放链——1.2「两张注册表」在站目录上肉眼可见。
+
+#### 第五层：运行效果=走读地图与特权查询
+
+前四层跑完，三行汇总并排一放，就是本章的「走读地图」——章内全部行号引用都挂在这三行事实之下（三行均为本机实测，机检级）：
+
+```text
+机检:  TOTAL=43 PASS=43 FAIL=0 WALK_TREE=/work/linux/linux-6.6.78 TREE_VERSION=v6.6.78
+加载链: TREE_VERSION=v6.6.78 STATIONS=6
+映射链: TREE_VERSION=v6.6.78 STATIONS=6
+```
+
+introspection 读数按权限分档。`bpftool version` 无特权可跑（本机实测；末行 `features:` 为版本输出自带的特性清单行，本机构建其后无条目）：
+
+```text
+bpftool v7.7.0
+using libbpf v1.7
+features:
+```
+
+`bpftool feature probe kernel`（完整探测）需要特权（报错点名 `CAP_SYS_ADMIN`/`CAP_BPF`/`CAP_NET_ADMIN`/`CAP_PERFMON`），本机非 root 且 `unprivileged_bpf_disabled=2`（一节 1.3 的开关），实测被拒、退出码 255：
+
+```text
+Error: missing CAP_SYS_ADMIN, CAP_BPF, CAP_NET_ADMIN, CAP_PERFMON, required for full feature probing; run as root or use 'unprivileged'
+```
+
+非特权档按报错提示改用 `bpftool feature probe kernel unprivileged`（本机实测，186 行，节选）——CONFIG_* 段与系统调用可用性段可信：
+
+```text
+Scanning system configuration...
+JIT compiler is enabled
+CONFIG_BPF is set to y
+CONFIG_BPF_SYSCALL is set to y
+CONFIG_BPF_JIT_ALWAYS_ON is set to y
+CONFIG_DEBUG_INFO_BTF is set to y
+Scanning system call availability...
+bpf() syscall is available
+```
+
+但「Scanning eBPF program types...」整节全部打印 `is NOT available`——这**不是**「内核没有」：探测程序/映射类型要真实调用 `bpf(2)` 加载试探，属特权动作，非特权档一律如此报告。因此非特权输出只有 CONFIG_* 与系统调用段可信；root（或持对应能力）下完整探测，同位置应翻成 `is available` 一类（预期输出示例 / 运行级待验证）：
+
+```text
+Scanning eBPF program types...
+eBPF program_type socket_filter is available
+eBPF program_type kprobe is available
+eBPF program_type tracing is available
+……
+```
+
+一句话分档：能本机看——`bpftool version`、非特权探测的 CONFIG_*/系统调用段、被拒报错本身；需特权才能看——完整探测与程序/映射类型的真实可用性（运行级待验证）。这也把 1.3 的权限开关从源码带回了命令行：同一个 `bpf_capable()` 世界。
+
+### 4.3 检查点
+
+先自答，再看提示：
+
+1. 三个月后换了台机器、树也换成更新的版本，机检全 PASS，但正文某条行号对不上——机检为什么没拦住？下一步做什么？（提示：机检按符号不按行号——符号还在、行号漂了它抓不住（4.1）；用第三层命令 `grep -n` 按符号重新定位、`sed -n` 核对上下文，再更新行号与版本标注。）
+2. 机检报 `FAIL 符号未命中:kernel/bpf/syscall.c|bpf_prog_load`，属于哪一类、处置第一步是什么？（提示：三类中的「符号未命中」；第一步不是改脚本，是核对 `WALK_TREE` 的树版本与 `TREE_VERSION` 是否一致——树对不上，FAIL 未必成立于本树；再判断改名/内联/宏展开与清单形态写错，回修 `citations.txt`（4.1，完整路径见排错节）。）
+3. 非特权探测输出里 `eBPF program_type socket_filter is NOT available`，能读成「内核没编 socket_filter」吗？（提示：不能——探测类型要真实加载试探，非特权档一律 NOT available（第五层）；该输出只有 CONFIG_*/系统调用段可信，真值要 root 完整探测（预期输出示例/运行级待验证）。）
+
+**独立示例**：[`scripts/`](../examples/chapter-05/scripts/)——机检脚本 `verify-citations.sh`（头注释记录数据源、汇总行格式与三类失败模式）；[`00-env/`](../examples/chapter-05/00-env/)——环境自检 `check-env.sh`（四个检查区、三档结论、缺树时的 kernel.org 获取指引）。
 <!-- 可视化（T8）：## 可视化：源码树全景与加载调用流 -->
 <!-- 排错（T9）：## 常见问题与排错 -->
 <!-- 课后（T9）：## 课后扩展任务 -->
