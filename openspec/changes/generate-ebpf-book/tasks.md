@@ -132,7 +132,7 @@
 
 ## 7. Future Batches
 
-- [ ] Batch 2: Complete Chapters 2-4.
+- [x] Batch 2: Complete Chapters 2-4.
 - [ ] Batch 3: Complete Chapters 5-8.
 - [ ] Batch 4: Complete Chapters 9-14, including verified observability examples where environment allows, and the Chapter 9 teaching-standard retrofit tasks recorded in the Chapter 9 matrix.
 - [ ] Batch 5: Complete Chapters 15-19, with special depth for Chapter 17.
