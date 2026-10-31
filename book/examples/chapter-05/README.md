@@ -19,7 +19,7 @@
 | `02-load-path/` | 源码切片器 | `trace-load-path.sh`:`BPF_PROG_LOAD` 加载链六站 | 已落地:六站切片器对 v6.6.78 树实跑(全量 307 行),站号与正文二节一一对应 |
 | `03-map-ops/` | 源码切片器 | `trace-map-ops.sh`:映射生命周期六站 | 已落地:六站切片器对 v6.6.78 树实跑(全量 427 行),站号与正文三节一一对应 |
 | `scripts/` | 符号机检 | `verify-citations.sh`:逐条机检引用锚点,输出 TOTAL/PASS/FAIL 汇总 | 已落地:verify-citations.sh 本机实跑 TOTAL=43 PASS=43 FAIL=0,退出码可作门禁 |
-| `exercises/` | 课后扩展 | 2 项走读练习(含参考实现与机检答案) | Task 12 落地 |
+| `exercises/` | 课后扩展 | 2 项走读练习:`01-trace-freeze/` BPF_MAP_FREEZE 全链走读卡(check-answer.sh 十锚点机检)、`02-extend-tracer/` BPF_BTF_LOAD 三站切片器(trace-btf-load.sh + check-trace.sh 六断言自检),均含防剧透参考实现 README | 已落地:机检级本机 v6.6.78 实跑全绿(01:TOTAL=10 PASS=10 FAIL=0;02:TOTAL=6 PASS=6 FAIL=0),冻结的运行级效果为预期输出示例/运行级待验证 |
 
 ## 学习路径
 
