@@ -143,6 +143,7 @@ include/linux/filter.h|struct bpf_binary_header|JIT 映像头
 
 ### Task 1: 00-env 环境自检 + 章级 README 骨架
 
+- [x] Task 1: 00-env 环境自检 + 章级 README 骨架
 **tasks.md 条目**:「Include a source-reading walkthrough with commands for navigating a local Linux tree.」(00-env 部分)+ C5 总览骨架。
 
 **Files:**
@@ -171,6 +172,7 @@ git commit -m "feat(ch05): 00-env 环境自检与章级示例 README 骨架"
 
 ### Task 2: 01-source-map 源码树地图(citations.txt 全量清单)
 
+- [ ] Task 2: 01-source-map 源码树地图(citations.txt 全量清单)
 **tasks.md 条目**:「Write full chapter prose introducing eBPF subsystem source layout and ownership boundaries.」(资产部分)。
 
 **Files:**
@@ -193,6 +195,7 @@ git commit -m "feat(ch05): 源码树地图资产与全量引用锚点清单"
 
 ### Task 3: verify-citations.sh 符号机检(本章「编译级」等价物)
 
+- [ ] Task 3: verify-citations.sh 符号机检(本章「编译级」等价物)
 **tasks.md 条目**:「Main-agent review for kernel path accuracy and conservative version language.」的机检基座。
 
 **Files:**
@@ -219,6 +222,7 @@ git commit -m "feat(ch05): 符号机检脚本(引用锚点全绿)"
 
 ### Task 4: 02-load-path 切片器
 
+- [ ] Task 4: 02-load-path 切片器
 **tasks.md 条目**:「Trace the load path from `BPF_PROG_LOAD` through `kernel/bpf/syscall.c`, verifier, JIT selection, and attach setup.」(资产部分)。
 
 **Files:**
@@ -245,6 +249,7 @@ git commit -m "feat(ch05): 加载路径切片器(六站实跑通过)"
 
 ### Task 5: 03-map-ops 切片器
 
+- [ ] Task 5: 03-map-ops 切片器
 **tasks.md 条目**:「Explain map create, lookup, update, delete, freeze, pin, and reference lifecycle at a source-code level.」(资产部分)。
 
 **Files:**
@@ -269,6 +274,7 @@ git commit -m "feat(ch05): 映射生命周期切片器(六站实跑通过)"
 
 ### Task 6: 正文——学习目标、导读与「一、源码地图」
 
+- [ ] Task 6: 正文——学习目标、导读与「一、源码地图」
 **tasks.md 条目**:「Write full chapter prose introducing eBPF subsystem source layout and ownership boundaries.」(正文部分);回收 ch02:423、ch04:805。
 
 **Files:**
@@ -292,6 +298,7 @@ git commit -m "docs(ch05): 目标导读与一节(源码地图与所有权边界)
 
 ### Task 7: 正文——「二、加载路径追踪」
 
+- [ ] Task 7: 正文——「二、加载路径追踪」
 **tasks.md 条目**:「Trace the load path from `BPF_PROG_LOAD` through `kernel/bpf/syscall.c`, verifier, JIT selection, and attach setup.」(正文);回收 ch02:131。
 
 **Files:**
@@ -314,6 +321,7 @@ git commit -m "docs(ch05): 二节(BPF_PROG_LOAD 一站一停)"
 
 ### Task 8: 正文——「三、映射生命周期」
 
+- [ ] Task 8: 正文——「三、映射生命周期」
 **tasks.md 条目**:「Explain map create, lookup, update, delete, freeze, pin, and reference lifecycle at a source-code level.」(正文);回收 ch02:289。
 
 **Files:**
@@ -336,6 +344,7 @@ git commit -m "docs(ch05): 三节(映射生命周期七动作)"
 
 ### Task 9: 正文——「四、实战:把走读变成可复现的动作」(五层)
 
+- [ ] Task 9: 正文——「四、实战:把走读变成可复现的动作」(五层)
 **tasks.md 条目**:「Include a source-reading walkthrough with commands for navigating a local Linux tree.」(正文部分)。
 
 **Files:**
@@ -358,6 +367,7 @@ git commit -m "docs(ch05): 四节(走读实战五层)"
 
 ### Task 10: 正文——可视化、排错、课后任务、总结、参考
 
+- [ ] Task 10: 正文——可视化、排错、课后任务、总结、参考
 **tasks.md 条目**:「Add text source tree and call-flow visualization.」+「Add troubleshooting, summary, and references.」
 
 **Files:**
@@ -384,6 +394,7 @@ git commit -m "docs(ch05): 可视化/排错/课后/总结/参考收尾"
 
 ### Task 11: 交叉链接、机检终跑与篇幅终检
 
+- [ ] Task 11: 交叉链接、机检终跑与篇幅终检
 **tasks.md 条目**:矩阵 4/5 条的收口与 C8 硬性核对。
 
 **Files:**
@@ -421,6 +432,7 @@ git commit -m "docs(ch05): 交叉链接、机检终跑回填与篇幅终检"
 
 ### Task 12: 两项课后练习参考实现
 
+- [ ] Task 12: 两项课后练习参考实现
 **tasks.md 条目**:STYLE.md 课后扩展任务约定(矩阵任务的练习口径)。
 
 **Files:**
@@ -446,6 +458,7 @@ git commit -m "feat(ch05): 两项走读练习参考实现(机检全绿)"
 
 ### Task 13: 主审(kernel path accuracy + conservative version language)与 tasks.md 勾选(收口)
 
+- [ ] Task 13: 主审(kernel path accuracy + conservative version language)与 tasks.md 勾选(收口)
 **tasks.md 条目**:「Main-agent review for kernel path accuracy and conservative version language.」;统一勾选矩阵 7 条。
 
 **Files:**
