@@ -414,7 +414,140 @@ WALK_TREE=/path/to/your/tree bash book/examples/chapter-05/02-load-path/trace-lo
 
 **独立示例**：[`02-load-path/`](../examples/chapter-05/02-load-path/)——本节六站的切片器（`trace-load-path.sh`），每站「定位 → 代码段 → 职责注」三层输出，正文行号与其一一对应；README 记录调用方法、实跑摘录与失败模式。
 
-<!-- 三节（T7）：## 三、映射生命周期：从一个 fd 到一块内存 -->
+## 三、映射生命周期：从一个 fd 到一块内存
+
+背景问题：第 2 章三节引言预告「映射在内核里的实现结构是第 5 章的内容」，本节正面兑现：沿七个动作走通映射（map）生命周期——create、lookup、update、delete、freeze（冻结）、pin（钉住）、release（释放）。公共头是 `struct bpf_map`（`include/linux/bpf.h:247`，v6.6.78），本节用的字段：`refcnt`（:276）与 `usercnt`（:277）两层引用计数、`writecnt`（:284）写计数、`frozen`（:298）；具体类型把公共头嵌进私有结构（`struct bpf_array` 首字段即它，`include/linux/bpf.h:1757`）。八类映射各对回一份 ops 对象（一节区 4 已点名）；本节以数组为对照例。
+
+七个动作落在同一条三层链上，先立模型再逐站走：
+
+```text
+命令层（fd/权限/拷贝）  通用层（按类型分流）  ops 回调（具体算法，arraymap 对照）
+BPF_MAP_CREATE      :5446 → map_create      :1127 ────→ map_alloc_check/map_alloc（:52/:83）
+BPF_MAP_LOOKUP_ELEM :5449 → map_lookup_elem :1434 → bpf_map_copy_value  :210 → array_map_lookup_elem :166
+BPF_MAP_UPDATE_ELEM :5452 → map_update_elem :1509 → bpf_map_update_value :153 → array_map_update_elem :313
+BPF_MAP_DELETE_ELEM :5455 → map_delete_elem :1565 → rcu 内直呼 ops ：1605 → array_map_delete_elem :392
+BPF_MAP_FREEZE      :5461 → map_freeze      :1998 ──（自包含，无 ops 回调，只置 frozen）──
+BPF_OBJ_PIN         :5467 → bpf_obj_pin     :2797 ──（与 ops 无关：绑 bpffs 路径）──
+close(fd)（⑦）            → bpf_map_release  :773 → bpf_map_put :750 → RCU 宽限期 → 工作队列 → ops->map_free :416
+```
+
+模型图把 1.2 注册表（`bpf_map_types[]`，`syscall.c:63`）落到调用关系上，也是 [`03-map-ops/`](../examples/chapter-05/03-map-ops/) README 第四节三层表的正文版。数组 ops 的存取三格（表头 ：750 见 1.1 区 4）：
+
+```c
+/* kernel/bpf/arraymap.c:757-759（v6.6.78） */
+	.map_lookup_elem = array_map_lookup_elem,
+	.map_update_elem = array_map_update_elem,
+	.map_delete_elem = array_map_delete_elem,
+```
+
+`map_free`/`map_release_uref`（:754/:756）留给动作⑦（3.5）。各站四要素：入口命令 → 通用层 → ops 回调（arraymap 对照）→ 失败出口。
+
+### 3.1 动作① create：从类型编号到一块内存
+
+入口 ：5446 → `map_create`（`syscall.c:1127`，切片器站 2）。属性审查后是查表（`CHECK_ATTR`，:1136-1138）：`map_type` 越界即 `-EINVAL`（:1163-1164）；`array_index_nospec`（:1165）是防推测围栏，与程序侧 `find_prog_type` 的 :2056 同句式；`ops = bpf_map_types[map_type]`（:1166）落空再 `-EINVAL`（:1167-1168）——「枚举在场、实现缺席」（1.2 的按配置分段）。随后：`ops->map_alloc_check`（:1170-1173，数组 `arraymap.c:52`）审私有参数，非特权闸 ：1186-1187（1.3 已拆），特权类型分档 ：1190-1233（`-EPERM` 三档 ：1221/:1229/:1233）。然后 `ops->map_alloc`（:1236-1238，数组为 `arraymap.c:83`）——**「一块内存」在此诞生**：数组按 `max_entries` 预分配定长一整块。收尾：两层计数置 1（:1247-1248）、`freeze_mutex` 初始化（:1249）、`bpf_map_new_fd` 发 fd（:1297）。失败出口：alloc 失败传 `PTR_ERR`（:1237-1238）；**fd 失败是唯一要善后的出口**——对象已建、计数已置，:1305 `bpf_map_put_with_uref` 走释放链（2.6「发卡后失败」的映射侧倒影）。
+
+### 3.2 动作②③④ lookup/update/delete：三层各司其职
+
+**lookup。**入口 ：5449 → `map_lookup_elem`（:1434，切片器站 4）：`__bpf_map_get`（:1452）把 fd 换回 `struct bpf_map *`（空 `-EBADF` :1325；非映射对象 `-EINVAL` :1328）；`FMODE_CAN_READ` 闸（:1455）；拷 key、分配值缓冲（:1466、:1474-1476）；进通用层 `bpf_map_copy_value`（:1487）。通用层定义在 ：210，数组这类常规类型落最后的 else：
+
+```c
+/* kernel/bpf/syscall.c:246-251（v6.6.78） */
+		else
+			ptr = map->ops->map_lookup_elem(map, key);
+		if (IS_ERR(ptr)) {
+			err = PTR_ERR(ptr);
+		} else if (!ptr) {
+			err = -ENOENT;
+```
+
+ops 回调返回**指针**而非 errno，三态由通用层翻译——`IS_ERR` 原样传（:248-249）、`NULL` 翻成 `-ENOENT`（:250-251）、成功则 `copy_map_value` 拷值（:254-258），末尾 `copy_to_user`（:1492）；读取全程在 `rcu_read_lock()`（:243）内。数组侧 `array_map_lookup_elem`（`arraymap.c:166`）印证指针返回：越界返 `NULL`（:171-172，经 ：251 变 `-ENOENT`），否则一句指针算术 `array->value + elem_size * index`（:174）。
+
+**update。**入口 ：5452 → `map_update_elem`（:1509）：`__bpf_map_get`（:1524）后先递增写计数（:1527，动作⑤用）再查 `FMODE_CAN_WRITE`（:1528-1530），拷值（:1546），进通用层 `bpf_map_update_value`（:1552），出口递减（:1558）。通用层定义在 ：153，头部分流：
+
+```c
+/* kernel/bpf/syscall.c:159-163（v6.6.78） */
+	if (bpf_map_is_offloaded(map)) {
+		return bpf_map_offload_update_elem(map, key, value, flags);
+	} else if (map->map_type == BPF_MAP_TYPE_CPUMAP ||
+		   map->map_type == BPF_MAP_TYPE_STRUCT_OPS) {
+		return map->ops->map_update_elem(map, key, value, flags);
+```
+
+offload 交驱动、CPUMAP/STRUCT_OPS 直呼 ops；往下 SOCKMAP 走专用通道（:164-166）、prog array 更新 fd（:167-170）、:172 起禁插桩、percpu 族（:173-180）、QUEUE/STACK 翻译成 push（:195-198）；数组落最后的 else：rcu_read_lock 内 `ops->map_update_elem`（:199-202）。数组侧 `array_map_update_elem`（`arraymap.c:313`）失败出口最有教学价值：越界 `-E2BIG`（:324-326，元素预分配、不能追加）；`BPF_NOEXIST` 撞 `-EEXIST`（:328-330）——数组没有「空槽」。「同一命令、不同实现、不同 errno」——回调表的存在意义。
+
+**delete。**入口 ：5455 → `map_delete_elem`（:1565）：权限闸同 update（:1582-1584）；prog array/struct_ops 要求可睡眠上下文，先分支直呼 ops（:1596-1601）；常规类型在 `rcu_read_lock` 内直呼 ops（:1605）——无独立通用层包装，只剩上下文纪律。数组侧对照三行：`array_map_delete_elem`（`arraymap.c:392-394`）直接 `return -EINVAL;`——定长预分配内存没有「删掉一格」的语义，想归还只有整块释放（动作⑦）；哈希表同名回调返 `-ENOENT`——返回什么由实现定义。
+
+### 3.3 动作⑤ freeze：一张「空白行」的对照面
+
+入口 ：5461 → `map_freeze`（:1998，切片器站 5）。函数体里**没有一次 ops 调用**——三层表的空白行。冻结 = 把映射从「可写」改「只读」：通用属性、不触及存储算法，通用层自己收口：
+
+```c
+/* kernel/bpf/syscall.c:2022-2032（v6.6.78） */
+	mutex_lock(&map->freeze_mutex);
+	if (bpf_map_write_active(map)) {
+		err = -EBUSY;
+		goto err_put;
+	}
+	if (READ_ONCE(map->frozen)) {
+		err = -EBUSY;
+		goto err_put;
+	}
+
+	WRITE_ONCE(map->frozen, true);
+```
+
+生效点不在本函数，而在**之后每一次写命令的权限检查**：`map_get_sys_perms`（:784）发现 `map->frozen` 就剥掉 fd 的 `FMODE_CAN_WRITE`（:791-792）——此后 update/delete/freeze 在 ：1528/:1582/:2017 撞 `-EPERM`，读（:1455 的 `FMODE_CAN_READ`）不受影响。并发两道：`bpf_map_write_active`（:124-127）不撕裂进行中的写——update/delete 入口的递增递减（:1527/:1558、:1581/:1612）是另一半；有写在进行时冻结拿 `-EBUSY`（:2024），已冻结再冻同样 `-EBUSY`（:2028）。
+
+### 3.4 动作⑥ pin：fd 与路径的往返
+
+入口 `BPF_OBJ_PIN` :5467 / `BPF_OBJ_GET` :5470 → `bpf_obj_pin`（:2797）/`bpf_obj_get`（:2813）。fd 进程私有、退出即失；pin 把对象在 bpffs（`kernel/bpf/inode.c`，一节区 6）里记到路径名下：`bpf_obj_pin` 审参（:2801-2806）后交 `bpf_obj_pin_user`（:2808-2810，实体 `kernel/bpf/inode.c:478`）——取对象、认类型（只认映射与程序）、建 inode，`bpf_any_get` 对映射走 `bpf_map_inc_with_uref`（`inode.c:39`）：**bpffs 路径从此持有一份 usercnt**。反向 `bpf_obj_get` → `bpf_obj_get_user`（`kernel/bpf/inode.c:527`）：路径换回新 fd。生命周期含义：pin 后持有者从「进程 fd 表」扩到「文件系统」，close 原 fd 不再让对象消失——第 1 章 `bpftool map pin`/`--pinned` 的出处。失败出口：路径非法、类型不支持、路径已占用 `-EEXIST` 等随 `bpf_obj_pin_user` 传出。
+
+### 3.5 动作⑦ release：两层计数、两级归零、两段延迟
+
+二节 2.6 留的释放线索在此展开，映射侧是程序侧释放链（`__bpf_prog_put`，:2181）的姊妹篇。入口 `close(fd)`：`bpf_map_fops` 的 `.release`（:944）挂 `bpf_map_release`（:773）——给实现一次 `ops->map_release` 机会（:777-778），再 `bpf_map_put_with_uref`（:780）。两层计数分工：`usercnt` 计用户态可见持有者（fd 与 pin），`refcnt` 计全部持有者——程序引用映射走 `bpf_map_inc`（`verifier.c:17748`，登记进 used_maps）**只加 refcnt、不加 usercnt**：关光 fd、删光 pin，只要程序还在用 refcnt 就不为零。归零流程：
+
+```c
+/* kernel/bpf/syscall.c:750-764（v6.6.78） */
+void bpf_map_put(struct bpf_map *map)
+{
+	if (atomic64_dec_and_test(&map->refcnt)) {
+		/* bpf_map_free_id() must be called first */
+		bpf_map_free_id(map);
+
+		WARN_ON_ONCE(atomic64_read(&map->sleepable_refcnt));
+		if (READ_ONCE(map->free_after_mult_rcu_gp))
+			call_rcu_tasks_trace(&map->rcu, bpf_map_free_mult_rcu_gp);
+		else if (READ_ONCE(map->free_after_rcu_gp))
+			call_rcu(&map->rcu, bpf_map_free_rcu_gp);
+		else
+			bpf_map_free_in_work(map);
+	}
+}
+```
+
+头注释（:747-749）先回答「为什么不能在 syscall 上下文直接 free」：`ops->map_free` 可能睡眠；更根本的是**其他 CPU 可能还在读**——lookup 在 `rcu_read_lock` 下裸拿 ops 返回的指针（:243-247），须等所有在读 CPU 离开读侧临界区。所以 `refcnt` 归零（:752）后先还编号给 `map_idr`（:754；对称 2.5 `prog_idr`），再走 RCU 宽限期（:758-761）或直接转工作队列（:762）。usercnt 先行：`bpf_map_put_uref`（:717）在 `usercnt` 归零时回调 `ops->map_release_uref`（:720-721，数组挂 `array_map_free_timers`，`arraymap.c:402`）。宽限期走完，`bpf_map_free_rcu_gp`（:734）递进工作队列，`bpf_map_free_deferred`（:691）执行 `ops->map_free`（:700），再收元数据（:710/:714）。数组侧 `array_map_free`（`arraymap.c:416`）逐元素清 BTF 字段（:428/:434）、释放每 CPU 内存（:438-439），最后 `bpf_map_area_free`（:444）归还那「一块内存」——与 3.1 对上。
+
+**教师视角**：内核处理「多实现」的惯用法在映射侧凑齐了——命令包装管 fd、权限、拷贝与 errno 翻译；通用层管公共分支与上下文纪律；ops 表管算法。第 4 章 2.1 的 prog ops 表是它的镜像：程序侧 `bpf_prog_load` → `find_prog_type`（:2050）查 `bpf_prog_types[]` → `bpf_verifier_ops`/`bpf_prog_ops`；映射侧 `map_create` → `bpf_map_types[]`（:1166）→ `bpf_map_ops`。两张表出自同一份清单的三次展开（1.2），越界围栏同句式（:1165 与 :2056），连「fd 失败走释放链」的善后都互为倒影（2.6/:1305）——学会一侧，另一侧免费。freeze/pin 的空白行补一刀：回调表只装**随实现变化的语义**；冻结、命名这类共享属性，用标志位与引用计数在通用层解决。
+
+**学生动手**：切片器逐站对照（站 1→节首模型图，2→3.1，3/4→3.2，5→3.3/3.4，6→3.5）。三条命令（走读树路径约定见 [`01-source-map/`](../examples/chapter-05/01-source-map/)）：
+
+```bash
+bash book/examples/chapter-05/03-map-ops/trace-map-ops.sh    # 全量六站
+bash book/examples/chapter-05/03-map-ops/trace-map-ops.sh | grep "^## 站"   # 站目录
+WALK_TREE=/path/to/your/tree bash book/examples/chapter-05/03-map-ops/trace-map-ops.sh
+```
+
+预期输出示例（第一、二条为 v6.6.78 树本机实跑，机检级）：第一条共 427 行、25 段代码、末行 `TREE_VERSION=v6.6.78 STATIONS=6`；第二条命中 6 行站标题；第三条换树时各站打 `NOT FOUND`（其 README 失败模式 2）。本节行号与该 README 锚点表一致，均可用一条 `grep -n` 复现；贴码区间与切片器切段不同处，以同站「定位」行为锚，漂移复核见四节 `verify-citations.sh`。
+
+### 3.6 检查点
+
+先自答，再看提示：
+
+1. freeze 为什么不需要 ops 回调？pin 呢？（提示：只置 `map->frozen`（:2032），`map_get_sys_perms`（:791-792）剥 `FMODE_CAN_WRITE`；pin 只在 bpffs 建名——「对象私有语义走 ops，通用属性走通用层」（3.3/3.4）。）
+2. `bpftool map update` 一个数组映射报 `-E2BIG`，是超了什么？（提示：元素创建时已预分配，「索引越界即满」——`arraymap.c:324-326`；对照 `BPF_NOEXIST` 撞 `-EEXIST`（:330），数组没有空槽（3.2）。）
+3. 被程序引用的映射，close 光所有 fd、删光 pin，为何还不释放？（提示：程序登记 `used_maps` 走 `bpf_map_inc`（`verifier.c:17748`）只加 refcnt；归零才 `bpf_map_put`（:750），经 RCU 宽限期进工作队列（:758-762），`ops->map_free` 在 `bpf_map_free_deferred`（:691）执行——直接 free 会踩到还在读的 CPU（3.5）。）
+
+**独立示例**：[`03-map-ops/`](../examples/chapter-05/03-map-ops/)——六站切片器（`trace-map-ops.sh`），每站「定位→代码段→职责注」三层输出；README 第四节三层表是节首模型图的底稿，第五、六节为实跑摘录与失败模式。
 <!-- 四节（T8）：## 四、实战：把走读变成可复现的动作 -->
 <!-- 可视化（T8）：## 可视化：源码树全景与加载调用流 -->
 <!-- 排错（T9）：## 常见问题与排错 -->
