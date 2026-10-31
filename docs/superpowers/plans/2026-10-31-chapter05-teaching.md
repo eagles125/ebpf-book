@@ -172,7 +172,7 @@ git commit -m "feat(ch05): 00-env 环境自检与章级示例 README 骨架"
 
 ### Task 2: 01-source-map 源码树地图(citations.txt 全量清单)
 
-- [ ] Task 2: 01-source-map 源码树地图(citations.txt 全量清单)
+- [x] Task 2: 01-source-map 源码树地图(citations.txt 全量清单)
 **tasks.md 条目**:「Write full chapter prose introducing eBPF subsystem source layout and ownership boundaries.」(资产部分)。
 
 **Files:**
