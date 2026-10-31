@@ -274,7 +274,7 @@ git commit -m "feat(ch05): 映射生命周期切片器(六站实跑通过)"
 
 ### Task 6: 正文——学习目标、导读与「一、源码地图」
 
-- [ ] Task 6: 正文——学习目标、导读与「一、源码地图」
+- [x] Task 6: 正文——学习目标、导读与「一、源码地图」
 **tasks.md 条目**:「Write full chapter prose introducing eBPF subsystem source layout and ownership boundaries.」(正文部分);回收 ch02:423、ch04:805。
 
 **Files:**
