@@ -4,7 +4,7 @@
 
 ## 演示目标
 
-把「eBPF 子系统二十万行内核代码为什么读得动」拆成三件可操作的事:
+把「eBPF 子系统以十万行计的内核代码为什么读得动」拆成三件可操作的事:
 
 - **源码地图**(`01-source-map/`):`kernel/bpf/` 与三层 `include/` 的分区导览,附全量引用锚点清单(citations.txt),每条锚点 = 文件 + 符号 + 一句话职责;
 - **两条走读链**(`02-load-path/`、`03-map-ops/`):加载路径(`BPF_PROG_LOAD` 一站一停)与映射生命周期(create/lookup/update/delete/freeze/pin/release)各六站,切片器对走读树实跑,提取每站定位行、关键代码段与职责注;

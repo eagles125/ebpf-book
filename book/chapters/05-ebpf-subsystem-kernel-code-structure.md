@@ -6,7 +6,7 @@
 
 读完本章后，你应当能够：
 
-- 对着 `kernel/bpf/` 目录说出六分区的名字与分工——入口分发、验证、执行与 JIT、映射实现、BTF 与本地存储、其他——并给任意一个 .c 文件找到分区归属（一节 1.1）。
+- 对着 `kernel/bpf/` 目录说出六分区的名字与分工——入口分发、验证、执行与 JIT（just-in-time，即时编译）、映射实现、BTF（BPF Type Format，BPF 类型格式）与本地存储、其他——并给任意一个 .c 文件找到分区归属（一节 1.1）。
 - 讲透「一行宏展开成源码地图」：`include/linux/bpf_types.h` 这份清单在 `kernel/bpf/syscall.c` 里三次定义宏、三次 include，展开成映射类型注册表、程序类型注册表与 link 类型名字符串表；并辨认三层 include 的所有权边界，把本机 `unprivileged_bpf_disabled=2` 对回源码拦截点（一节 1.2 与 1.3）。
 - 沿 `BPF_PROG_LOAD` 从 `bpf(2)` 入口到程序就绪走通加载链，说出每一站落在哪个文件（二节）。
 - 沿映射（map）从 `BPF_MAP_CREATE` 到 fd、从 fd 到一块内核内存走通生命周期，把第 2 章的八类映射对回实现文件（三节）。
@@ -18,16 +18,16 @@
 
 走读需要一个树。全书以 v6.6.78 为走读树（路径与约定见 [`01-source-map/`](../examples/chapter-05/01-source-map/)），正文行号一律标注「(v6.6.78)」。走读树只承担两类操作——`wc -l` 数行数、`grep` 对符号——构建、加载、运行都不发生在它身上；本章所有行号都应能用一条 grep 重现，这就是「静态事实」的含义。你的树若不是这个版本，行号会漂移；这不是麻烦，是本章要教的技能：先按符号检索定位，再读上下文，四节把它变成可复现的动作。
 
-先把前四章的预告逐条回收，共四点，各自标注兑现位置：
+学习路线按「先地图、再两条链、最后上机」推进：一节给源码地图与所有权边界（六分区、双展开、三层 include 与权限开关）；二节追踪加载路径，`BPF_PROG_LOAD` 一站一停；三节追踪映射生命周期；四节把走读变成可复现的动作；可视化、常见问题与排错、课后扩展任务随后收尾。二节与三节各配一个切片器（`02-load-path/`、`03-map-ops/`），四节教你实跑。
+
+两个阅读约定沿用全书。其一，双视角行文——加粗的「**教师视角**」段给类比与误区，「**学生动手**」段给可操作命令，一节各小节的检查点以编号自测问题收拢。其二，验证状态约定——本章是源码走读章，验证口径换档：源码摘录与行号是**静态事实**（贴码与走读树逐字一致，行号全部实测）；机检脚本输出是**本机实测**；凡涉及加载与运行的描述一律「预期输出示例 / 运行级待验证」。若某条行号对不上，先怀疑版本漂移，排错路径见排错节。
+
+最后把前四章的预告逐条回收，共四点，各自标注兑现位置：
 
 - 预告①（第 2 章 1.8）：「JIT 编译为本机指令，架构相关（第 6 章，源码地图见第 5 章）」→ 二节沿 `BPF_PROG_LOAD` 一站一停，走到 JIT 那一站时给出源码位置；各架构后端内部留给第 6 章。
 - 预告②（第 2 章三节引言）：「映射在内核里的实现结构是第 5 章的内容」→ 三节《映射生命周期：从一个 fd 到一块内存》兑现：从 `BPF_MAP_CREATE` 到 fd、从 fd 到内核内存，把八类映射对回实现文件。
 - 预告③（第 2 章 4.1）：「子系统源码地图（`syscall.c`/`verifier.c`/各映射实现文件的关系）是第 5 章的正题」→ 一节正面兑现：1.1 的分区表、1.3 的边界。
 - 预告④（第 4 章总结的桥）：「第 5 章把 2.1 的一行宏展开成源码地图」→ 一节 1.2 的双展开现场兑现：同一个头文件、两处不同宏定义、两张注册表。
-
-学习路线按「先地图、再两条链、最后上机」推进：一节给源码地图与所有权边界（六分区、双展开、三层 include 与权限开关）；二节追踪加载路径，`BPF_PROG_LOAD` 一站一停；三节追踪映射生命周期；四节把走读变成可复现的动作；可视化、常见问题与排错、课后扩展任务随后收尾。二节与三节各配一个切片器（`02-load-path/`、`03-map-ops/`），四节教你实跑。
-
-两个阅读约定沿用全书。其一，双视角行文——加粗的「**教师视角**」段给类比与误区，「**学生动手**」段给可操作命令，一节各小节的检查点以编号自测问题收拢。其二，验证状态约定——本章是源码走读章，验证口径换档：源码摘录与行号是**静态事实**（贴码与走读树逐字一致，行号全部实测）；机检脚本输出是**本机实测**；凡涉及加载与运行的描述一律「预期输出示例 / 运行级待验证」。若某条行号对不上，先怀疑版本漂移，排错路径见排错节。
 
 ## 一、源码地图：布局与所有权边界
 
@@ -60,7 +60,7 @@ int bpf_check(struct bpf_prog **prog, union bpf_attr *attr, bpfptr_t uattr, __u3
 
 `bpf_check` 是验证器大门，第 3 章的全部规则从这里向下展开。失败点：拒绝日志都出自 `log.c`。边界：验证只在加载期跑一次，运行期不重来。
 
-**区 3：执行与 JIT——`core.c`、`dispatcher.c`、`trampoline.c`、`mprog.c`、`offload.c`。**背景问题：验证通过的指令以什么形态执行？`core.c`（2975 行）同时装着解释器与通用 JIT（just-in-time，即时编译）骨架，关键在 `__weak`。摘录：
+**区 3：执行与 JIT——`core.c`、`dispatcher.c`、`trampoline.c`、`mprog.c`、`offload.c`。**背景问题：验证通过的指令以什么形态执行？`core.c`（2975 行）同时装着解释器与通用 JIT 骨架，关键在 `__weak`。摘录：
 
 ```c
 /* kernel/bpf/core.c:2884-2887（v6.6.78） */
@@ -84,7 +84,7 @@ const struct bpf_map_ops array_map_ops = {
 
 每个实现文件都产出这样一个 ops 对象：`hashtab.c` 产 `htab_map_ops`（`kernel/bpf/hashtab.c:2280`，v6.6.78）等变体，`ringbuf.c` 产 `ringbuf_map_ops`（:355）——正是 1.2 注册表里存的地址。失败点：ops 没挂的回调由内核判空。边界：fd 与引用计数归 `syscall.c`，实现文件只管「这类映射怎么存取」（三节展开）。
 
-**区 5：BTF 与本地存储——`btf.c` 等 7 个文件。**背景问题：CO-RE（Compile Once - Run Everywhere，一次编译，到处运行）与 fentry/fexit 依赖的类型信息从哪来？`btf.c`（8601 行）做 BTF（BPF Type Format，BPF 类型格式）解析、校验与查找；`sysfs_btf.c` 全文 45 行，把内核 BTF 暴露成第 4 章用过的 `/sys/kernel/btf/vmlinux`。摘录：
+**区 5：BTF 与本地存储——`btf.c` 等 7 个文件。**背景问题：CO-RE（Compile Once - Run Everywhere，一次编译，到处运行）与 fentry/fexit 依赖的类型信息从哪来？`btf.c`（8601 行）做 BTF 的解析、校验与查找；`sysfs_btf.c` 全文 45 行，把内核 BTF 暴露成第 4 章用过的 `/sys/kernel/btf/vmlinux`。摘录：
 
 ```c
 /* kernel/bpf/sysfs_btf.c:31-38（v6.6.78） */
@@ -100,7 +100,7 @@ static int __init btf_vmlinux_init(void)
 
 链接器把 vmlinux BTF 放进 `__start_BTF`/`__stop_BTF` 区间，:42 的 `sysfs_create_bin_file` 把它挂成 sysfs 文件（`subsys_initcall` 在 :45）。失败点：内核没编 BTF 时文件不存在，fentry/fexit 与 CO-RE 全线不可用——第 4 章环境前提的源码出处。本地存储侧：task/inode/cgroup 三族映射共享 `bpf_local_storage.c`。
 
-**区 6：其他——`cgroup.c`、`bpf_iter.c` 族、`bpf_lsm.c`、`helpers.c`、`inode.c` 等 11 个文件。**背景问题：挂载点与辅助函数（helper）为什么也住在 `kernel/bpf/`？它们是所有程序类型共享的底座。摘录：
+**区 6：其他——`cgroup.c`、`bpf_iter.c` 族、`bpf_lsm.c`、`helpers.c`、`inode.c` 等 14 个文件。**背景问题：挂载点与辅助函数（helper）为什么也住在 `kernel/bpf/`？它们是所有程序类型共享的底座。摘录：
 
 ```c
 /* kernel/bpf/helpers.c:1756-1759（v6.6.78） */
@@ -198,7 +198,7 @@ static const char *bpf_link_type_strs[] = {
 
 背景问题之一：谁能包含谁？用户态工具为什么敢直接用 `<linux/bpf.h>`？边界有三层。第一层 `include/uapi/linux/bpf.h`（7350 行，v6.6.78）是 UAPI 契约：命令字枚举、`union bpf_attr`、类型枚举与辅助函数编号——内核对用户态唯一承诺稳定的部分，两边都可包含。第二层 `include/linux/bpf.h`（3232 行）是内核对象层：`struct bpf_map`、`struct bpf_map_ops`、`struct bpf_prog` 与验证器导出原型，仅内核态可包含；它自己在 :7 `#include <uapi/linux/bpf.h>`（v6.6.78）——「契约在内层、实现在外层」的单向依赖就此可见；`syscall.c` 的 :4 包含的正是第二层。第三层 `bpf_types.h` 游离在依赖链之外——不是「被包含的头」，是「被多次展开的清单」，1.2 的三处现场即全部用法。失败点：内核私有头在用户态编不过——工具链用自带 uapi 副本（第 2 章三节引言数过它的枚举成员）。
 
-背景问题之二：前四章标注的「本机非 root、`unprivileged_bpf_disabled=2`」在源码哪里？声明在 `syscall.c:60-61`（v6.6.78）：`int sysctl_unprivileged_bpf_disabled __read_mostly = IS_BUILTIN(CONFIG_BPF_UNPRIV_DEFAULT_OFF) ? 2 : 0;`——发行版打开该配置即开机为 2，本机值正是 2（`/proc/sys/kernel/unprivileged_bpf_disabled`，本机实测）。拦截点两处、同一句式：`map_create` 的 :1186 与 `bpf_prog_load` 的 :2618，都是 `if (sysctl_unprivileged_bpf_disabled && !bpf_capable()) return -EPERM;`——非 root 加载拿到 `Operation not permitted` 的源码出处，前四章「加载级待验证」的答案落在这里。开关自身：`bpf_unpriv_handler`（:5774）要求写入者持 `CAP_SYS_ADMIN`（:5781），值为 1 时锁死（:5787）；表项（:5800 起）以 `SYSCTL_TWO`（:5806）钳住值域 0–2。边界：权限不止一层——值哪怕归 0，非特权也只拿到受限面：映射侧 :1190 起 switch 只放行 ARRAY、PERCPU_ARRAY 等，程序侧 :2620-2622 只放行 SOCKET_FILTER 与 CGROUP_SKB。
+背景问题之二：前四章标注的「本机非 root、`unprivileged_bpf_disabled=2`」在源码哪里？声明在 `syscall.c:60-61`（v6.6.78）：`int sysctl_unprivileged_bpf_disabled __read_mostly = IS_BUILTIN(CONFIG_BPF_UNPRIV_DEFAULT_OFF) ? 2 : 0;`——发行版打开该配置即开机为 2，本机值正是 2（`/proc/sys/kernel/unprivileged_bpf_disabled`，本机实测）。拦截点两处、同一句式：`map_create` 的 :1186 与 `bpf_prog_load` 的 :2618，都是 `if (sysctl_unprivileged_bpf_disabled && !bpf_capable()) return -EPERM;`——非 root 加载拿到 `Operation not permitted` 的源码出处，前四章「加载级待验证」的答案落在这里。开关自身：`bpf_unpriv_handler`（:5774）要求写入者持 `CAP_SYS_ADMIN`（:5781），值为 1 时锁死（:5787）；表项（:5800 起）以 `SYSCTL_TWO`（:5806）钳住值域 0–2。边界：权限不止一层——值哪怕归 0，非特权也只拿到受限面：映射侧 :1190 起 switch 只放行 ARRAY、PERCPU_ARRAY 等，程序侧 :2624-2627 只放行 SOCKET_FILTER 与 CGROUP_SKB。
 
 ### 1.4 检查点
 
@@ -206,7 +206,7 @@ static const char *bpf_link_type_strs[] = {
 
 1. 内核要新增一种映射类型，按本章地图至少要动哪几处？哪些地方**不用**动？（提示：UAPI 枚举加成员、`bpf_types.h` 加一行、实现文件给 ops 对象，三处；注册表与分发不用动——双展开替你长表，见 1.2。）
 2. `bpf_prog_types[]` 里 `BPF_PROG_TYPE_SOCKET_FILTER` 一格指向 `&sk_filter_prog_ops`，这个对象定义在哪个文件？为什么不在 `syscall.c`？（提示：`net/core/filter.c:10953`（v6.6.78）；ops 跟着钩子实现走，注册表只管入口与生命周期（1.2）。）
-3. 非 root 终端执行 `bpftool prog load` 报 `Operation not permitted`，本章能把报错对到源码哪一行？再想一层：若 sysctl 归 0，同一个程序就能加载吗？（提示：`syscall.c:2618`（PROG_LOAD）与 :1186（MAP_CREATE）的 `sysctl_unprivileged_bpf_disabled && !bpf_capable()`；归 0 后还要过 :2620 的类型白名单——非特权仅 SOCKET_FILTER 与 CGROUP_SKB（1.3）。）
+3. 非 root 终端执行 `bpftool prog load` 报 `Operation not permitted`，本章能把报错对到源码哪一行？再想一层：若 sysctl 归 0，同一个程序就能加载吗？（提示：`syscall.c:2618`（PROG_LOAD）与 :1186（MAP_CREATE）的 `sysctl_unprivileged_bpf_disabled && !bpf_capable()`；归 0 后还要过 :2624 的类型白名单——非特权仅 SOCKET_FILTER 与 CGROUP_SKB（1.3）。）
 
 **独立示例**：[`01-source-map/`](../examples/chapter-05/01-source-map/)——45 个 .c 文件六分区全量表、三层 include 与双展开的文字版、`citations.txt` 引用锚点清单（本章每条「文件：行号」都能对上号），机检脚本逐条核对（用法见四节）。
 
