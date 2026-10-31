@@ -249,7 +249,7 @@ git commit -m "feat(ch05): 加载路径切片器(六站实跑通过)"
 
 ### Task 5: 03-map-ops 切片器
 
-- [ ] Task 5: 03-map-ops 切片器
+- [x] Task 5: 03-map-ops 切片器
 **tasks.md 条目**:「Explain map create, lookup, update, delete, freeze, pin, and reference lifecycle at a source-code level.」(资产部分)。
 
 **Files:**
