@@ -1,6 +1,6 @@
 # 01-source-map:eBPF 子系统源码树地图
 
-eBPF 的内核侧实现集中在 `kernel/bpf/` 一个目录里。本章正文《一、源码地图》一节按本 README 的分区展开;`citations.txt` 则是全章引用锚点的清单数据,`scripts/verify-citations.sh`(机检脚本)以它为唯一数据源,逐行到走读树里核对符号。
+eBPF 的内核侧实现集中在 `kernel/bpf/` 一个目录里。本章正文《一、源码地图》一节按本 README 的分区展开;`citations.txt` 则是全章引用锚点的清单数据,`../scripts/verify-citations.sh`(机检脚本)以它为唯一数据源,逐行到走读树里核对符号。
 
 - 走读树:`/work/linux/linux-6.6.78`(v6.6.78)。本目录只做两件事:`wc -l` 统计行数、`grep -F` 核对符号——**只读源码树,不构建、不加载**。
 - 术语约定:`map` 译作「映射」,`helper` 译作「辅助函数」,`program type` 译作「程序类型」,`attachment point` 译作「挂载点」。
