@@ -344,7 +344,7 @@ git commit -m "docs(ch05): 三节(映射生命周期七动作)"
 
 ### Task 9: 正文——「四、实战:把走读变成可复现的动作」(五层)
 
-- [ ] Task 9: 正文——「四、实战:把走读变成可复现的动作」(五层)
+- [x] Task 9: 正文——「四、实战:把走读变成可复现的动作」(五层)
 **tasks.md 条目**:「Include a source-reading walkthrough with commands for navigating a local Linux tree.」(正文部分)。
 
 **Files:**
