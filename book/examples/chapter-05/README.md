@@ -14,11 +14,11 @@
 
 | 目录 | 类别 | 内容 | 落地状态 |
 |---|---|---|---|
-| `00-env/` | 环境自检 | `check-env.sh`:走读树/工具链/BTF/权限档位分级诊断,末尾三档结论 | 已落地 |
-| `01-source-map/` | 源码树地图 | `citations.txt` 全量引用锚点清单 + 分区导览 README | Task 2 落地 |
-| `02-load-path/` | 源码切片器 | `trace-load-path.sh`:`BPF_PROG_LOAD` 加载链六站 | Task 4 落地 |
-| `03-map-ops/` | 源码切片器 | `trace-map-ops.sh`:映射生命周期六站 | Task 5 落地 |
-| `scripts/` | 符号机检 | `verify-citations.sh`:逐条机检引用锚点,输出 TOTAL/PASS/FAIL 汇总 | Task 3 落地 |
+| `00-env/` | 环境自检 | `check-env.sh`:走读树/工具链/BTF/权限档位分级诊断,末尾三档结论 | 已落地:本机实跑四检查区+三档结论通过,缺树时给出 kernel.org 获取指引 |
+| `01-source-map/` | 源码树地图 | `citations.txt` 全量引用锚点清单 + 分区导览 README | 已落地:citations.txt 43 条锚点本机机检 FAIL=0,README 六分区表与正文一节互为详略 |
+| `02-load-path/` | 源码切片器 | `trace-load-path.sh`:`BPF_PROG_LOAD` 加载链六站 | 已落地:六站切片器对 v6.6.78 树实跑(全量 307 行),站号与正文二节一一对应 |
+| `03-map-ops/` | 源码切片器 | `trace-map-ops.sh`:映射生命周期六站 | 已落地:六站切片器对 v6.6.78 树实跑(全量 427 行),站号与正文三节一一对应 |
+| `scripts/` | 符号机检 | `verify-citations.sh`:逐条机检引用锚点,输出 TOTAL/PASS/FAIL 汇总 | 已落地:verify-citations.sh 本机实跑 TOTAL=43 PASS=43 FAIL=0,退出码可作门禁 |
 | `exercises/` | 课后扩展 | 2 项走读练习(含参考实现与机检答案) | Task 12 落地 |
 
 ## 学习路径
@@ -37,7 +37,13 @@
 
 ## 机检汇总
 
-机检汇总由 Task 11 回填。
+本机实测(2026-11-01;运行环境一句话:普通用户 shell,仅需 bash/grep/sed/wc,clang 不需要,无 root 可复现)——`bash book/examples/chapter-05/scripts/verify-citations.sh` 实跑输出:
+
+```text
+TOTAL=43 PASS=43 FAIL=0 WALK_TREE=/work/linux/linux-6.6.78 TREE_VERSION=v6.6.78
+```
+
+退出码 0。换树或回修 `citations.txt` 后以同一命令复跑,以汇总行 `FAIL=0` 收口;FAIL 的三类处置见正文四节排错③。
 
 ## 走读树版本声明
 

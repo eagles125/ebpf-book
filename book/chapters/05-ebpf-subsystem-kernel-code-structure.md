@@ -16,7 +16,7 @@
 
 前四章你一直在「用门」：第 1 章把程序从门里递进去，第 3 章看着验证器（verifier）在门口安检，第 4 章弄清了门牌决定工位。但门框长什么样、门是谁造的、为什么这套设施能一边被全系统依赖一边持续生长，还没有拆开看过。本章拆门框——读的对象从「程序怎么写」换成「子系统自己长什么样」。量级先摆出来：`kernel/bpf/` 下 45 个 .c 文件共 65955 行（v6.6.78 实测），单是网络钩子的家 `net/core/filter.c` 就另有 12026 行，加上三层 `include/` 头文件与各架构 JIT 后端，构成 eBPF 的内核侧全貌。本章不写 BPF 程序、不编译、不加载，全部动作是源码走读：贴源码、数行号、对符号。与前四章的分工：前四章讲行为与语义，本章讲结构与边界——此后各章引用内核源码，一律以本章的地图为坐标。
 
-走读需要一个树。全书以 v6.6.78 为走读树（路径与约定见 [`01-source-map/`](../examples/chapter-05/01-source-map/)），正文行号一律标注「(v6.6.78)」。走读树只承担两类操作——`wc -l` 数行数、`grep` 对符号——构建、加载、运行都不发生在它身上；本章所有行号都应能用一条 grep 重现，这就是「静态事实」的含义。你的树若不是这个版本，行号会漂移；这不是麻烦，是本章要教的技能：先按符号检索定位，再读上下文，四节把它变成可复现的动作。
+走读需要一个树。全书以 v6.6.78 为走读树（路径与约定见 [`01-source-map/`](../examples/chapter-05/01-source-map/)），正文行号一律标注「（v6.6.78）」。走读树只承担两类操作——`wc -l` 数行数、`grep` 对符号——构建、加载、运行都不发生在它身上；本章所有行号都应能用一条 grep 重现，这就是「静态事实」的含义。你的树若不是这个版本，行号会漂移；这不是麻烦，是本章要教的技能：先按符号检索定位，再读上下文，四节把它变成可复现的动作。
 
 学习路线按「先地图、再两条链、最后上机」推进：一节给源码地图与所有权边界（六分区、双展开、三层 include 与权限开关）；二节追踪加载路径，`BPF_PROG_LOAD` 一站一停；三节追踪映射生命周期；四节把走读变成可复现的动作；可视化、常见问题与排错、课后扩展任务随后收尾。二节与三节各配一个切片器（`02-load-path/`、`03-map-ops/`），四节教你实跑。
 
@@ -252,7 +252,7 @@ static int bpf_prog_load(union bpf_attr *attr, bpfptr_t uattr, u32 uattr_size)
 	char license[128];
 ```
 
-逐段读：签名后的第一道闸是 `CHECK_ATTR(BPF_PROG_LOAD)`（:2594-2595），要求属性块中本命令之后的所有填充位为零——UAPI 向后兼容的地基：未来内核新增字段，老 loader 置零即可不报错；`prog_flags` 掩码（:2597-2604）与对齐类检查（:2606-2609）把标志位审死，越位同样 `-EINVAL`/`-EPERM`。紧接三道权限闸，全在 :2743 的验证调用**之前**：:2618-2619 非特权开关（一节 1.3 已拆）；:2621-2623 指令条数为 0 或超限即 `-E2BIG`，上限分档——特权 `BPF_COMPLEXITY_LIMIT_INSNS`（100 万条，`include/linux/bpf.h:1769`，v6.6.78）、非特权 `BPF_MAXINSNS`（4096 条，`include/uapi/linux/bpf_common.h:54`）；:2624-2627 类型白名单一句回指——非特权仅 SOCKET_FILTER 与 CGROUP_SKB（一节 1.3 贴过码）；:2629-2632 分档查 `CAP_NET_ADMIN`/`CAP_PERFMON`。位置关系要记牢：权限闸在验证之前——第 3 章排错节第三组「先答一个问题：进没进验证」的源码出处就是 :2618-2632 与 :2743 的先后。
+逐段读：签名后的第一道闸是 `CHECK_ATTR(BPF_PROG_LOAD)`（:2594-2595），要求属性块中本命令之后的所有填充位为零——UAPI 向后兼容的地基：未来内核新增字段，老 loader 置零即可不报错；`prog_flags` 掩码（:2597-2604）与对齐类检查（:2606-2609）把标志位审死，越位同样 `-EINVAL`/`-EPERM`。紧接三道权限闸，全在 :2743 的验证调用**之前**：:2618-2619 非特权开关（一节 1.3 已拆）；:2621-2623 指令条数为 0 或超限即 `-E2BIG`，上限分档——特权 `BPF_COMPLEXITY_LIMIT_INSNS`（100 万条，`include/linux/bpf.h:1769`，v6.6.78）、非特权 `BPF_MAXINSNS`（4096 条，`include/uapi/linux/bpf_common.h:54`）；:2624-2627 类型白名单一句回指——非特权仅 SOCKET_FILTER 与 CGROUP_SKB（一节 1.3 已点名该白名单）；:2629-2632 分档查 `CAP_NET_ADMIN`/`CAP_PERFMON`。位置关系要记牢：权限闸在验证之前——第 3 章排错节第三组「先答一个问题：进没进验证」的源码出处就是 :2618-2632 与 :2743 的先后。
 
 ### 2.3 站 3：验证调用点——`bpf_check` 的唯一入口
 
@@ -351,7 +351,7 @@ int bpf_prog_new_fd(struct bpf_prog *prog)
 }
 ```
 
-`security_bpf_prog`（:2297）是 LSM 闸；`anon_inode_getfd`（:2301-2302）发放匿名 inode 的 fd（名字 `bpf-prog`，`O_CLOEXEC` 防跨 exec 泄漏）。站 5 同时是释放链的起点：加载体内 `atomic64_set(&prog->aux->refcnt, 1)`（:2716）把引用计数置 1，fd 是第一位持有者。失败出口：编号路径 `WARN_ON_ONCE(!id)` → `-ENOSPC`（:2112-2113）；fd 分配失败（fd 表满一类标准错误随返回值传出）→ :2774-2775 `bpf_prog_put(prog)`——编号已发、通告已登记（kallsyms/perf/audit 三件套，:2769-2771），善后必须走释放链。
+`security_bpf_prog`（:2297）是 LSM 闸；`anon_inode_getfd`（:2301-2302）发放匿名 inode 的 fd（名字 `bpf-prog`，`O_CLOEXEC` 防跨 exec 泄漏）。站 5 同时是释放链的起点：加载体内 `atomic64_set(&prog->aux->refcnt, 1)`（:2716）把引用计数置 1，fd 是第一位持有者。失败出口：编号路径 `WARN_ON_ONCE(!id)` → `-ENOSPC`（:2112-2113）；fd 分配失败（fd 表满一类标准错误随返回值传出）→ :2774-2775 `bpf_prog_put(prog)`——编号已发、通告已登记（三件套——`kallsyms`（内核符号表，登记后性能剖析与栈回溯能按符号认出这段程序）、`perf`（perf 事件流，向订阅者广播程序加载/卸载事件）、`audit`（内核审计日志，给加载动作留档备查），:2769-2771），善后必须走释放链。
 
 ### 2.6 站 6：「加载 ≠ 挂载」与释放链
 
@@ -376,7 +376,7 @@ static void __bpf_prog_put(struct bpf_prog *prog)
 }
 ```
 
-职责：引用计数归零（:2185）才启动分级释放——入口 `bpf_prog_put`（:2195-2199，导出符号）→ `__bpf_prog_put`（:2181，中断上下文转工作队列 :2186-2188）→ `bpf_prog_put_deferred`（:2168）卸 :2769-2771 登记的三件套、把编号还给 IDR（:2175-2177）→ `__bpf_prog_put_noref`（:2147）注销 BTF/模块引用后按 sleepable 与否走两种 RCU 回收（:2158-2165）。常态入口是 fd 关闭：`bpf_prog_release`（:2201）在 `->release` 回调里调 `bpf_prog_put`（:2205）——第 2 章 1.8 的「Ctrl-C 退出即卸载」源码出处就在这一行。map 侧的完整释放故事在三节；prog 侧到此一段带过。
+职责：引用计数归零（:2185）才启动分级释放——入口 `bpf_prog_put`（:2195-2199，导出符号）→ `__bpf_prog_put`（:2181，中断上下文转工作队列 :2186-2188）→ `bpf_prog_put_deferred`（:2168）卸 :2769-2771 登记的三件套、把编号还给 IDR（:2175-2177）→ `__bpf_prog_put_noref`（:2147）注销 BTF/模块引用后按 sleepable 与否走两种 RCU 回收（:2158-2165）。常态入口是 fd 关闭：`bpf_prog_release`（:2201）在 `->release` 回调里调 `bpf_prog_put`（:2205）——第 2 章 1.8 的「Ctrl-C 退出即卸载」源码出处就在这一行。映射侧的完整释放故事在三节；程序侧到此一段带过。
 
 六站失败出口收成总表（行号 v6.6.78 实测；`-EACCES`/`-EPERM` 日志排错见第 3 章排错节第一、三组）：
 
@@ -388,6 +388,7 @@ static void __bpf_prog_put(struct bpf_prog *prog)
 | `-EPERM` | :2618-2619、:2624-2627、:2629-2632、:2606-2609 | 非特权开关、类型白名单、NET_ADMIN/PERFMON 档位等——均未进验证即拦 |
 | `-EACCES` | `verifier.c` 全文件 126 处 `return -EACCES` | 验证器拒绝，带完整日志 |
 | `-ENOMEM` | :2674-2681 | `bpf_prog_alloc` 失败 |
+| `-ENOSPC` | :2112-2113 | prog_idr 编号分配：`idr_alloc` 满时的兜底出口（2.5 已述） |
 | `-ENOTSUPP` | `core.c:2386-2388` | 必须 JIT（JIT_ALWAYS_ON 或含 kfunc 调用）而架构未提供 |
 
 判别口径沿用第 3 章排错节第三组：`-EPERM` 没进验证（查权限档位），`-EACCES`/`-EINVAL` 已进（读验证日志）——现在这句话能对回 :2618-2632 与 :2743 的先后顺序。
@@ -460,7 +461,7 @@ close(fd)（⑦）            → bpf_map_release  :773 → bpf_map_put :750 →
 			err = -ENOENT;
 ```
 
-ops 回调返回**指针**而非 errno，三态由通用层翻译——`IS_ERR` 原样传（:248-249）、`NULL` 翻成 `-ENOENT`（:250-251）、成功则 `copy_map_value` 拷值（:254-258），末尾 `copy_to_user`（:1492）；读取全程在 `rcu_read_lock()`（:243）内。数组侧 `array_map_lookup_elem`（`arraymap.c:166`）印证指针返回：越界返 `NULL`（:171-172，经 ：251 变 `-ENOENT`），否则一句指针算术 `array->value + elem_size * index`（:174）。
+ops 回调返回**指针**而非 errno，三态由通用层翻译——`IS_ERR` 原样传（:248-249）、`NULL` 翻成 `-ENOENT`（:250-251）、成功则 `copy_map_value` 拷值（:254-258），末尾 `copy_to_user`（:1492）；读取全程在 `rcu_read_lock()`（:243）内。数组侧 `array_map_lookup_elem`（`arraymap.c:166`）印证指针返回：越界返 `NULL`（:171-172，经 ：251 变 `-ENOENT`），否则一句指针算术 `array->value + (u64)array->elem_size * (index & array->index_mask)`（:174）。
 
 **update。**入口 ：5452 → `map_update_elem`（:1509）：`__bpf_map_get`（:1524）后先递增写计数（:1527，动作⑤用）再查 `FMODE_CAN_WRITE`（:1528-1530），拷值（:1546），进通用层 `bpf_map_update_value`（:1552），出口递减（:1558）。通用层定义在 ：153，头部分流：
 
@@ -537,7 +538,7 @@ bash book/examples/chapter-05/03-map-ops/trace-map-ops.sh | grep "^## 站"   # �
 WALK_TREE=/path/to/your/tree bash book/examples/chapter-05/03-map-ops/trace-map-ops.sh
 ```
 
-预期输出示例（第一、二条为 v6.6.78 树本机实跑，机检级）：第一条共 427 行、25 段代码、末行 `TREE_VERSION=v6.6.78 STATIONS=6`；第二条命中 6 行站标题；第三条换树时各站打 `NOT FOUND`（其 README 失败模式 2）。本节行号与该 README 锚点表一致，均可用一条 `grep -n` 复现；贴码区间与切片器切段不同处，以同站「定位」行为锚，漂移复核见四节 `verify-citations.sh`。
+预期输出示例（第一、二条为 v6.6.78 树本机实跑，机检级）：第一条共 427 行、25 段代码、末行 `TREE_VERSION=v6.6.78 STATIONS=6`；第二条命中 6 行站标题；第三条换树分两档：树不存在→启动即报「走读树目录不存在」并退出，一站不产；树在但锚点漂移→按站打 `NOT FOUND`，其余站继续（与 [`02-load-path/`](../examples/chapter-05/02-load-path/) README 失败模式 1/2 一致，排错④展开）。本节行号与该 README 锚点表一致，均可用一条 `grep -n` 复现；贴码区间与切片器切段不同处，以同站「定位」行为锚，漂移复核见四节 `verify-citations.sh`。
 
 ### 3.6 检查点
 
@@ -640,6 +641,8 @@ TOTAL=43 PASS=43 FAIL=0 WALK_TREE=/work/linux/linux-6.6.78 TREE_VERSION=v6.6.78
 | 可选：ctags 建索引 | 装 `universal-ctags` 后 `ctags -R kernel/bpf include/linux` | 编辑器对符号名一键跳转，适合反复走读 |
 | 可选：cscope 查调用者 | 装 `cscope` 后 `cscope -Rbq` 建索引、`cscope -dL4 'bpf_check'` | 查询 4 列出谁调用该函数，适合逆向追链 |
 
+检索类命令的更全索引与变体用法（grep/sed/ctags/cscope 等）见 [`附录 B 常用工具与命令索引`](../appendix/b-tool-command-index.md)；走读树拿不到或发行版内核缺 BTF 时，按 [`附录 C 各发行版内核编译 BTF 配置指南`](../appendix/c-distro-btf-build-guide.md) 自建。
+
 两个提醒。其一，grep 检索的是源码文本，不存在「被编译器内联了搜不到」的问题；真正的坑在**源码里就找不到**：符号在 `#ifdef` 分支里（如 1.2 第三处展开的 `CONFIG_PROC_FS`），或藏在宏展开背后（`bpf_map_types[]` 的下标要等预处理才出现）——换关键词、回注册表是第一反应；`grep -n` 落空且机检同时报「符号未命中」时，完整排错路径见排错节。其二，定位到手别急着抄行号——先 `sed -n` 读上下文，确认符号语义与正文一致，再更新行号与版本标注。
 
 #### 第四层：运行环境=两个切片器实跑与总装
@@ -705,6 +708,7 @@ CONFIG_BPF is set to y
 CONFIG_BPF_SYSCALL is set to y
 CONFIG_BPF_JIT_ALWAYS_ON is set to y
 CONFIG_DEBUG_INFO_BTF is set to y
+……
 Scanning system call availability...
 bpf() syscall is available
 ```
@@ -846,7 +850,7 @@ bpf_prog_new_fd             :2293（调用点 :2773）
 
 **排错①：符号 grep 不到。**三种情形。其一，改名或搬文件——内核提交会重命名函数、移动文件：先 grep 短名（去掉类型与括号，查 `bpf_prog_load` 而非 `static int bpf_prog_load(`），落空再放开到全树 `grep -rn`，再查 `include/` 下的声明（`grep -rn 符号 include/linux`）；反复走读就装 `universal-ctags` 建索引，编辑器对符号一键跳转（4.1 第三层命令表）。其二，内联与宏展开——`static inline` 函数在调用点展开为机器码，源码定义仍在、grep 仍能命中；真正 grep 不到的是**展开才存在**的记号：1.2 讲过的注册表下标与 `##` 拼名，本树实测一例——`grep -rn sk_filter_prog_ops` 全树只命中定义处一处（`net/core/filter.c:10953`），注册表里的引用是预处理拼接出来的，要回 1.2 的三处展开现场去读。其三，`#ifdef` 分支里的符号——本树没开对应配置（如第三处展开所在的 `CONFIG_PROC_FS`）就 grep 不到；换关键词、回注册表是第一反应（4.1 第三层的两个提醒同口径）。
 
-**排错②：行号对不上（版本漂移定位法）。**行号是快照，符号是锚点——对不上先核对正文标注的「（v6.6.78）」与你的树是否同版，再怀疑事实。重定位两步：第一步**锚符号重定位**，用贴码头注里的函数定义行做锚（如 `SYSCALL_DEFINE3(bpf`），`grep -n` 在你的树里拿到新行号；第二步**±偏移**，函数内部的引用行 ≈ 新锚行 +（旧引用行 − 旧锚行）——如二节站 3 的 `bpf_check` 调用点 ：2743 在锚 `bpf_prog_load` :2586 之下 157 行，换树后在新的锚行 +157 附近核对。切片器两步法就是这套动作的固化：`grep -n` 定位、`sed -n 'A,Bp'` 核对上下文（4.1）；校准后把新行号与版本标注一起更新，机检不受影响——它按符号不按行号（4.1）。
+**排错②：行号对不上（版本漂移定位法）。**行号是快照，符号是锚点——对不上先核对正文标注的「（v6.6.78）」与你的树是否同版，再怀疑事实。重定位两步：第一步**锚符号重定位**，用贴码头注里的函数定义行做锚（如 `SYSCALL_DEFINE3(bpf`），`grep -n` 在你的树里拿到新行号；第二步**±偏移**，函数内部的引用行 ≈ 新锚行 +（旧引用行 − 旧锚行）——如二节站 3 的 `bpf_check` 调用点 ：2743 在锚 `bpf_prog_load` :2586 之下 157 行，换树后在新的锚行 +157 附近核对。切片器两步法就是这套动作的固化：`grep -n` 定位、`sed -n 'A,Bp'` 核对上下文（4.1）；校准后把新行号与版本标注一起更新，机检不受影响——它按符号不按行号（4.1）。为什么容忍漂移：机检锚定的是「符号仍在这个文件里」这条源码文本事实，行号只是排版位置的快照——提交重排代码时符号不变而行号必移，按行号校验会把正常演进误报成损坏，按符号校验只关心锚点存活，天然免疫漂移。
 
 **排错③：机检 FAIL 三类原因与修复。**4.1 的三类表是速查，这里给每类的完整处置链。**文件不在树**：先 `grep ^SUBLEVEL Makefile` 验树版本，再核 `WALK_TREE` 指向，最后查 `citations.txt` 路径拼写——三步做完仍在 FAIL 才谈其他。**符号未命中**：第一步核对汇总行 `TREE_VERSION` 与你的树是否一致——树对不上，FAIL 未必成立于本树（4.3 检查点 2 同口径）；再按排错①的检索策略判改名/搬文件/宏展开，找到新形态后**回修 `citations.txt`** 对应行（保持「文件|符号|说明」三段），不放水改脚本——机检守的是「清单与树的一致性」，FAIL 修清单，不修现实。**格式错**：清单行分隔符不是恰好 2 个 `|` 或字段为空，修行重跑。修完以汇总行 `FAIL=0` 收口（退出码 0，可作门禁）。
 
