@@ -321,7 +321,7 @@ git commit -m "docs(ch05): 二节(BPF_PROG_LOAD 一站一停)"
 
 ### Task 8: 正文——「三、映射生命周期」
 
-- [ ] Task 8: 正文——「三、映射生命周期」
+- [x] Task 8: 正文——「三、映射生命周期」
 **tasks.md 条目**:「Explain map create, lookup, update, delete, freeze, pin, and reference lifecycle at a source-code level.」(正文);回收 ch02:289。
 
 **Files:**
