@@ -106,7 +106,7 @@ char LICENSE[] SEC("license") = "GPL";
 
 ### Task 1: 00-env 自检 + 章级 README 骨架
 
-- [ ] Task 1: 00-env 自检 + 章级 README 骨架
+- [x] Task 1: 00-env 自检 + 章级 README 骨架
 
 **tasks.md 条目**:「Include commands for inspecting …」的环境基座部分 + C5 总览骨架。
 
