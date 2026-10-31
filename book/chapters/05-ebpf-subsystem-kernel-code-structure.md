@@ -730,8 +730,161 @@ eBPF program_type tracing is available
 3. 非特权探测输出里 `eBPF program_type socket_filter is NOT available`，能读成「内核没编 socket_filter」吗？（提示：不能——探测类型要真实加载试探，非特权档一律 NOT available（第五层）；该输出只有 CONFIG_*/系统调用段可信，真值要 root 完整探测（预期输出示例/运行级待验证）。）
 
 **独立示例**：[`scripts/`](../examples/chapter-05/scripts/)——机检脚本 `verify-citations.sh`（头注释记录数据源、汇总行格式与三类失败模式）；[`00-env/`](../examples/chapter-05/00-env/)——环境自检 `check-env.sh`（四个检查区、三档结论、缺树时的 kernel.org 获取指引）。
-<!-- 可视化（T8）：## 可视化：源码树全景与加载调用流 -->
-<!-- 排错（T9）：## 常见问题与排错 -->
-<!-- 课后（T9）：## 课后扩展任务 -->
-<!-- 总结（T9）：## 总结 -->
-<!-- 参考来源（T9）：## 本章参考来源 -->
+
+## 可视化：源码树全景与加载调用流
+
+一至三节的文字坐标收成两张图：图 1 是空间——代码「住」在哪些文件、谁允许包含谁；图 2 是时间——加载命令经过哪些站、从哪里失败。两图数据取自 [`01-source-map/`](../examples/chapter-05/01-source-map/) README 与二节实测行号，行号口径 v6.6.78。
+
+### 图 1：源码树全景
+
+```text
+kernel/bpf/ 六区（45 个 .c 文件，65955 行，v6.6.78）＝一条 bpf 命令从进门到出门
+
+区1 入口分发·门（1 文件）
+  syscall.c            5823 bpf(2) 唯一入口：分发、fd 与权限
+区2 验证·安检（4 文件）
+  verifier.c          20459 验证器主体：逐条静态模拟后放行
+  tnum.c                214 三值数字算术：跟踪寄存器未知位
+  log.c                 327 验证日志输出通道
+  disasm.c              350 内建反汇编器，指令写进日志
+区3 执行与 JIT·发动机（5 文件）
+  core.c               2975 解释器与通用 JIT 骨架（__weak 兜底）
+  dispatcher.c          173 同类程序聚合的间接跳转表
+  trampoline.c         1051 为 fentry/fexit 生成蹦床
+  mprog.c               452 多程序挂载通用层
+  offload.c             865 网卡硬件卸载基础设施
+区4 映射实现·集装箱（14 文件）
+  arraymap.c           1383 数组映射族，per-CPU 数组底座
+  hashtab.c            2630 哈希映射及 LRU 变体，最常用
+  ringbuf.c             809 环形缓冲区，无锁记录式输出
+  lpm_trie.c            766 最长前缀匹配（路由表）
+  bloom_filter.c        219 布隆过滤器映射
+  queue_stack_maps.c    299 队列（FIFO）与栈（LIFO）
+  stackmap.c            691 栈轨迹映射（回溯调用栈）
+  map_in_map.c          150 映射嵌套映射的查找层
+  cpumap.c              779 报文引流到指定 CPU
+  devmap.c             1164 网卡重定向的虚拟出口表
+  reuseport_array.c     353 套接字组内分流旁路表
+  percpu_freelist.c     200 per-CPU 空闲链表（节点回收）
+  bpf_lru_list.c        700 LRU 逐出链表
+  memalloc.c            932 BPF 专用内存分配器
+区5 BTF 与本地存储·说明书与贴纸（7 文件）
+  btf.c                8601 BTF 解析、校验与查找
+  sysfs_btf.c            45 暴露 /sys/kernel/btf/vmlinux
+  bpf_local_storage.c   921 本地存储共享核心（RCU 生命周期）
+  bpf_task_storage.c    374 task 本地存储映射
+  bpf_inode_storage.c   237 inode 本地存储映射
+  bpf_cgrp_storage.c    240 cgroup 本地存储映射
+  local_storage.c       614 cgroup 本地存储旧式形态
+区6 其他·各个码头（14 文件）
+  cgroup.c             2602 cgroup 挂载点本体
+  bpf_iter.c            848 迭代器框架与目标注册
+  cgroup_iter.c         296 遍历 cgroup 层级
+  task_iter.c           864 遍历进程与线程
+  prog_iter.c           107 遍历已加载的程序
+  link_iter.c           107 遍历已创建的 link
+  map_iter.c            231 遍历系统中的映射
+  bpf_lsm.c             376 程序类型暴露为 LSM 钩子
+  bpf_struct_ops.c      910 BPF 实现内核 ops 表（如拥塞控制）
+  tcx.c                 346 TCX ingress/egress 多程序链
+  net_namespace.c       567 网络命名空间 link 清理
+  cpumask.c             466 cpumask 的 kfunc 集（非映射）
+  helpers.c            2622 共享辅助函数实现与原型
+  inode.c               817 bpffs：pin 的最小文件系统
+
+include/ 三层——谁能包含谁（一节 1.3）
+  syscall.c 等使用方 ──include──▶ linux/bpf.h（3232 行，内核对象层，仅内核态）
+                              │ :7 单向 include
+                              ▼
+                 uapi/linux/bpf.h（7350 行，UAPI 契约，两边可含）
+  linux/bpf_types.h（153 行）——游离于包含链外：三次定义宏、三次展开（1.2）
+```
+
+解读：竖着读，六区从上到下就是一条 bpf 命令的行进顺序——进「门」分发、过「安检」放行、「发动机」给出可执行形态、「集装箱」装数据、「说明书与贴纸」管类型信息，「码头」是各挂载点共享的底座。行数一列也是阅读量预估——走读按站切、不按文件吞。横着读，每行「名字＋规模＋职责」，先认区再查名，与 [`01-source-map/`](../examples/chapter-05/01-source-map/) 全量表互为详略；图末三行是 1.3 的所有权边界。
+
+### 图 2：BPF_PROG_LOAD 调用流
+
+```text
+用户态 loader（bpftool prog load / libbpf）
+  │ bpf(BPF_PROG_LOAD, &attr, size)
+  ▼
+SYSCALL_DEFINE3(bpf)        syscall.c:5567
+  ▼
+__sys_bpf                   :5426 ──✗→ -EFAULT（:5438 拷贝失败）/-EINVAL（:5559 未知命令）
+  │ 三道前置（:5431/:5438/:5441）后 switch(cmd)
+  ▼
+case BPF_PROG_LOAD          :5464
+  ▼
+bpf_prog_load               :2586 ──✗→ -EPERM（:2618/:2624/:2629 三道权限闸）
+  │ 审参（CHECK_ATTR :2594 起）──✗→ -EINVAL/-EPERM
+  │ 指令数 0 或超限 ──✗→ -E2BIG（:2621-2623，特权 100 万/非特权 4096）
+  │ 对象分配失败 ──✗→ -ENOMEM（:2674-2681）
+  ▼
+bpf_check                   :2743（verifier.c:20222）──✗→ -EACCES 等（126 处，带日志）
+  ▼
+bpf_prog_select_runtime     :2747（core.c:2357）
+  │ __weak 兜底原样返回 = 回退解释器，不是失败（*err 为 0）
+  │ 必须 JIT 而 fp->jited 为假 ──✗→ -ENOTSUPP（core.c:2386-2388）
+  ▼
+bpf_prog_alloc_id（:2099，调用点 :2751）──✗→ -ENOSPC（:2112-2113）
+  ▼
+bpf_prog_new_fd             :2293（调用点 :2773）
+  │ security_bpf_prog 闸；anon_inode_getfd("bpf-prog")
+  │ 发 fd 失败 ──✗→ bpf_prog_put 走释放链（:2774-2775，唯一善后出口）
+  ▼
+返回 fd（此刻程序未挂任何钩子——加载 ≠ 挂载）
+  ── 平级独立命令（共用入口 switch，互不调用）──
+     case BPF_LINK_CREATE  :5534 → link_create（:5010）
+     case BPF_PROG_ATTACH  :5473 → bpf_prog_attach（:3911）
+```
+
+解读：图 2 是二节六站的时间轴：竖线是成功路径，✗ 是失败出口，每个出口标了 errno 与拦截行号，与 2.6 的 errno 总表对应。竖读可见一条分界线——`-EPERM`/`-E2BIG`/`-ENOMEM` 全部拦在 `bpf_check` 之前，`-EACCES` 是唯一「进了验证才可能拿到」的拒绝：第 3 章排错节第三组「先答进没进验证」，在图上就是这条线的位置。图末两条平级命令重复 2.6 的提醒：fd 返回不等于程序开始工作。换树时行号漂移而拓扑不变——按锚符号重定位（排错②）即可整图搬进新树。
+
+## 常见问题与排错
+
+本章的排错对象不是「程序跑不起来」，而是「走读走不下去」：符号找不到、行号对不上、机检报警、切片器罢工、查询命令被拒。与第 3 章排错节的分工先讲清：那边查「验证器为什么拒绝程序」——失败画廊把七类拒绝收成日志信号速查表（画廊 1–7，对应 3.1–3.7）；这边查「走读者为什么在源码树里迷路」。凡涉及加载与运行的报错，口径仍是预期输出示例 / 运行级待验证（本机非 root，见 4.2 第五层）。
+
+**排错①：符号 grep 不到。**三种情形。其一，改名或搬文件——内核提交会重命名函数、移动文件：先 grep 短名（去掉类型与括号，查 `bpf_prog_load` 而非 `static int bpf_prog_load(`），落空再放开到全树 `grep -rn`，再查 `include/` 下的声明（`grep -rn 符号 include/linux`）；反复走读就装 `universal-ctags` 建索引，编辑器对符号一键跳转（4.1 第三层命令表）。其二，内联与宏展开——`static inline` 函数在调用点展开为机器码，源码定义仍在、grep 仍能命中；真正 grep 不到的是**展开才存在**的记号：1.2 讲过的注册表下标与 `##` 拼名，本树实测一例——`grep -rn sk_filter_prog_ops` 全树只命中定义处一处（`net/core/filter.c:10953`），注册表里的引用是预处理拼接出来的，要回 1.2 的三处展开现场去读。其三，`#ifdef` 分支里的符号——本树没开对应配置（如第三处展开所在的 `CONFIG_PROC_FS`）就 grep 不到；换关键词、回注册表是第一反应（4.1 第三层的两个提醒同口径）。
+
+**排错②：行号对不上（版本漂移定位法）。**行号是快照，符号是锚点——对不上先核对正文标注的「（v6.6.78）」与你的树是否同版，再怀疑事实。重定位两步：第一步**锚符号重定位**，用贴码头注里的函数定义行做锚（如 `SYSCALL_DEFINE3(bpf`），`grep -n` 在你的树里拿到新行号；第二步**±偏移**，函数内部的引用行 ≈ 新锚行 +（旧引用行 − 旧锚行）——如二节站 3 的 `bpf_check` 调用点 ：2743 在锚 `bpf_prog_load` :2586 之下 157 行，换树后在新的锚行 +157 附近核对。切片器两步法就是这套动作的固化：`grep -n` 定位、`sed -n 'A,Bp'` 核对上下文（4.1）；校准后把新行号与版本标注一起更新，机检不受影响——它按符号不按行号（4.1）。
+
+**排错③：机检 FAIL 三类原因与修复。**4.1 的三类表是速查，这里给每类的完整处置链。**文件不在树**：先 `grep ^SUBLEVEL Makefile` 验树版本，再核 `WALK_TREE` 指向，最后查 `citations.txt` 路径拼写——三步做完仍在 FAIL 才谈其他。**符号未命中**：第一步核对汇总行 `TREE_VERSION` 与你的树是否一致——树对不上，FAIL 未必成立于本树（4.3 检查点 2 同口径）；再按排错①的检索策略判改名/搬文件/宏展开，找到新形态后**回修 `citations.txt`** 对应行（保持「文件|符号|说明」三段），不放水改脚本——机检守的是「清单与树的一致性」，FAIL 修清单，不修现实。**格式错**：清单行分隔符不是恰好 2 个 `|` 或字段为空，修行重跑。修完以汇总行 `FAIL=0` 收口（退出码 0，可作门禁）。
+
+**排错④：切片器 NOT FOUND。**两个切片器的预期行为分两档（各 README 失败模式表，均已实测）。树不在：第一站之前就报「走读树目录不存在」并退出，一站都不产（失败模式 1）。树在但锚点漂移：对应站打 `STATION n: NOT FOUND` 后**继续其余站**，退出码 1（失败模式 2）——降级粒度由锚点存活情况决定：实测同一加载链切片器指向 4.19 树时站 1/6 NOT FOUND、站 2–5 照常切出，映射链则六站全灭（通用层符号 5.x 才引入）。两档的分界就是判别法：`NOT FOUND` ≠ 树没挂上——后者连站目录都出不来。处置：回你的树 `grep -n` 新位置，改该站锚点模式与偏移，同步更新校准注释；stderr 的版本 WARN（失败模式 3）同时提醒——非 v6.6.78 树上行号仅供参考，换树遇到 NOT FOUND 属预期。
+
+**排错⑤：bpftool 特权报错。**本机口径（4.2 第五层实测）：非 root 且 `unprivileged_bpf_disabled=2`（一节 1.3 的开关）时，`bpftool feature probe kernel` 报缺 `CAP_SYS_ADMIN`/`CAP_BPF`/`CAP_NET_ADMIN`/`CAP_PERFMON`、退出码 255——**这是预期行为，不是故障**，源码出处就是 ：2618 一族的权限闸。处置两档：无特权改走 `bpftool feature probe kernel unprivileged`（输出只信 CONFIG_*/系统调用段——程序/映射类型段一律 NOT available，探测要真实加载，4.2 已析）或无特权可跑的 `bpftool version`；有特权环境以 root 重跑完整探测（预期输出示例 / 运行级待验证）。与第 3 章排错节第三组的分工：那边判「加载被 `-EPERM` 拒，进没进验证」；这边是内省查询本身被拒——连属性块都没递进门。都叫「权限失败」，别混着查。
+
+## 课后扩展任务
+
+一至三节带你走完两条现成的链，两项扩展任务把 4.1 的两步法变成你自己的手艺——一项补链，一项扩链（参考实现 README 按「任务在前、思路在后」防剧透结构组织）：
+
+| 任务 | 扩展维度 | 任务描述 | 参考实现 |
+|---|---|---|---|
+| 1 | 走读链补全 | 追踪 `BPF_MAP_FREEZE` 完整调用链，自制「freeze 走读卡」 | [`exercises/01-trace-freeze/`](../examples/chapter-05/exercises/01-trace-freeze/) |
+| 2 | 切片器扩展 | 给 `trace-map-ops.sh` 新增 `BPF_BTF_LOAD` 站 | [`exercises/02-extend-tracer/`](../examples/chapter-05/exercises/02-extend-tracer/) |
+
+**任务 1：追踪 BPF_MAP_FREEZE 完整调用链。**3.3 只展开了 freeze 的通用层收口，完整链要从入口分发走到底。要求：沿切片器两步法（4.1）走通 `case BPF_MAP_FREEZE` → `map_freeze` 全程，产出带行号标注的「freeze 走读卡」——至少覆盖入口分发行、`map_freeze` 全函数、三道并发闸的顺序、写命令撞 `-EPERM` 的拦截点；按 2.6 errno 总表的格式整理失败出口；说明 freeze 与 3.1 动作①相比少了什么、为什么（回调表与善后链两个角度）。交付物仿 [`citations.txt`](../examples/chapter-05/01-source-map/) 的「文件|符号|说明」格式列锚点清单，机检 `FAIL=0` 收口。提示：3.3/3.5 的模型图是底稿；「冻结为什么拦得住写」的另一半在写计数（3.2）。
+
+**任务 2：给 trace-map-ops.sh 增加 BPF_BTF_LOAD 站。**切片器是可扩展的——每个站只是「锚点模式 + sed 区间 + 职责注」三件套。要求：在映射链切片器里新增第七站，切出 `case BPF_BTF_LOAD`（与 `BPF_MAP_CREATE` 同一条 switch 的平级命令）及其命令实体的头若干行，标注它进入 `kernel/bpf/btf.c`（1.1 区 5）的边界；输出三层（定位→代码段→职责注）与汇总行和既有六站一致；在 README 失败模式表补一条换树实测行为。提示：站 2 的锚点写法是现成模板；命令实体函数名自己 grep——这正是排错①练过的检索。
+
+**防剧透约定**：两项练习的 README 都把任务描述与提示放在前部、参考实现思路独立成节放在后部——先只读前部自行走读，卡住再回对应小节补课（任务 1 回 3.2/3.3，任务 2 回 4.1 与排错①②），自检后才翻分界线之后的「参考实现思路」。验证状态：两项均为机检级（不涉及加载与运行），以各目录 README 为准。
+
+## 总结
+
+本章把前四章一直在「用」的门框拆开看了一遍，收成五点内化，逐条对回学习目标：
+
+1. **源码地图**：`kernel/bpf/` 45 个 .c 文件 65955 行按「一条 bpf 命令从进门到出门」分六区——门（入口分发）、安检（验证）、发动机（执行与 JIT）、集装箱（映射实现）、说明书与贴纸（BTF 与本地存储）、码头（其他）；三层 include 立起所有权边界——uapi 层两边可含、内核对象层仅内核态、`bpf_types.h` 只被展开；地图的灵魂是 1.2 的双展开：一份 153 行的清单三次展开出两张注册表与一张名字表，新增类型只动三处、注册表自动生长（1.1–1.3，图 1）。
+2. **加载四拍**：验证（:2743）→ 选执行（:2747）→ 编号（:2751）→ 发 fd（:2773），次序由失败代价决定——不可见的失败 `goto` 清理、可见的失败引用计数善后；fd 返回时程序未挂任何钩子，挂载是平级的独立命令（二节，图 2）。
+3. **映射三层**：命令包装管 fd、权限、拷贝与 errno 翻译，通用层管公共分支与上下文纪律，ops 回调管算法；冻结与 pin 这类共享属性不走回调表——回调表只装随实现变化的语义（三节）。
+4. **机检纪律**：正文每条「文件：行号」都应能用一条命令重现；`verify-citations.sh` 按符号守底线，三类 FAIL 对号处置，修清单不放水（四节、排错③）。
+5. **版本漂移心法**：行号是快照、符号是锚点；换树先「锚符号重定位 ± 偏移」，再用切片器两步法核对上下文——行号漂移不是麻烦，是走读者必须掌握的技能（排错①②④）。
+
+通往第 6 章的桥：二节站 4 把 JIT 留在门口——通用骨架（`core.c:2357`）与 `__weak` 兜底（:2884）已点名；各架构后端如何把 eBPF 指令逐条翻成本机机器码是第 6 章的正题——带着图 1 去读「发动机」区里你还没进过的那个房间。
+
+## 本章参考来源
+
+- Linux 内核源码树（v6.6.78，本章走读树；获取指引见 4.2 第一层）：`kernel/bpf/` 全部 45 个 .c 文件（全量表见 [`01-source-map/`](../examples/chapter-05/01-source-map/)）、`net/core/filter.c`（程序类型 prog_ops 之家）与三份头文件——`include/uapi/linux/bpf.h`（7350 行，UAPI 契约：命令字枚举、`union bpf_attr`、辅助函数编号）、`include/linux/bpf.h`（3232 行，内核对象层）、`include/linux/bpf_types.h`（153 行，注册表清单）。
+- Linux kernel documentation：`Documentation/bpf/index.rst`（BPF 子系统文档总目录）、`Documentation/bpf/btf.rst`（BTF 格式与工具链）、`Documentation/bpf/classic_vs_extended.rst`（cBPF 与 eBPF 指令集对照）——随内核版本演进，以所用树为准。
+- `include/uapi/linux/bpf.h`：命令字与辅助函数原型的权威注释（第 3 章 2.7 白名单口径的出处）。
+- 前章回指：第 2 章（八类映射与生命周期六步）、第 3 章（验证器机制与失败画廊 1–7）、第 4 章（程序类型与挂载点）——本章为三者提供源码坐标，此后各章沿用本章地图。
+- ebpf.top：BPF 入门系列相关文章（内核源码结构的中文讲解）。
