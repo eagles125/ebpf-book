@@ -458,7 +458,7 @@ git commit -m "feat(ch05): 两项走读练习参考实现(机检全绿)"
 
 ### Task 13: 主审(kernel path accuracy + conservative version language)与 tasks.md 勾选(收口)
 
-- [ ] Task 13: 主审(kernel path accuracy + conservative version language)与 tasks.md 勾选(收口)
+- [x] Task 13: 主审(kernel path accuracy + conservative version language)与 tasks.md 勾选(收口)
 **tasks.md 条目**:「Main-agent review for kernel path accuracy and conservative version language.」;统一勾选矩阵 7 条。
 
 **Files:**
