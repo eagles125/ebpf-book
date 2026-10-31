@@ -222,7 +222,7 @@ git commit -m "feat(ch05): 符号机检脚本(引用锚点全绿)"
 
 ### Task 4: 02-load-path 切片器
 
-- [ ] Task 4: 02-load-path 切片器
+- [x] Task 4: 02-load-path 切片器
 **tasks.md 条目**:「Trace the load path from `BPF_PROG_LOAD` through `kernel/bpf/syscall.c`, verifier, JIT selection, and attach setup.」(资产部分)。
 
 **Files:**
