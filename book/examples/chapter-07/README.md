@@ -23,7 +23,7 @@
 | `05-map-internals/` | 源码切片器 | `trace-map-internals.sh`:映射内部六站(类型注册表/ops 接口/桶锁/更新/删除 RCU/记账) | Task 5 落地 |
 | `scripts/` | 符号机检 | `verify-citations.sh`:机检树根 citations.txt,输出 TOTAL/PASS/FAIL 汇总 | Task 3 落地 |
 | `citations.txt` | 锚点清单 | 树根,五组约 40 行(helper 分发/白名单/hash 内部/per-CPU·LRU·记账/事件输出与 UAPI) | Task 2 落地 |
-| `exercises/` | 课后扩展 | `01-map-op-chain/`(调用链查证)、`02-extend-ringbuf/`(ringbuf 切片扩展),防剧透结构 | Task 13 落地 |
+| `exercises/` | 课后扩展 | `01-map-op-chain/`(调用链查证:README 防剧透任务书 + `answer.md` 9 跳链表 + `check-chain.sh` 六锚点机检)、`02-extend-ringbuf/`(ringbuf 切片扩展:`trace-ringbuf.sh` 两站 + `check-ringbuf.sh` 七项验收),防剧透结构 | Task 13 落地:两练习机检实跑全绿(check-chain TOTAL=6 PASS=6;check-ringbuf TOTAL=8 PASS=8,均 exit 0) |
 
 ## 学习路径
 
