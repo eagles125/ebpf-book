@@ -40,7 +40,13 @@
 
 ## 机检汇总
 
-机检汇总由 Task 11 回填。
+本机终跑实测(脚本 `scripts/verify-citations.sh`,数据源为本目录树根 `citations.txt`):
+
+```
+TOTAL=32 PASS=32 FAIL=0 WALK_TREE=/work/linux/linux-6.6.78 TREE_VERSION=v6.6.78
+```
+
+退出码 0;负路径 `WALK_TREE=/nonexistent` 时逐条 `FAIL 文件不在树`、汇总 `FAIL=32`、退出码 1(门禁行为符合设计)。32 条锚点分五组:①`kernel/bpf/core.c` 执行形态与开关 13 条;②x86 后端 `arch/x86/net/bpf_jit_comp.c` 7 条;③arm64 后端 5 条(含 `bpf_jit.h`);④核心对象与辅助结构 4 条;⑤UAPI 3 条。逐条说明见 `citations.txt` 行尾注释。
 
 ## 走读树版本声明
 
