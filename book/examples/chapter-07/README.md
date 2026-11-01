@@ -41,7 +41,13 @@
 
 ## 机检汇总
 
-机检汇总由 Task 12 回填。
+本机终跑实测(脚本 `scripts/verify-citations.sh`,数据源为本目录树根 `citations.txt`):
+
+```
+TOTAL=44 PASS=44 FAIL=0 WALK_TREE=/work/linux/linux-6.6.78 TREE_VERSION=v6.6.78
+```
+
+退出码 0;负路径 `WALK_TREE=/nonexistent` 时逐条 FAIL、退出码 1(门禁行为符合设计)。44 条锚点分五组:①helper 分发 8 条;②白名单 5 条;③hash 内部 11 条;④per-CPU/LRU/记账 7 条;⑤事件输出与映射总纲 13 条。逐条说明见 `citations.txt` 行尾注释。
 
 ## 走读树版本声明
 
