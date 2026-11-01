@@ -26,3 +26,4 @@ book/examples/chapter-03/01-pkt-parse/pkt_parse
 book/examples/chapter-04/01-multi-observe/multi_observe
 book/examples/chapter-04/02-xdp-tc/xdp_tc
 book/examples/chapter-07/01-hash-lookup-update/hash_count
+book/examples/chapter-07/02-percpu-counter/pcpu_count
