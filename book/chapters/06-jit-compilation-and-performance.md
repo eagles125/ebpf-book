@@ -593,11 +593,127 @@ WALK_TREE=/nonexistent bash book/examples/chapter-06/02-jit-x86/trace-jit-x86.sh
 **独立示例**:本节六站的全部代码段与行号已工具化——[`02-jit-x86/`](../examples/chapter-06/02-jit-x86/),切片器只读源码树、不构建不加载;JIT 的输入样本(14 条字节码)见 [`01-bpf-asm/`](../examples/chapter-06/01-bpf-asm/)。
 
 
-<!-- ============================================================
-     Task 8 占位:三、arm64:另一套后端的同构与差异
-     四站:①编译入口 ②build_body 分派 ③bpf2a64 映射 ④与 x86 差异
-     消费:03-jit-arm64/trace-jit-arm64.sh 四站输出
-============================================================ -->
+## 三、arm64:另一套后端的同构与差异
+
+本节按「高层对照」读 arm64 后端(`arch/arm64/net/bpf_jit_comp.c`,2303 行,v6.6.78)——不逐指令深挖,目标是验证一个命题:**二节的六站结构是框架属性,不是 x86 私有**。切片器 [`03-jit-arm64/trace-jit-arm64.sh`](../examples/chapter-06/03-jit-arm64/) 的四站与本节对应;每站职责注都写明「与 x86 对照」。
+
+### 3.1 入口同构:换个后端,骨架没换
+
+arm64 的编译入口 `bpf_int_jit_compile`(`arch/arm64/net/bpf_jit_comp.c:1518`,v6.6.78)与 x86 站一的入口**签名逐字相同**,开头几拍也一致:先问 `prog->jit_requested`(`:1530`),再 `bpf_jit_blind_constants(prog)` 做致盲预处理,失败同样 `return orig_prog` 回退。这不是巧合:通用层(core.c)与架构层(arch/*/net/)的分界就是这一个强符号加少量架构回调——**「框架与后端分层」是内核对 JIT 的架构裁决**,谁来实现谁就继承这套骨架。指令遍历同样同构:`build_body`(`:1442`)循环调 `build_insn`(`:761`)逐条 lower,`extra_pass` 两趟语义原样保留(`build_body` 的第二个参数就是它)——对应 x86 的 do_jit 与站二。
+
+### 3.2 bpf2a64:第二张寄存器映射表
+
+寄存器映射是两套后端差异最直观的地方。arm64 的映射表 `bpf2a64`(`arch/arm64/net/bpf_jit_comp.c:44-66`,v6.6.78):
+
+```c
+/* arch/arm64/net/bpf_jit_comp.c:44-66(v6.6.78) */
+/* Map BPF registers to A64 registers */
+static const int bpf2a64[] = {
+	/* return value from in-kernel function, and exit value from eBPF */
+	[BPF_REG_0] = A64_R(7),
+	/* arguments from eBPF program to in-kernel function */
+	[BPF_REG_1] = A64_R(0),
+	[BPF_REG_2] = A64_R(1),
+	[BPF_REG_3] = A64_R(2),
+	[BPF_REG_4] = A64_R(3),
+	[BPF_REG_5] = A64_R(4),
+	/* callee saved registers that in-kernel function will preserve */
+	[BPF_REG_6] = A64_R(19),
+	[BPF_REG_7] = A64_R(20),
+	[BPF_REG_8] = A64_R(21),
+	[BPF_REG_9] = A64_R(22),
+	/* read-only frame pointer to access stack */
+	[BPF_REG_FP] = A64_R(25),
+	/* temporary registers for BPF JIT */
+	[TMP_REG_1] = A64_R(10),
+	[TMP_REG_2] = A64_R(11),
+	[TMP_REG_3] = A64_R(12),
+	/* tail_call_cnt */
+	[TCALL_CNT] = A64_R(26),
+	/* temporary register for blinding constants */
+	[BPF_REG_AX] = A64_R(9),
+	[FP_BOTTOM] = A64_R(27),
+};
+```
+
+与 x86 站三的 reg2hex 并排读,「思路同构、映射各异」落到实处:
+
+| BPF 寄存器 | x86_64(reg2hex) | arm64(bpf2a64) | 角色 |
+|---|---|---|---|
+| r0 | RAX | x7(尾声才搬回 x0) | 返回值 |
+| r1–r5 | RDI/RSI/RDX/RCX/R8 | x0–x4 | 函数参数 |
+| r6–r9 | RBX/R13–R15 | x19–x22 | 被调用者保存 |
+| FP | RBP(只读) | x25 | 帧指针 |
+| 尾调用计数 | 栈上 `[rbp-tcc_off]` | x26(TCALL_CNT) | 33 层上限计数 |
+| AX(致盲) | R10 | x9 | 致盲临时寄存器 |
+
+两套 ABI 的影子都在:arm64 侧 r1–r5 直接对齐 AAPCS 的 x0–x4;但 **r0 映射到 x7 而不是 x0**——x0 已经被 r1 占了,arm64 的返回值寄存器只能「借用」x7,尾声 `emit(A64_MOV(1, A64_R(0), r0), ctx)`(`:682`,v6.6.78)再把 x7 搬回 x0 交差;反过来,helper 调用返回后 `:1123` 把 x0 搬回 x7。这是 arm64 十五个通用寄存器不够「参数、返回值、被保存者」各就各位的妥协,x86 侧不存在(寄存器够多)。尾调用计数两套后端实现也不同:x86 放栈上(站五的 `[rbp-tcc_off]`),arm64 专门占用 x26——同一语义,资源约束不同,落地不同。
+
+### 3.3 差异三点:icache、立即数、原子指令
+
+**差异一:icache 必须显式刷新。**arm64 的指令缓存与数据缓存不保证一致(CPU 改写的数据要指令缓存自己看到才算数),JIT 写完机器码必须执行一次 cache 维护:`bpf_flush_icache` 封装(`:1507-1510`)在编译收尾统一调用(`:1639`)。x86 是一致的缓存体系,写完即可执行,没有这一步——这是两套后端「最后一公里」的架构差异。
+
+**差异二:64 位立即数要按 16 位分块。**x86 指令变长,一条 `movabs` 能装下 64 位立即数;arm64 指令**定长 32 位**,一条装不下 64 位常量,必须 MOVZ/MOVK 序列按 16 位一档拼装。`emit_a64_mov_i64`(`:129-152`,v6.6.78)就是这个拼装器:
+
+```c
+/* arch/arm64/net/bpf_jit_comp.c:129-152(v6.6.78) */
+static inline void emit_a64_mov_i64(const int reg, const u64 val,
+				    struct jit_ctx *ctx)
+{
+	u64 nrm_tmp = val, rev_tmp = ~val;
+	bool inverse;
+	int shift;
+
+	if (!(nrm_tmp >> 32))
+		return emit_a64_mov_i(0, reg, (u32)val, ctx);
+
+	inverse = i64_i16_blocks(nrm_tmp, true) < i64_i16_blocks(nrm_tmp, false);
+	shift = max(round_down((inverse ? (fls64(rev_tmp) - 1) :
+					  (fls64(nrm_tmp) - 1)), 16), 0);
+	if (inverse)
+		emit(A64_MOVN(1, reg, (rev_tmp >> shift) & 0xffff, shift), ctx);
+	else
+		emit(A64_MOVZ(1, reg, (nrm_tmp >> shift) & 0xffff, shift), ctx);
+	shift -= 16;
+	while (shift >= 0) {
+		if (((nrm_tmp >> shift) & 0xffff) != (inverse ? 0xffff : 0x0000))
+			emit(A64_MOVK(1, reg, (nrm_tmp >> shift) & 0xffff, shift), ctx);
+		shift -= 16;
+	}
+}
+```
+
+四层优化读法:高 32 位为零的常量直接走 32 位装载(第一条 return);否则比较「原值分块」与「按位取反分块」哪边的 16 位块更少——取反后 MOVN 打头可能更省;MOVZ/MOVN 打头一次,余下每 16 位一条 MOVK,而且**全零/全全一的块直接跳过**(循环里的条件)——x86 侧二节例①的「0 值 xor 优化」在这里有了 arm64 版对应物。锚点程序的 `r0 = 0x0` 在 arm64 上同样命中「零值短路」;而一个 64 位大常量最多四条、常常两三条。
+
+**差异三:原子指令的可选路径(LSE)。**x86 的原子操作一律 `lock` 前缀,没有分叉;arm64 有两代原子机制——传统 LL/SC(excl 前缀的「加载-修改-条件存储」循环)与 ARMv8.1 的 LSE 原生原子指令。JIT 在 `#ifdef CONFIG_ARM64_LSE_ATOMICS`(`:445`)编译期分支内,再按 CPU 能力运行时检测 `cpus_have_cap(ARM64_HAS_LSE_ATOMICS)`(`:1353`)选路:支持 LSE 走 CASAL 一类单条原子指令(`:500` 一带),否则回退 LL/SC 序列。同一份 BPF 原子操作,在两台 arm64 机器上可能 lower 出不同形态——「架构相关」至此又多一层「微架构相关」。
+
+### 3.4 收束:第三套后端怎么读
+
+方法迁移:读任何一套 `arch/*/net/bpf_jit_comp.c`,套路固定四步——①找 `bpf_int_jit_compile` 入口,确认 jit_requested 门与致盲预处理在不在;②找 `build_body`/`do_jit` 等价物,看逐条 lower 的分派结构;③找寄存器映射表,对照本节两张表数「参数、返回值、被保存者」各归谁;④找尾声,看返回值怎么搬、映像怎么刷。第 6 章开头说「框架同构、后端各异」,读第三套时你用的就是这三张对照表加这四步。
+
+**教师视角。**同构性不是 x86 与 arm64 「长得像」,而是**分层**的产物:通用层把「什么时候编、编之前做什么、失败怎么办」全部收走,架构层只剩「怎么翻译一条指令」——所以任何后端一进来就长一个样。学生最常见的误区是拿映射表逐行背诵:不必,表是查的,规律是记的——「参数对齐调用约定、被保存者让位、临时寄存器谁也不用」三条规律在手,x86、arm64、以及未来你遇到的任何后端都能自己推出个八九不离十。
+
+**学生动手**:三条命令把四站切出来——
+
+```bash
+# ①四站全量
+bash book/examples/chapter-06/03-jit-arm64/trace-jit-arm64.sh
+# ②只看差异站(站 4:立即数装载与 icache)
+bash book/examples/chapter-06/03-jit-arm64/trace-jit-arm64.sh | sed -n '/^## 站 4/,$p'
+# ③负路径自检(应报错 exit 1)
+WALK_TREE=/nonexistent bash book/examples/chapter-06/03-jit-arm64/trace-jit-arm64.sh
+```
+
+预期输出:①四站结构同切片器 README 摘录,汇总 `TREE_VERSION=v6.6.78 STATIONS=4`,exit 0;②站 4 三段(MOVZ/MOVK 拼装器、icache 封装、编译收尾);③`走读树目录不存在:/nonexistent`,exit 1(均本机实测)。
+
+**检查点**(自测后看提示):
+
+1. BPF r0 在 arm64 上映射到 x7,那 helper 返回后程序从哪里读返回值?——提示:`:1123` 与 `:682` 两次搬运方向相反——进 helper 前后各搬一次,搞清哪次是「取」哪次是「还」。
+2. 同一个 `r0 = 0x0`,在 x86 与 arm64 上各 lower 成什么?——提示:二节例①的零值优化与 3.3 的零值短路;x86 是 `xor`,arm64 是单条 MOVZ/等价——两套后端都对零值做了省编码处理。
+3. 为什么尾调用计数 x86 放栈上、arm64 占寄存器?——提示:数一数 arm64 表里还有几个空闲通用寄存器;x86 的 R12–R15 已各有所属。
+
+**独立示例**:本节四站的代码段与行号工具化在 [`03-jit-arm64/`](../examples/chapter-06/03-jit-arm64/);与二节六站并排跑,两张输出对着读,「同构与差异」一目了然。
+
 
 <!-- ============================================================
      Task 9 占位:四、实战:亲手摸到字节码与机器码(五层)
