@@ -27,3 +27,5 @@ book/examples/chapter-04/01-multi-observe/multi_observe
 book/examples/chapter-04/02-xdp-tc/xdp_tc
 book/examples/chapter-07/01-hash-lookup-update/hash_count
 book/examples/chapter-07/02-percpu-counter/pcpu_count
+book/examples/chapter-07/03-event-output/event_ringbuf
+book/examples/chapter-07/03-event-output/event_perf
