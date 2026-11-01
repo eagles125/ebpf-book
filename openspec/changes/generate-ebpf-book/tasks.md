@@ -209,13 +209,13 @@
 
 ### Chapter 6: JIT Compilation and Performance Optimization
 
-- [ ] Write full chapter prose explaining interpreter mode, JIT mode, architecture backends, and why JIT matters.
-- [ ] Analyze x86_64 and arm64 JIT paths at a high level, including instruction lowering, prologue/epilogue, helper calls, and constant blinding where applicable.
-- [ ] Include commands for inspecting translated and JITed output with `bpftool prog dump xlated` and `bpftool prog dump jited`.
-- [ ] Include a performance comparison methodology for JIT enabled versus disabled, with clear safety notes.
-- [ ] Add text visualization comparing interpreter and JIT execution paths.
-- [ ] Add troubleshooting, summary, and references.
-- [ ] Main-agent review to distinguish verified results from expected methodology.
+- [x] Write full chapter prose explaining interpreter mode, JIT mode, architecture backends, and why JIT matters.
+- [x] Analyze x86_64 and arm64 JIT paths at a high level, including instruction lowering, prologue/epilogue, helper calls, and constant blinding where applicable.
+- [x] Include commands for inspecting translated and JITed output with `bpftool prog dump xlated` and `bpftool prog dump jited`.
+- [x] Include a performance comparison methodology for JIT enabled versus disabled, with clear safety notes.
+- [x] Add text visualization comparing interpreter and JIT execution paths.
+- [x] Add troubleshooting, summary, and references.
+- [x] Main-agent review to distinguish verified results from expected methodology.
 
 ### Chapter 7: Helpers and Map Internals
 
