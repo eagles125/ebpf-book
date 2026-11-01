@@ -351,10 +351,141 @@ bash book/examples/chapter-07/05-map-internals/trace-map-internals.sh | sed -n '
 
 **独立示例**:per-CPU 语义见 [`02-percpu-counter/`](../examples/chapter-07/02-percpu-counter/);本节源码现场在 [`05-map-internals/`](../examples/chapter-07/05-map-internals/) 站 1(注册表里的 LRU ops)与站 6(记账)。
 
-<!-- ============================================================
-     Task 11 占位:四、事件输出:perf buffer 与 ring buffer(含可视化两图)
-     消费:示例 03 双变体
-============================================================ -->
+## 四、事件输出:perf buffer 与 ring buffer
+
+计数器是「用户来查」;事件输出是「内核来报」—— tracepoint 命中、包到达、安全事件发生,程序把一条记录推给用户态。BPF 有两条成熟通道:老资格的 **perf buffer**(BPF_MAP_TYPE_PERF_EVENT_ARRAY)与后来居上的 **ring buffer**(BPF_MAP_TYPE_RINGBUF,include/uapi/linux/bpf.h:958,v6.6.78)。本节沿源码把两条路各走一遍,再给五点对比与选型;示例 [`03-event-output/`](../examples/chapter-07/03-event-output/) 用同一事件源把两条通道各实现一遍,是本节的实证面。
+
+### 4.1 perf buffer:每 CPU 一环,fd 为桥
+
+BPF 侧的入口是 `bpf_perf_event_output`(kernel/trace/bpf_trace.c:660,v6.6.78;proto `bpf_perf_event_output_proto` :698,一节 1.4 的说明书家族)。它要一张 `BPF_MAP_TYPE_PERF_EVENT_ARRAY`(ops:`perf_event_array_map_ops`,kernel/bpf/arraymap.c:1245,v6.6.78)——key 是 **CPU 号**,value 是用户态预先挂到该 CPU 上的 perf 事件 fd。内层实现 `__bpf_perf_event_output`(kernel/trace/bpf_trace.c:618,v6.6.78):
+
+```c
+/* kernel/trace/bpf_trace.c:618-635(v6.6.78) */
+__bpf_perf_event_output(struct pt_regs *regs, struct bpf_map *map,
+			u64 flags, struct perf_raw_record *raw,
+			struct perf_sample_data *sd)
+{
+	struct bpf_array *array = container_of(map, struct bpf_array, map);
+	unsigned int cpu = smp_processor_id();
+	u64 index = flags & BPF_F_INDEX_MASK;
+	struct bpf_event_entry *ee;
+	struct perf_event *event;
+
+	if (index == BPF_F_CURRENT_CPU)
+		index = cpu;
+	if (unlikely(index >= array->map.max_entries))
+		return -E2BIG;
+
+	ee = READ_ONCE(array->ptrs[index]);
+	if (!ee)
+		return -ENOENT;
+```
+
+四个出口读出四个事实:`BPF_F_INDEX_MASK` 允许指定 CPU(默认 `BPF_F_CURRENT_CPU` 走本 CPU,:625-626);索引越界 -E2BIG;该 CPU 还没挂事件 fd → -ENOENT(常见新手指错:数组开了 64 格但只有 4 个 CPU 挂了 fd);后段(:637-647)还要验证 fd 确是 `PERF_COUNT_SW_BPF_OUTPUT` 类型的软件事件、且必须在本 CPU 上消费(-EOPNOTSUPP)——**每 CPU 隔离**是 perf 通道的安全设计。通过后 `perf_event_output` 把记录推进当前 CPU 的 perf 环;环满产生**丢失**,丢失计数走用户态 `on_lost` 回调(示例 03 的 perf.c)。
+
+用户态侧是 libbpf 的 `perf_buffer__new`(逐 CPU `perf_event_open` 挂事件)+ `perf_buffer__poll` 轮询——示例 03 的 perf.c 十几行就是全部。
+
+### 4.2 ring buffer:一张共享大页,两段式提交
+
+ring buffer 把「每 CPU 一环」换成**单一共享环形缓冲**:`struct bpf_ringbuf`(kernel/bpf/ringbuf.c:26,v6.6.78)——一页元数据(消费者/生产者位置)+ 双倍数据区(环形回绕免拷贝),用户态 `mmap` 直达数据(`ringbuf_map_mmap_kern`,:261)。BPF 侧两段式:
+
+```c
+/* kernel/bpf/ringbuf.c:408-432(v6.6.78) */
+static void *__bpf_ringbuf_reserve(struct bpf_ringbuf *rb, u64 size)
+{
+	unsigned long cons_pos, prod_pos, new_prod_pos, pend_pos, flags;
+	struct bpf_ringbuf_hdr *hdr;
+	u32 len, pg_off, tmp_size, hdr_len;
+
+	if (unlikely(size > RINGBUF_MAX_RECORD_SZ))
+		return NULL;
+
+	len = round_up(size + BPF_RINGBUF_HDR_SZ, 8);
+	if (len > ringbuf_total_data_sz(rb))
+		return NULL;
+
+	cons_pos = smp_load_acquire(&rb->consumer_pos);
+
+	if (in_nmi()) {
+		if (!spin_trylock_irqsave(&rb->spinlock, flags))
+			return NULL;
+	} else {
+		spin_lock_irqsave(&rb->spinlock, flags);
+	}
+
+	pend_pos = rb->pending_pos;
+	prod_pos = rb->producer_pos;
+	new_prod_pos = prod_pos + len;
+```
+
+读法四拍:单条记录上限 `RINGBUF_MAX_RECORD_SZ`;空间检查(消费进度 `cons_pos` 决定可用空间——**慢消费者直接限流生产者**,这是丢失语义的来源);NMI 上下文用 trylock(抢不到立刻 NULL,绝不自旋);`pending_pos` 扫描跳过**已预留未提交**的记录——这正是两段式的关键:reserve 拿到的是「已占位但未发布」的私有空间,填完 `bpf_ringbuf_commit`(:489)才发布;中途可以 `bpf_ringbuf_discard` 丢弃(:536 的 proto)。一次性写法 `bpf_ringbuf_output`(:543,`BPF_CALL_4`)是 reserve+memcpy+commit 的糖。提交只推进 `producer_pos`(原子释放语义);用户态 `ring_buffer__poll` 读 `cons/prod` 差值收事件,确认后推进 `consumer_pos`。事件**就绪唤醒**由 irq_work 完成(`bpf_ringbuf_notify`,:150)——轮询之外还能即时醒。
+
+### 4.3 五点对比与选型
+
+| 维度 | perf buffer | ring buffer |
+|---|---|---|
+| 缓冲所有权 | 每 CPU 一环(PERF_EVENT_ARRAY 按 CPU 号索引) | 单一共享环(元数据页 + 双数据区) |
+| BPF 侧写法 | 一次性拷贝(`bpf_perf_event_output`) | reserve→填→submit/discard(两段式,:408/:489) |
+| 跨 CPU 顺序 | 各环独立,无全局顺序 | 提交顺序即全局顺序(单 producer_pos 定序) |
+| 丢失语义 | 环满丢本 CPU 事件,lost 计数可观测 | reserve 返回 NULL 静默丢弃(慢消费者限流) |
+| 用户态接口 | `perf_buffer__new/poll`(依赖 perf_event_open 档位) | `ring_buffer__new/poll` + mmap 直读(无 perf 依赖) |
+
+选型结论:**默认 ring buffer**——内存开销随实际事件量、全局顺序、无 perf_event_open 档位依赖(示例 03 README 的对照表同款);三种例外选 perf buffer:需要与 perf 生态对齐(采样、`perf report` 消费)、需要逐 CPU 硬隔离、或目标内核版本尚未引入 ringbuf(<5.8,随版本演进,以所用内核为准)。
+
+**教师视角。**两条通道是「共享资源组织方式」的一对镜像:perf 按 CPU 切分(隔离换无争用,代价是排序与 fd 管理),ringbuf 全局共享(顺序与简洁,代价是自旋锁串行化 reserve——NMI 里宁可丢也不等)。学生误区:以为 ringbuf 的 `reserve/submit` 只是 API 风味——它是**发布语义**:submit 之前记录对消费者不存在,这让「复杂事件分步填充」天然安全;perf 的一次性拷贝没有这个中间态。
+
+**学生动手。**
+
+```bash
+# 编译级:双变体一次构建(零告警,本机已验证)
+make -C book/examples/chapter-07/03-event-output
+# 运行级待验证(root 档):同源双跑,对照输出形态
+sudo ./book/examples/chapter-07/03-event-output/event_ringbuf   # 另一终端执行任意命令产生事件
+sudo ./book/examples/chapter-07/03-event-output/event_perf
+```
+
+预期输出示例(运行级待验证):`[ringbuf] pid=… comm=…` 与 `[perf] pid=… comm=… (cpuN)`——事件内容相同,唤醒与轮询形态不同(见示例 README)。
+
+**检查点**(自测后看提示):
+
+1. ring buffer 里一条记录 submit 前半途返回,消费者会读到半成品吗?——提示:4.2 的发布语义与 pending_pos 扫描;忘了 submit 的记录最终由谁回收(超时机制,随内核演进)。
+2. 64 核机器上 PERF_EVENT_ARRAY 开 64 格、但用户态只给 cpu0 挂了 fd,cpu3 上的事件会怎样?——提示:4.1 的四个出口之一;-ENOENT 不是「丢」,是「没发出去」。
+3. 为什么 ringbuf 的 reserve 在 NMI 上下文用 trylock?——提示:4.2 读法第三拍;自旋等锁在 NMI 里的后果,对照二节站 3 的 per-CPU 判重入。
+
+**独立示例**:两条通道的完整双实现见 [`03-event-output/`](../examples/chapter-07/03-event-output/)(编译级已验证);运行级验证步骤与预期输出在其 README。
+
+## 可视化:六类映射与两条事件通道
+
+**图 1:六类映射速查(矩阵⑥)。**
+
+```text
+            寻址方式      并发策略            内存策略           典型用途
+hash        任意键→哈希    读 RCU+写桶锁       prealloc/按需      通用 KV(示例 01)
+array       下标=顺序      下标独立,几乎免锁   建表一次配齐       配置表/统计槽(示例 02 的骨架)
+LRU hash    任意键+逐出    同 hash             预分配元素池+牺牲者 连接追踪/缓存(三节 3.2)
+per-CPU     下标×CPU 分身  本 CPU 独占,零锁    ncpu×value_size    高频计数(示例 02)
+perf event  CPU 号→事件 fd 读侧轮询/写侧入环   每 CPU perf 环     事件通道(四节 4.1)
+ring buffer 单共享环      单 prod_pos 定序    mmap 共享大页      事件通道(四节 4.2)
+```
+
+**解读(≥150 字)**:六类的差异可以压成两个问题——「键怎么找到值」与「并发怎么解」。前四行是存储类:hash 用任意键换灵活性,array 用下标换顺序与速度,LRU 在 hash 上加逐出策略,per-CPU 在两者之上按 CPU 复制值;后两行是通道类,不存储、只流转。内存列是第 5 章「fd→内存」链条的类型化展开:prealloc 一次性配齐、per-CPU 按核翻倍、ring buffer 的双数据区是为回绕免拷贝付的固定租金。教学建议:把这张表当索引用——每行都能在切片器五/六站或对应示例里找到源码现场。
+
+**图 2:两条事件通道的数据流。**
+
+```text
+ BPF 程序(某 tracepoint 命中)
+   │ bpf_perf_event_output          │ bpf_ringbuf_reserve→填→submit
+   ▼                                ▼
+ [每 CPU perf 环]×N          [单一 ring buffer(prod_pos 前移)]
+   │ 各环独立、可能丢失              │ 全局有序、满则 reserve 失败
+   ▼                                ▼
+ 用户态 perf_buffer__poll         用户态 ring_buffer__poll
+ (perf_event_open 档位)          (mmap 直读,确认后推 cons_pos)
+   │                                │
+   └────────► 应用处理回调 ◄────────┘
+```
+
+**解读(≥150 字)**:图的左列是「按 CPU 分而治之」——事件留在发生的 CPU 上,用户态逐环轮询,好处是无争用、坏处是全局顺序不存在;右列是「单点定序」——`producer_pos` 一个原子量决定全局次序,用户态确认消费后推进 `consumer_pos`,空间归还即限流解除。两列在「应用处理回调」汇合,对上层完全等价——这就是示例 03 能用同一事件源双实现的原因。丢失语义的差异在图上看是两处小字:左列环满「丢并计数」,右列「reserve 失败」——前者丢在内核侧,后者丢在 BPF 程序侧,排错时的第一分叉点(排错节)。
 
 <!-- ============================================================
      Task 12 占位:常见问题与排错、课后扩展任务、总结、本章参考来源
