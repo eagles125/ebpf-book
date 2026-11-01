@@ -715,11 +715,138 @@ WALK_TREE=/nonexistent bash book/examples/chapter-06/03-jit-arm64/trace-jit-arm6
 **独立示例**:本节四站的代码段与行号工具化在 [`03-jit-arm64/`](../examples/chapter-06/03-jit-arm64/);与二节六站并排跑,两张输出对着读,「同构与差异」一目了然。
 
 
-<!-- ============================================================
-     Task 9 占位:四、实战:亲手摸到字节码与机器码(五层)
-     ①依赖 ②「编译」环境=机检+反汇编 ③部署=定位 ④运行=两切片器
-     ⑤效果=bpftool prog dump xlated/jited(预期)+性能对比方法论
-============================================================ -->
+## 四、实战:亲手摸到字节码与机器码
+
+本章实战的特别之处:全程**不加载任何程序**。能摸到的两样东西——BPF 字节码(自己编译)与 JIT 源码(切片器切出)——都不经过 `bpf(2)` 系统调用;真正需要加载的动作(第⑤层)只给命令讲解与预期输出,标明「运行级待验证」。每层四拍:背景问题→动作→预期输出→边界。
+
+### 4.1 第①层 依赖环境:两棵树、三件工具
+
+**背景问题**:JIT 走读需要什么?两张表说清。
+
+| 依赖 | 本机实况 | 用途 |
+|---|---|---|
+| 走读树 | `/work/linux/linux-6.6.78`(机检与切片唯一数据源) | 切片器、机检、行号引用 |
+| 运行内核 | 7.0.0-38(CONFIG_BPF_JIT/ALWAYS_ON/DEFAULT_ON 全 y) | sysctl 读取、CONFIG 对照(一节 1.4) |
+| clang | 18.1.3,`-target bpf` | 01-bpf-asm 编译字节码 |
+| llvm-objdump | 18.1.3(与 clang 同系) | 反汇编 |
+| bpftool | 7.7.0 | 第⑤层讲解用(特权查询档) |
+
+权限与 CONFIG 前提由 [`00-env/check-env.sh`](../examples/chapter-06/00-env/) 五段一次查完(一节 1.5 已跑过):无 root 可完成第②③④层;第⑤层需要 root,且本机 `unprivileged_bpf_disabled=2`——非特权加载被内核直接拒绝,这是边界,不是故障。**边界**:走读树换版本时行号漂移,机检脚本会逐条报 FAIL,先修树再读文。
+
+### 4.2 第②层 「编译」环境:机检 + 反汇编,本章的两件实证
+
+**背景问题**:本章几十处「文件:行号」引用,凭什么可信?两件实证:机检管引用,反汇编管字节码。
+
+**机检**——`scripts/verify-citations.sh` 以章级树根的 `citations.txt`(32 行锚点)为唯一数据源,逐行到走读树做「文件存在 + grep -F 命中」核对;原理与失败三分类已在第 5 章四节展开,这里一段带过:
+
+```bash
+bash book/examples/chapter-06/scripts/verify-citations.sh
+# 预期输出(末行):TOTAL=32 PASS=32 FAIL=0 WALK_TREE=/work/linux/linux-6.6.78 TREE_VERSION=v6.6.78
+# 退出码:FAIL=0 → 0(本机实测)
+```
+
+**反汇编**——[`01-bpf-asm/`](../examples/chapter-06/01-bpf-asm/) 全流程,本章唯一的构建动作(只编译不加载):
+
+```bash
+cd book/examples/chapter-06/01-bpf-asm
+make                                      # clang -O2 -g -target bpf … 产出 xdp_count.bpf.o
+./disasm.sh                               # llvm-objdump -d,14 条指令
+```
+
+反汇编全文 14 条,前 8 条与源码的对照节选如下(全文与逐行讲解见该目录 README;下表「反汇编」列与实跑输出逐字一致):
+
+| 指令 | 机器码 | 反汇编 | 对应源码 |
+|---|---|---|---|
+| 0 | `b7 00 00 00 00 00 00 00` | `r0 = 0x0` | L25 预置默认返回 XDP_ABORTED |
+| 1 | `61 12 04 00 00 00 00 00` | `r2 = *(u32 *)(r1 + 0x4)` | L21 读 `ctx->data_end` |
+| 2 | `61 11 00 00 00 00 00 00` | `r1 = *(u32 *)(r1 + 0x0)` | L20 读 `ctx->data` |
+| 3 | `bf 13 00 00 00 00 00 00` | `r3 = r1` | L24 边界检查第一步:复制指针 |
+| 4 | `07 03 00 00 0e 00 00 00` | `r3 += 0xe` | L24 `eth + 1` 即指针加 14 |
+| 5 | `2d 23 07 00 00 00 00 00` | `if r3 > r2 goto +0x7 <LBB0_3>` | L24 越界跳出口 |
+| 6 | `71 12 0c 00 00 00 00 00` | `r2 = *(u8 *)(r1 + 0xc)` | L27 按字节读 `h_proto` 低半 |
+| 7 | `71 11 0d 00 00 00 00 00` | `r1 = *(u8 *)(r1 + 0xd)` | L27 读 `h_proto` 高半 |
+
+**边界**:这张表是 clang 18.1.3 的产物;clang 大版本升级可能改变指令数与排布(寄存器分配/常量折叠策略演进),对不上先对齐编译器版本(排错节)。
+
+### 4.3 第③层 部署环境:JIT 源文件在哪里
+
+**背景问题**:行号引用指向的文件长什么样?JIT 后端按架构归位,布局模式统一是 `arch/<架构>/net/`:
+
+| 文件 | 行数(v6.6.78) | 角色 |
+|---|---|---|
+| `arch/x86/net/bpf_jit_comp.c` | 3020 | x86_64 后端(二节六站) |
+| `arch/x86/net/bpf_jit_comp32.c` | 2624 | x86 32 位兼容后端——给 32 位内核上的 eBPF 用,与 64 位版平行,一句带过 |
+| `arch/arm64/net/bpf_jit_comp.c` | 2303 | arm64 后端(三节) |
+| `arch/arm64/net/bpf_jit.h` | 300 | arm64 指令编码宏(`A64_R` 一族) |
+| `kernel/bpf/core.c` | 2975 | 通用层:选通、解释器、致盲、pack |
+
+定位命令目录(逐条 `grep -n`,与第 5 章同一套):机检脚本已把本章 32 个锚点全部自动化;想手查,一条 `grep -n "锚点" <文件>` 即可,行号漂移时以符号为准。这张表还是一张「找后端」的地图:其他架构(riscv64、s390、loongarch 等)一律照 `arch/<架构>/net/bpf_jit_comp.c` 模式归位,想确认你的机器用哪套,`uname -m` 一查即可——三节 3.4 的「四步读法」对它们全部适用。
+
+### 4.4 第④层 运行环境:一次跑全章
+
+**背景问题**:四件资产怎么一次跑完?清单在此(全部只读,除 `make` 产 .o 外零写入):
+
+```bash
+# 1. 环境自检:sysctl 分级 + 工具链 + CONFIG + BTF(无 root)
+bash book/examples/chapter-06/00-env/check-env.sh
+# 2. 引用机检:32 锚点全绿才继续
+bash book/examples/chapter-06/scripts/verify-citations.sh
+# 3. 反汇编锚点:亲手产出 14 条字节码(只编译不加载)
+cd book/examples/chapter-06/01-bpf-asm && make && ./disasm.sh
+# 4. 两套后端切片:x86 六站 + arm64 四站
+bash book/examples/chapter-06/02-jit-x86/trace-jit-x86.sh
+bash book/examples/chapter-06/03-jit-arm64/trace-jit-arm64.sh
+```
+
+**预期输出**:1 → 五段 OK 与三档结论(一节 1.5 摘录过);2 → `TOTAL=32 PASS=32 FAIL=0`;3 → 14 条指令(4.2 节选);4 → `STATIONS=6` 与 `STATIONS=4` 汇总、exit 0。任何一步 FAIL,按各目录 README 的失败模式表处置,不要带病前进。
+
+### 4.5 第⑤层 运行效果:加载之后的世界(运行级待验证)
+
+**背景问题**:程序真的被 JIT 了吗?JIT 出的机器码长什么样?这层的一切都发生在加载之后——**本机为预期输出示例,运行级待验证**(需 root 加载;`unprivileged_bpf_disabled=2` 与 `perf_event_paranoid=4` 把非特权路线全部封死,见 4.1)。
+
+**查 xlated(验证器改写后的字节码)**:
+
+```bash
+bpftool prog list                     # 找到程序 ID
+bpftool prog dump xlated id <ID> opcodes
+# 预期输出示例(运行级待验证):逐条指令 + 16 进制操作码;
+# 注意:验证器可能已改写指令(边界检查具体化、辅助函数调用展开),与 01-bpf-asm 的字节码未必逐条相同
+```
+
+**查 jited(机器码)**:
+
+```bash
+bpftool prog dump jited id <ID> file /tmp/prog.jited
+llvm-objdump -D -b binary -m i386:x86-64 /tmp/prog.jited   # 反汇编 JIT 产物
+# 预期输出示例(运行级待验证):能对上二节站三的序言(push rbp/mov rbp,rsp/sub rsp…)
+```
+
+两个参数各管一头:`opcodes` 让 xlated/jited 逐条附带 16 进制字节(把「源码级」变成「字节级」);`file` 把二进制倾倒到文件,交由 llvm-objdump 以裸二进制模式反汇编。若 `bpf_jit_kallsyms=1` 且有 root,`/proc/kallsyms` 里还能看到 `bpf_prog_<tag>_<name>` 形式的 JIT 符号(一节 1.3)。
+
+**性能对比方法论**:「JIT 到底快多少?」本机 `CONFIG_BPF_JIT_ALWAYS_ON=y` 无法真做(一节 1.4),方法迁移到可关 ALWAYS_ON 的内核:
+
+```bash
+# 方法论(预期步骤,本机不可复现):同一程序两种形态各跑 N 次取均值
+echo 0 > /proc/sys/net/core/bpf_jit_enable   # 关 JIT(需 root;可关内核上)
+# 加载并测;随后 echo 1 > /proc/sys/net/core/bpf_jit_enable 再测一轮
+```
+
+计时口径两选一:数据面程序用 `perf stat` 包住流量重放;纯函数类用 `BPF_PROG_TEST_RUN`(`bpftool prog run`)驱动。**安全注(不可省)**:生产环境禁关 JIT——`bpf_jit_harden` 与 ALWAYS_ON 是纵深防御的一部分,本实验只属于实验内核;本机 `perf_event_paranoid=4` 下非特权 `perf` 不可用,替代口径是加 root 档重测或改用 `bpftool prog run` 的内核侧计时。**边界**:本层全部命令的输出形态随内核版本与 bpftool 版本演进,以实测为准——这与本章「行号可机检」的口径不同,属于「预期输出示例」档。
+
+### 四节收束:双视角与检查点
+
+**教师视角。**本章实战刻意做成「不加载」:一来机检、反汇编、切片三件套在**任何机器**上可复现(无需 root、无需内核实验环境),二来把「编译级真实物」与「运行级预期」的边界本身当成教学内容——学生最容易犯的错,是把预期输出当实测事实背下来。四段节奏里,每层的「预期输出」都标了口径,这是全书验证状态约定的又一次落地。
+
+**学生动手。**按 4.4 清单顺序跑一遍全章四件资产;跑通后回到 4.2 的对照表,把 8 行对照逐行「读」出声——练的就是 source↔bytecode 这条眼力(课后练习①把这件事变成机检)。
+
+**检查点**(自测后看提示):
+
+1. `bpftool prog dump xlated` 看到的指令,和 `01-bpf-asm` 反汇编出的 14 条,应该完全一样吗?——提示:两个对象不同——后者是编译器产物,前者是**验证器改写后**的字节码;差异点回忆第 3 章(边界检查、辅助函数调用改写)。
+2. `perf_event_paranoid=4` 的机器上想测 JIT on/off,哪条路走不通、哪条还能走?——提示:非特权 perf 封死;root 档或 `bpftool prog run`(仍需特权)——本机两条都要 root,只剩方法论。
+3. 为什么第②层的 `make` 说「无挂载风险」,而第⑤层同是 bpftool 却要 root?——提示:前者止步于文件编译,后者触发 `bpf(2)` 系统调用——一条 sysctl(`unprivileged_bpf_disabled=2`)管住了它。
+
+**独立示例**:本章全部实战资产——[`00-env/`](../examples/chapter-06/00-env/)、[`01-bpf-asm/`](../examples/chapter-06/01-bpf-asm/)、[`02-jit-x86/`](../examples/chapter-06/02-jit-x86/)、[`03-jit-arm64/`](../examples/chapter-06/03-jit-arm64/)、[`scripts/`](../examples/chapter-06/scripts/)——按 4.4 清单一次跑通。
+
 
 <!-- ============================================================
      Task 10 占位:可视化(解释器 vs JIT 执行路径对比 + x86 六站流水图)、
