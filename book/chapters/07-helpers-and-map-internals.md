@@ -149,11 +149,133 @@ WALK_TREE=/nonexistent bash book/examples/chapter-07/04-helper-dispatch/trace-he
 
 **独立示例**:本节五站已工具化——[`04-helper-dispatch/`](../examples/chapter-07/04-helper-dispatch/);helper 在 hash 映射上的两个消费现场见 [`01-hash-lookup-update/`](../examples/chapter-07/01-hash-lookup-update/)(BPF 侧 lookup/update)。
 
-<!-- ============================================================
-     Task 9 占位:二、hash 映射内部:并发与内存
-     布局/无锁 RCU 查找/更新三语义与桶锁/prealloc/bpf_mem_alloc 回收
-     消费:05-map-internals 站 1-5;示例 01
-============================================================ -->
+## 二、hash 映射内部:并发与内存
+
+hash 映射(BPF_MAP_TYPE_HASH)是使用频率最高、内部也最讲究的一类映射。本节与切片器 [`05-map-internals/`](../examples/chapter-07/05-map-internals/) 的六站一一对应,走读对象是 `kernel/bpf/hashtab.c`(2630 行,v6.6.78)。每站四拍照旧:签名→职责→关键代码段→失败出口。
+
+### 2.1 注册表与接口表:两种「表」先分清
+
+hash 映射出现在两张表里,别混。第一张是**类型注册表** `bpf_map_types[]`(kernel/bpf/syscall.c:63,v6.6.78;切片器站 1)——`bpf_types.h` 那份清单第三次展开的映射侧,`BPF_MAP_CREATE` 拿着 `attr->map_type` 在这里查到本类型的 `bpf_map_ops`(第 5 章三节生命周期入口的查表处,本章不重复生命周期,只看 ops 指向的实现)。第二张是**接口表** `struct bpf_map_ops`(include/linux/bpf.h:75,v6.6.78;切片器站 2)——每种映射类型一张函数表,用户态可达的 `alloc_check/alloc/free/get_next_key/lookup 系/batch 系` 在前,程序侧(BPF 内可调)的 `map_lookup_elem/map_update_elem/map_delete_elem` 在后。示例 [`01-hash-lookup-update/`](../examples/chapter-07/01-hash-lookup-update/) 里 BPF 侧那两个 helper 调用,经一节 1.3 的白名单查到 proto、再由运行时落到这张表的 `htab_map_update_elem` 上——两张表 + 一个 ops,就是「一个 helper 调用到达实现」的完整链。
+
+### 2.2 查找:为什么敢无锁
+
+hash 查找的实现 `__htab_map_lookup_elem`(kernel/bpf/hashtab.c:677,v6.6.78):
+
+```c
+/* kernel/bpf/hashtab.c:677-695(v6.6.78) */
+static void *__htab_map_lookup_elem(struct bpf_map *map, void *key)
+{
+	struct bpf_htab *htab = container_of(map, struct bpf_htab, map);
+	struct hlist_nulls_head *head;
+	struct htab_elem *l;
+	u32 hash, key_size;
+
+	WARN_ON_ONCE(!rcu_read_lock_held() && !rcu_read_lock_trace_held() &&
+		     !rcu_read_lock_bh_held());
+
+	key_size = map->key_size;
+
+	hash = htab_map_hash(key, key_size, htab->hashrnd);
+
+	head = select_bucket(htab, hash);
+
+	l = lookup_nulls_elem_raw(head, hash, key, key_size, htab->n_buckets);
+
+	return l;
+}
+```
+
+没有一把锁:算哈希 → 选桶 → 沿链表逐个比对。它的合法性有两根支柱。其一,**RCU 读侧临界区**(`WARN_ON_ONCE` 断言调用者持有 rcu_read_lock/BPF 程序天然处于 RCU 读侧)——写侧删改都走「摘链后延迟回收」(2.5),读者手里的指针要么指向完整元素、要么指向合法链表节点,永远不会踩到已归还的内存。其二,**rcu 发布语义**:`hlist_nulls_add_head_rcu`(2.3 的替换动作)保证新元素对读者「要么完整可见、要么完全不可见」,不存在半个节点。
+
+还有一枚彩蛋:JIT 阶段 hash 查找会被**内联**——`htab_map_gen_lookup`(kernel/bpf/hashtab.c:722,v6.6.78)把 `bpf_map_lookup_elem` 的 call 指令改写成对 `__htab_map_lookup_elem` 的直接调用,跳过 helper 包装层(参数检查在验证期已完成)。一节 1.1 的「两条路」到这里变成「一条短路」:helper 机制是通用底座,JIT 有权对热点路径走捷径——这是第 6 章与本章在代码上的一次会师。
+
+### 2.3 更新:三语义、两级锁与一个并发窗口
+
+更新的实现 `htab_map_update_elem`(kernel/bpf/hashtab.c:1098,v6.6.78;切片器站 4 切的是头部),三语义由 `check_flags`(:1083)把关:`BPF_NOEXIST` 要求键不存在(否则 -EEXIST)、`BPF_EXIST` 要求键存在(否则 -ENOENT)、`BPF_ANY` 不挑。加锁后的主干(kernel/bpf/hashtab.c:1146-1162,v6.6.78):
+
+```c
+/* kernel/bpf/hashtab.c:1146-1162(v6.6.78) */
+	ret = htab_lock_bucket(htab, b, hash, &flags);
+	if (ret)
+		return ret;
+
+	l_old = lookup_elem_raw(head, hash, key, key_size);
+
+	ret = check_flags(htab, l_old, map_flags);
+	if (ret)
+		goto err;
+
+	if (unlikely(l_old && (map_flags & BPF_F_LOCK))) {
+		/* first lookup without the bucket lock didn't find the element,
+		 * but second lookup with the bucket lock found it.
+		 * This case is highly unlikely, but has to be dealt with:
+		 * grab the element lock in addition to the bucket lock
+		 * and update element in place
+		 */
+```
+
+**两级锁**是 hash 并发设计的核心(切片器站 3,`htab_lock_bucket`,kernel/bpf/hashtab.c:149,v6.6.78):第一级是 **per-CPU 计数锁**(`__this_cpu_inc_return(*(htab->map_locked[hash]))`)——哈希值决定落在哪个 CPU 的计数槽上,同 CPU 重入直接 -EBUSY,把死锁风险挡在自旋之前;第二级才是**桶级 `raw_spin_lock`**(粒度:一个桶,不是整表),配合 `local_irq_save` 关中断——自旋锁在中断上下文也可用,RT 内核上同样安全。粒度选择的账:整表一把锁最简单,但所有 CPU 抢同一 cacheline;桶级锁把争用按哈希打散;per-CPU 计数再解决「同 CPU 上中断再入同桶」的自旋死锁。三层叠加,写侧并发安全、且临界区只有链表操作几条指令。
+
+**并发窗口的兑现**(示例 01 的 README 埋过):示例里「先 lookup、不命中再 update(NOEXIST)」两步之间没有原子性——两个 CPU 同时首包,可能双双 lookup 未命中,随后一个 NOEXIST 成功、一个撞上 -EEXIST 返回 -E2BIG 之外的第一类失败(表满则是 -E2BIG)。源码层看,`check_flags` 在**桶锁内**复查,`alloc_htab_elem` 对 NOEXIST 的裁决也在锁内——所以窗口只存在于「程序侧的两步」之间,内核侧的单次 update 原子无误。这解释了示例的处置:把 -EEXIST/-E2BIG 当正常事,或者改用 `BPF_ANY`。
+
+**第三种更新:`BPF_F_LOCK`**(值里带 `struct bpf_spin_lock` 的映射)值得单独一提:它走**元素级锁**在原位改值(不摘链、不分配),更新路径开头(:1124 起)有专门的快路——先无锁找元素、抓元素锁原位改、99.9% 到此为止;极小概率的「无锁时没找到、锁内找到了」再回落桶锁路径(上面贴码的后半就是这个兜底)。两级锁之外的第三级,粒度细到一个值。
+
+**失败出口**汇总:未知 flags → -EINVAL;NOEXIST 撞已有键 → -EEXIST;EXIST 没找到 → -ENOENT;prealloc 表满 → -E2BIG(2.4);内存耗尽 → -ENOMEM。
+
+### 2.4 prealloc:内存换延迟的一笔账
+
+建表时的关键抉择在 `htab_map_alloc`(kernel/bpf/hashtab.c:422,v6.6.78):`bool prealloc = !(attr->map_flags & BPF_F_NO_PREALLOC);`——默认(不加 NO_PREALLOC 标志)**预分配全部元素**(`htab_is_prealloc` 判定,:131),配合 `htab->extra_elems` 备用池:
+
+- **prealloc(默认)**:建表时一次性分配 max_entries 个元素,运行期更新只做链表摘挂,不碰分配器——更新延迟恒定、无内存分配失败,代价是建表慢、哪怕用不满也占着内存;
+- **BPF_F_NO_PREALLOC**:按需分配——省内存、建表快,但每次插入走 `bpf_mem_alloc` 分配路径,延迟抖动大,且容量上限不再由建表保证。
+
+选型一句话:数据面高频更新选默认 prealloc(延迟可预算);键空间稀疏或巨大的(LRU 场景除外,见三节)才考虑 NO_PREALLOC。注意 LRU 语义与 NO_PREALLOC 互斥(:440 的检查),内核用一张 `htab_lru_map_ops`(三节)给出第三种答案。
+
+### 2.5 删除与回收:RCU 时代的「延迟归 library」
+
+删除 `htab_map_delete_elem`(kernel/bpf/hashtab.c:1424,v6.6.78)与更新同构:RCU 读者断言 → 锁桶 → `lookup_elem_raw` 原位找 → 摘链。真正的讲究在**回收**这一步(切片器站 5 的第二段,kernel/bpf/hashtab.c:892-901,v6.6.78):
+
+```c
+/* kernel/bpf/hashtab.c:892-901(v6.6.78) */
+static void htab_elem_free(struct bpf_htab *htab, struct htab_elem *l)
+{
+	check_and_free_fields(htab, l);
+
+	migrate_disable();
+	if (htab->map.map_type == BPF_MAP_TYPE_PERCPU_HASH)
+		bpf_mem_cache_free(&htab->pcpu_ma, l->ptr_to_pptr);
+	bpf_mem_cache_free(&htab->ma, l);
+	migrate_enable();
+}
+```
+
+内存不直接归还页分配器,而是交给 `bpf_mem_alloc`(建表时配好的 ma 与 pcpu_ma 双分配器,:88-89)——它内部按 **RCU 时代(grace period)**攒批释放:元素摘链后先「逻辑死亡」,等所有在读者都越过临界区后才物理归还。这就是 2.2「读侧敢无锁」的另一半:写侧不省这几次延迟,换读者永远不见悬空指针。per-CPU hash 的元素是两块(per-CPU 值区 + 元素本体),所以 free 成对调两次——`pcpu_ma` 与 `ma` 的分工在回收侧最直观。
+
+### 二节收束:双视角与检查点
+
+**教师视角。**hash 映射的并发模型可以压缩成一句话:**读免锁靠 RCU、写串行靠桶锁、死锁防靠 per-CPU、内存晚还靠 mem_alloc**。学生最容易卡住的是「为什么敢无锁读」——把 2.2 与 2.5 连起来读一遍就通了:无锁的底气不在读侧,在写侧的纪律(发布用 RCU 写入、回收走 grace period)。另一个误区是把 `bpf_map_lookup_elem` 当「函数调用」逐次展开:实际 JIT 常内联成几条指令(2.2 的彩蛋),「helper 调用贵」的直觉在 hash 查找上并不成立。
+
+**学生动手。**三条命令把六站切出来(预期输出均本机实测):
+
+```bash
+# ①六站全量
+bash book/examples/chapter-07/05-map-internals/trace-map-internals.sh
+# ②对读示例:并发窗口的源码现场(站 4)
+bash book/examples/chapter-07/05-map-internals/trace-map-internals.sh | sed -n '/^## 站 4/,/^## 站 5/p'
+# ③负路径自检
+WALK_TREE=/nonexistent bash book/examples/chapter-07/05-map-internals/trace-map-internals.sh
+```
+
+①汇总 `TREE_VERSION=v6.6.78 STATIONS=6` exit 0;②站 4 的更新头部与 `htab_lock_bucket` 调用;③exit 1。
+
+**检查点**(自测后看提示):
+
+1. 示例 01 的「lookup→update(NOEXIST)」窗口,内核能不能替你关掉?——提示:单次 update 在桶锁内原子(2.3);关窗口的办法是改成 `BPF_ANY` 单调用,或 `BPF_F_LOCK` 原位改。
+2. 同一 CPU 上,中断处理里的 BPF 程序更新同一个 hash 映射,为什么会撞 -EBUSY?——提示:站 3 的第一级 per-CPU 计数锁就是干这个的(重入保护),不是性能优化。
+3. prealloc 表更新为什么不会有 -ENOMEM?——提示:元素早在建表时分配;运行期只挂链。那 -E2BIG 从哪来(2.3 失败出口)?
+
+**独立示例**:hash 闭环见 [`01-hash-lookup-update/`](../examples/chapter-07/01-hash-lookup-update/);本节源码现场工具化在 [`05-map-internals/`](../examples/chapter-07/05-map-internals/)(六站中的前五站)。
+
 
 <!-- ============================================================
      Task 10 占位:三、per-CPU、LRU 与内存记账
