@@ -221,7 +221,7 @@ static void *__htab_map_lookup_elem(struct bpf_map *map, void *key)
 
 没有一把锁:算哈希 → 选桶 → 沿链表逐个比对。它的合法性有两根支柱。其一,**RCU 读侧临界区**(`WARN_ON_ONCE` 断言调用者持有 rcu_read_lock/BPF 程序天然处于 RCU 读侧)——写侧删改都走「摘链后延迟回收」(2.5),读者手里的指针要么指向完整元素、要么指向合法链表节点,永远不会踩到已归还的内存。其二,**rcu 发布语义**:`hlist_nulls_add_head_rcu`(2.3 的替换动作)保证新元素对读者「要么完整可见、要么完全不可见」,不存在半个节点。
 
-还有一枚彩蛋:JIT 阶段 hash 查找会被**内联**——`htab_map_gen_lookup`(kernel/bpf/hashtab.c:722,v6.6.78)把 `bpf_map_lookup_elem` 的 call 指令改写成对 `__htab_map_lookup_elem` 的直接调用,跳过 helper 包装层(参数检查在验证期已完成)。一节 1.1 的「两条路」到这里变成「一条短路」:helper 机制是通用底座,JIT 有权对热点路径走捷径——这是第 6 章与本章在代码上的一次会师。
+还有一枚彩蛋:JIT 阶段 hash 查找会被**内联**——`htab_map_gen_lookup`(kernel/bpf/hashtab.c:719,v6.6.78)把 `bpf_map_lookup_elem` 的 call 指令改写成对 `__htab_map_lookup_elem` 的直接调用,跳过 helper 包装层(参数检查在验证期已完成)。一节 1.1 的「两条路」到这里变成「一条短路」:helper 机制是通用底座,JIT 有权对热点路径走捷径——这是第 6 章与本章在代码上的一次会师。
 
 ### 2.3 更新:三语义、两级锁与一个并发窗口
 
@@ -472,7 +472,7 @@ static void *__bpf_ringbuf_reserve(struct bpf_ringbuf *rb, u64 size)
 | 丢失语义 | 环满丢本 CPU 事件,lost 计数可观测 | reserve 返回 NULL 静默丢弃(慢消费者限流) |
 | 用户态接口 | `perf_buffer__new/poll`(依赖 perf_event_open 档位) | `ring_buffer__new/poll` + mmap 直读(无 perf 依赖) |
 
-补一个 6.x 新成员:**user ring buffer**(`BPF_MAP_TYPE_USER_RINGBUF`,include/uapi/linux/bpf.h:962,v6.6.78;ops `user_ringbuf_map_ops`,kernel/bpf/ringbuf.c:370)——方向反转的第三条通道:**用户态写、BPF 读**(`bpf_user_ringbuf_peek` 一族,带 busy 位防并发),配置下发、控制面到数据面的批量传令可用它;与本章两条「BPF 写、用户态读」通道合起来,共享环形缓冲的双向版图就齐了。
+补一个 6.x 新成员:**user ring buffer**(`BPF_MAP_TYPE_USER_RINGBUF`,include/uapi/linux/bpf.h:962,v6.6.78;ops `user_ringbuf_map_ops`,kernel/bpf/ringbuf.c:370)——方向反转的第三条通道:**用户态写、BPF 读**(`bpf_user_ringbuf_drain`,BPF_CALL_4 在 :745;内部 `__bpf_user_ringbuf_peek` 以 busy 位防并发,:676),配置下发、控制面到数据面的批量传令可用它;与本章两条「BPF 写、用户态读」通道合起来,共享环形缓冲的双向版图就齐了。
 
 选型结论:**默认 ring buffer**——内存开销随实际事件量、全局顺序、无 perf_event_open 档位依赖(示例 03 README 的对照表同款);三种例外选 perf buffer:需要与 perf 生态对齐(采样、`perf report` 消费)、需要逐 CPU 硬隔离、或目标内核版本尚未引入 ringbuf(<5.8,随版本演进,以所用内核为准)。
 
