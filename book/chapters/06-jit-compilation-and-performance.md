@@ -418,7 +418,7 @@ static void emit_prologue(u8 **pprog, u32 stack_depth, bool ebpf_from_cbpf,
 			goto emit_cond_jmp;
 ```
 
-`goto emit_cond_jmp` 指向 switch 后面的公共出口(把比较结果转成跳转偏移的那段)——连同 JMP32 十个标签,20 种比较共享一条编码逻辑,「多样性压在 case 标签、共性压在出口」。锚点指令 11 是 `BPF_JEQ | BPF_K`(立即数比较)变体,lowering 同族(立即数版在 `:1732` 起)。
+`goto emit_cond_jmp` 指向 switch 后面的公共出口(把比较结果转成跳转偏移的那段)——连同 JMP32 十个标签,20 种比较共享一条编码逻辑,「多样性压在 case 标签、共性压在出口」。锚点指令 11 是 `BPF_JEQ | BPF_K`(立即数比较)变体,lowering 同族(立即数版在 `:1745` 起)。
 
 **失败出口**:switch 的 `default` 直接 `return -EFAULT`(`arch/x86/net/bpf_jit_comp.c:1823-1824`,v6.6.78)——但如站二所说,验证过的程序到不了这里。
 
@@ -454,7 +454,7 @@ int bpf_jit_get_func_addr(const struct bpf_prog *prog,
 		   bpf_jit_supports_far_kfunc_call()) {
 ```
 
-三类 `call`,三种地址策略。**helper 调用**(普通 `call`):地址恒定——`__bpf_call_base + imm`(函数体接续在 `:1235-1244`,helper 与基址都在核心内核,第一趟就能写对)。**BPF 子程序调用**(`BPF_PSEUDO_CALL`,bpf2bpf):第一趟只能填占位 `NULL`——子程序自己的机器码地址要等 `addrs[]` 收敛;`extra_pass` 为真才从 `prog->aux->func[off]->bpf_func` 取真地址。站二的两趟编译,一半理由就在这几行。**kfunc 调用**(`BPF_PSEUDO_KFUNC_CALL`):按内核是否支持远距 kfunc 调用分流。**失败出口**:子程序索引越界 `return -EINVAL`。
+三类 `call`,三种地址策略。**helper 调用**(普通 `call`):地址恒定——`__bpf_call_base + imm`(函数体接续在 `:1237-1243`,helper 与基址都在核心内核,第一趟就能写对)。**BPF 子程序调用**(`BPF_PSEUDO_CALL`,bpf2bpf):第一趟只能填占位 `NULL`——子程序自己的机器码地址要等 `addrs[]` 收敛;`extra_pass` 为真才从 `prog->aux->func[off]->bpf_func` 取真地址。站二的两趟编译,一半理由就在这几行。**kfunc 调用**(`BPF_PSEUDO_KFUNC_CALL`):按内核是否支持远距 kfunc 调用分流。**失败出口**:子程序索引越界 `return -EINVAL`。
 
 **尾调用(tail call)是另一族「跳过去就不回来」的调用**,x86 侧有两种 lowering。间接版(`arch/x86/net/bpf_jit_comp.c:520-543`,v6.6.78)先做运行时边界检查:
 
@@ -798,7 +798,7 @@ bash book/examples/chapter-06/02-jit-x86/trace-jit-x86.sh
 bash book/examples/chapter-06/03-jit-arm64/trace-jit-arm64.sh
 ```
 
-**预期输出**:1 → 五段 OK 与三档结论(一节 1.5 摘录过);2 → `TOTAL=32 PASS=32 FAIL=0`;3 → 14 条指令(4.2 节选);4 → `STATIONS=6` 与 `STATIONS=4` 汇总、exit 0。任何一步 FAIL,按各目录 README 的失败模式表处置,不要带病前进。
+**预期输出**(均本机实测):1 → 五段 OK 与三档结论(一节 1.5 摘录过);2 → `TOTAL=32 PASS=32 FAIL=0`;3 → 14 条指令(4.2 节选);4 → `STATIONS=6` 与 `STATIONS=4` 汇总、exit 0。任何一步 FAIL,按各目录 README 的失败模式表处置,不要带病前进。
 
 ### 4.5 第⑤层 运行效果:加载之后的世界(运行级待验证)
 
