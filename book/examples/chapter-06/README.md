@@ -20,7 +20,7 @@
 | `02-jit-x86/` | 源码切片器 | `trace-jit-x86.sh`:x86_64 JIT 六站(选通入口/do_jit 两趟/emit_prologue/逐例 lowering/helper 与 tail call/致盲与映像分配) | Task 4 落地 |
 | `03-jit-arm64/` | 源码切片器 | `trace-jit-arm64.sh`:arm64 JIT 四站(入口/build_body 分派/bpf2a64 映射/与 x86 对照) | Task 5 落地 |
 | `scripts/` | 符号机检 | `verify-citations.sh`:机检树根 citations.txt 逐条「文件存在 + 符号 grep」,输出 TOTAL/PASS/FAIL 汇总 | Task 3 落地 |
-| `exercises/` | 课后扩展 | `01-asm-readback/`(反汇编回读对照)、`02-extend-jit/`(常量致盲站扩展),均含防剧透参考实现 | Task 12 落地 |
+| `exercises/` | 课后扩展 | `01-asm-readback/`(反汇编回读对照:README 防剧透任务书 + `answer.md` 14 行参考表 + `check-answer.sh` 五特征机检)、`02-extend-jit/`(常量致盲站扩展:`trace-blind-station.sh` 两站切片 + `check-trace.sh` 八项验收),均含防剧透参考实现 | Task 12 落地:两练习机检实跑全绿(check-answer TOTAL=5 PASS=5;check-trace TOTAL=8 PASS=8,均 exit 0) |
 
 > **citations.txt 在本目录树根**(即本 README 旁,不在子目录):它是全章共享接口、机检脚本唯一数据源,Task 2 落地。
 
