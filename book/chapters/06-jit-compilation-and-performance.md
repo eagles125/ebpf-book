@@ -848,7 +848,119 @@ echo 0 > /proc/sys/net/core/bpf_jit_enable   # 关 JIT(需 root;可关内核上)
 **独立示例**:本章全部实战资产——[`00-env/`](../examples/chapter-06/00-env/)、[`01-bpf-asm/`](../examples/chapter-06/01-bpf-asm/)、[`02-jit-x86/`](../examples/chapter-06/02-jit-x86/)、[`03-jit-arm64/`](../examples/chapter-06/03-jit-arm64/)、[`scripts/`](../examples/chapter-06/scripts/)——按 4.4 清单一次跑通。
 
 
-<!-- ============================================================
-     Task 10 占位:可视化(解释器 vs JIT 执行路径对比 + x86 六站流水图)、
-     常见问题与排错、课后扩展任务、总结、本章参考来源
-============================================================ -->
+## 可视化:解释器与 JIT 的执行路径对比
+
+**图 1:同一个程序,两条执行路径。**
+
+```text
+        ┌──────────────────────────────────────────────────────────┐
+        │ 字节码 14 条(01-bpf-asm 实产):b7 / 61 / 61 / bf / 07 / 2d / …│
+        └───────────────────────┬──────────────────────────────────┘
+                                │ bpf_prog_select_runtime 选通
+          解释器路(左)          │           JIT 路(右)
+   ┌────────────────────┐      │      ┌────────────────────────────┐
+   │ 每次触发,逐条:      │      │      │ 加载时,一次性:              │
+   │  取指 insn->code    │      │      │  站1 入口+致盲预处理          │
+   │  查 jumptable[256]  │      │      │  站2 两趟 do_jit             │
+   │  间接跳 &&label     │      │      │  站3 序言 站4 lowering       │
+   │  执行,取下一条…循环 │      │      │  站5 CALL 定址 站6 分配映像   │
+   └────────────────────┘      │      └────────────┬───────────────┘
+   开销:每条指令一次查表        │                   ▼
+   总账:O(指令数×执行次数)     │      每次触发:直接执行原生指令
+                               │      总账:O(指令数) 一次 + 零分派
+   ⚠ 本机 ALWAYS_ON=y:左路已从内核映像移除,开关只剩安全语义(一节 1.4)
+```
+
+**解读(≥150 字)**:两条路分岔在选通点,分水岭是成本付在哪头。左路把「取指+查表+间接跳转」的代价按 `指令数 × 执行次数` 线性付——执行一次付一次,天文学次数的执行量意味着天文学账单;右路把这些代价一次性压进加载时,代价本身也精打细算:致盲把敏感立即数改写掉,两趟编译让跳转地址收敛,序言搭好栈帧,最后 14 条 8 字节定长指令变成一串变长但原生的 x86 指令。图底的警示不是脚注而是主判词:在 ALWAYS_ON 内核上,左路不是「慢选项」而是「不存在」——这解释了一节 1.4 为什么说开关「只剩安全语义」。
+
+**图 2:x86 JIT 六站流水图。**
+
+```text
+ 字节码(struct bpf_prog,验证器已放行)
+      │
+      ▼
+ ①选通入口 comp.c:2754 ── jit_requested=0 ──→ 原样返回(解释器)
+      │ 致盲预处理 bpf_jit_blind_constants(core.c:1428)
+      │        └─ 失败 IS_ERR ──→ 回退解释器
+      ▼
+ ②两趟循环 comp.c:2830 ── 每趟 do_jit(:1075):
+      │     ③emit_prologue 序言(:343;寄存器映射 reg2hex :171)
+      │     ④大 switch 逐条 lowering(ALU/STX/LDX/JMP…;default → -EFAULT)
+      │     ⑤CALL 定址(core.c:1210)/tail call 两形态(:520/:594)
+      │ proglen<=0 ──→ 释放映像,回退解释器(失败出口)
+      ▼
+ 长度收敛,addrs[] 稳定
+      ▼
+ ⑥映像分配 bpf_prog_pack(core.c:904)── 只读可执行(ROX)
+      │
+      ▼
+ fp->bpf_func = JIT 代码 ── 事件触发 ── 直接原生执行
+```
+
+**解读(≥150 字)**:六站不是流水线上的六道独立工序,而是一张带**三条失败出口**的决策图:jit_requested 为零、致盲失败、任何一趟 proglen 非正,三条路都汇到同一个终点——回退解释器(ALWAYS_ON 内核上则直接加载失败,一节 1.4)。图上还要读出两处「跨站协作」:站二的 `addrs[]` 活着,是为了站五的子程序调用有真地址可取;站三序言预留的补丁位与跳板偏移,是站五直接尾调用能原地改写的前提。最后一站的 ROX(运行前填满、转只读可执行)是安全收口——机器码从生成到执行,落进的是不可写内存。
+
+## 常见问题与排错
+
+### 走读与反汇编类
+
+**Q:开了 `bpf_jit_harden` 后,反汇编 JIT 映像的指令和源码常量对不上,是 bug 吗?**
+A:预期行为,不是 bug。二节站六讲过:致盲把立即数拆成「随机异或对」,指令流里不再有明文常量,每次加载随机数还不同。[`01-bpf-asm/`](../examples/chapter-06/01-bpf-asm/) 的 14 条之所以能逐字对照,正因为它只编译、未加载——致盲发生在编译之后、加载之前的 JIT 流程里;对照表的「逐字一致」与「致盲后对不上」两者都成立,边界就是加载那一步。
+
+**Q:重编出的 `.bpf.o` 指令数不是 14 条?**
+A:先对齐 clang 版本(本章锚点绑 18.1.3)。寄存器分配与常量折叠策略随版本演进,指令数漂移属预期;逐条比对前先确认 `clang --version`。练习①的机检答案同样绑定该版本。
+
+**Q:`bpftool prog dump jited` 报权限错误?**
+A:三层门:要 root;程序要先真的加载在系统里(`bpftool prog list` 可见);本机还有 `unprivileged_bpf_disabled=2` 这道总闸(4.1)。三条都满足才能看机器码——这是运行级内容归入「预期」档的原因。
+
+**Q:`dump xlated` 与 `dump jited` 对照,一条 BPF 指令对应的 x86 指令长度忽长忽短?**
+A:正常。JIT 是逐条独立 lower,同一条 BPF 指令依寄存器与立即数编码成 3–10+ 字节不等的 x86 序列——x86 变长指令集的必然结果(对照二节站三:映射到 r8–r15 的寄存器要多一个 REX 前缀字节)。工具侧可以按 `addrs[]` 的思路定位「第 i 条 BPF 指令对应的机器码起点」,练习②的致盲站是同一个手艺的源码版。
+
+**Q:`dump xlated` 看到的指令和 [`01-bpf-asm/`](../examples/chapter-06/01-bpf-asm/) 的 14 条对不上?**
+A:也是预期。`xlated` 是**验证器改写后**的字节码(边界检查具体化、helper 调用展开等,第 3 章),`.bpf.o` 里是**编译器产物**——两个对象、两个阶段;四节检查点 1 已拆过这层,这里给排错口径:先比条数,再按操作码找对应,别逐字节硬对。
+
+**Q:机检脚本报 FAIL?**
+A:三类原因与处置(文件不在树/符号未命中/格式错)与第 5 章完全同款,处置流程见第 5 章四节与排错节,不重复展开;先修 `citations.txt` 再重跑,不改脚本放水。
+
+### sysctl 类
+
+**Q:`cat` 不到 `bpf_jit_harden`/`bpf_jit_kallsyms`/`bpf_jit_limit`?**
+A:`EACCES` 是文件权限 0600 在说话(root-only),不是开关不存在——一节 1.3 的分级表与 [`00-env/`](../examples/chapter-06/00-env/) ② 段已逐项实证。root 档重跑 check-env 即可看到值。
+
+**Q:`bpf_jit_enable` 写 0 失败?**
+A:本机 ALWAYS_ON 把表项锁成 min=max=1,写操作直接被拒;这不是 sysctl 的错,是 1.4 说的「开关焊死在开」。
+
+### 方法论类
+
+**Q:本机 ALWAYS_ON=y,JIT on/off 对比测不了,怎么办?**
+A:迁移实验设计(4.5 的方法论步骤):在**可关 ALWAYS_ON 的实验内核**上做,`bpf_jit_enable` 0/1 各测一轮;安全注重申——生产环境禁关 JIT,实验内核做完即弃。
+
+**Q:`perf stat` 无权限?**
+A:`perf_event_paranoid=4` 封死非特权 perf(一节 1.5 第三条读数)。替代口径两条:root 档重测,或改用 `bpftool prog run`(`BPF_PROG_TEST_RUN`)的内核侧计时——同样需要特权;工具命令速查见[附录 B](../appendix/b-tool-command-index.md)。
+
+## 课后扩展任务
+
+两项练习的完整任务书、提示与机检脚本在 `book/examples/chapter-06/exercises/`(任务与提示在前、参考思路在后,先自己动手再翻答案;先修条件:4.2 的 01-bpf-asm 全流程与 4.4 清单跑通):
+
+- **练习① 字节码回读**([`exercises/01-asm-readback/`](../examples/chapter-06/exercises/01-asm-readback/)):对 [`01-bpf-asm/`](../examples/chapter-06/01-bpf-asm/) 的锚点程序产出你自己的逐行 source↔bytecode 对照表,并与 README 的对照表交叉核对;`check-answer.sh` 会对反汇编输出断言五个特征序列,全绿即通过。练的是 4.2 那条「source↔bytecode 眼力」——二节六站的输入侧基本功。
+- **练习② 扩展切片器**([`exercises/02-extend-jit/`](../examples/chapter-06/exercises/02-extend-jit/)):给 `trace-jit-x86.sh` 加一个「致盲细节」独立小脚本——对 `core.c` 切 `bpf_jit_blind_insn`(:1250)与 `bpf_jit_blind_constants`(:1428)两站,接口同款(`STATIONS=2`);`check-trace.sh` 负责验收。练的是第 5 章学的「锚点定位 + 区间提取」手艺,迁移到本章素材上;做完后回看排错节第一条,致盲的教学闭环就完整了。
+
+## 总结
+
+五点内化,对应学习目标五条:
+
+1. **三种执行形态与选通**:offload 优先、JIT 次之、解释器兜底,`bpf_prog_select_runtime` 一锤定音(一节 1.1)——第 4 章生命周期第三步在这里完成。
+2. **解释器的实现技巧**:256 项 computed-goto 跳转表 + 栈长 16 档特化入口,「虚拟 CPU」不是比喻而是可读的实现(一节 1.1)。
+3. **JIT 的经济学**:每条指令一次解码 vs 一次编译,间接跳转伤预测,固定开销前移利好高频路径(一节 1.2)——这是 ALWAYS_ON 成为默认的根据。
+4. **开关与实况**:`bpf_jit_enable/kallsyms/harden/limit` 出自 core.c:560-566,默认值来自 CONFIG;本机 ALWAYS_ON=y 把解释器移出内核映像、把开关焊死在开(一节 1.3/1.4)——「读源码的对象是走读树,不是运行内核」分得清了。
+5. **两套后端一套框架**:x86 六站走完「选通→两趟→序言→lowering→定址→分配」,arm64 四站验证同构;「架构相关」落在映射表、立即数装载与 icache 三处实感上(二节、三节)。
+
+第 6 章之后,程序生命周期的每一步你都拆开看过了:加载(第 5 章)、验证(第 3 章)、执行形态(本章)。下一站回到数据面——第 9 章起开始动手写程序,第 15 章把 XDP 的性能潜力放到真实拓扑上。
+
+## 本章参考来源
+
+- Linux v6.6.78 源码树(走读树,行号引用基准):`kernel/bpf/core.c`(选通、解释器、致盲、bpf_prog_pack);`arch/x86/net/bpf_jit_comp.c` 与 `arch/x86/net/bpf_jit_comp32.c`(x86_64 及 32 位兼容后端);`arch/arm64/net/bpf_jit_comp.c` 与 `arch/arm64/net/bpf_jit.h`(arm64 后端与编码宏)。
+- 内核文档 `Documentation/bpf/`:`index.rst`(BPF 文档总目)、`clang-notes.rst`(clang 生成 BPF 代码的选项与注意事项——指令数漂移的官方注脚)、`classic_vs_extended.rst`(经典 BPF 与扩展 BPF 指令集对照)。
+- UAPI 与核心头:`include/uapi/linux/bpf.h`(指令编码、`BPF_PROG_LOAD`、`enum xdp_action`)、`include/linux/bpf.h`(`MAX_TAIL_CALL_CNT`、`struct bpf_prog_aux`)、`include/linux/filter.h`(`struct bpf_binary_header`)。
+- 工具手册:`bpftool-prog(8)`(`dump xlated/jited`、`opcodes`/`file` 参数)、`perf(1)`(`perf_event_paranoid` 权限语义)。
+- 章节回指:第 2 章 2.1(BPF 虚拟机模型与指令编码)、第 3 章(验证器:边界检查与 PROBE_MEM 的上游)、第 4 章(程序类型与辅助函数白名单)、第 5 章(源码地图、加载路径与机检方法);后续应用见第 9 章(动手入门)与第 15 章(XDP 性能实战)。
+
