@@ -171,12 +171,427 @@ bash book/examples/chapter-06/00-env/check-env.sh
 
 **独立示例**:本节的开关分级与五段自检已工具化——[`00-env/check-env.sh`](../examples/chapter-06/00-env/),只读、无 root 可跑;反汇编锚点(亲手产出字节码)见 [`01-bpf-asm/`](../examples/chapter-06/01-bpf-asm/)。
 
-<!-- ============================================================
-     Task 7 占位:二、x86_64 JIT:从字节码到机器码的六站
-     六站:①选通与入口 ②do_jit 与两趟编译 ③emit_prologue 与寄存器映射
-     ④指令 lowering 逐例 ⑤helper 调用与 tail call ⑥常量致盲与映像分配
-     消费:02-jit-x86/trace-jit-x86.sh 六站输出;锚点:01-bpf-asm 14 条指令
-============================================================ -->
+## 二、x86_64 JIT:从字节码到机器码的六站
+
+本节是本章主重,也是导读预告③「深挖留第 6 章」的兑现处。走读方法与第 5 章一致,但多了一个抓手:每站与切片器 [`02-jit-x86/trace-jit-x86.sh`](../examples/chapter-06/02-jit-x86/) 的六站一一对应——正文贴的每一段码,切片器都能在你自己的树上原样切出来。输入样本统一用 [`01-bpf-asm/`](../examples/chapter-06/01-bpf-asm/) 的 14 条指令:JIT 读到什么、翻译成什么,全程拿它对号。每站四拍:签名(标注 v6.6.78 行号)→职责→关键代码段→失败出口。
+
+### 站 1:选通与入口
+
+**签名**:`bpf_int_jit_compile(struct bpf_prog *prog)`,定义在 `arch/x86/net/bpf_jit_comp.c:2754`(v6.6.78)。**职责**:接住 `core.c:2384` 的调用(第 5 章二节站 4 在此止步——「深挖」承诺现在兑现),做两件预备工作后把程序交给逐条翻译的主循环。
+
+```c
+/* arch/x86/net/bpf_jit_comp.c:2754-2773(v6.6.78) */
+struct bpf_prog *bpf_int_jit_compile(struct bpf_prog *prog)
+{
+	struct bpf_binary_header *rw_header = NULL;
+	struct bpf_binary_header *header = NULL;
+	struct bpf_prog *tmp, *orig_prog = prog;
+	struct x64_jit_data *jit_data;
+	int proglen, oldproglen = 0;
+	struct jit_context ctx = {};
+	bool tmp_blinded = false;
+	bool extra_pass = false;
+	bool padding = false;
+	u8 *rw_image = NULL;
+	u8 *image = NULL;
+	int *addrs;
+	int pass;
+	int i;
+
+	if (!prog->jit_requested)
+		return orig_prog;
+
+	tmp = bpf_jit_blind_constants(prog);
+	/*
+	 * If blinding was requested and we failed during blinding,
+	 * we must fall back to the interpreter.
+	 */
+	if (IS_ERR(tmp))
+		return orig_prog;
+```
+
+三个入口事实,对应三个失败出口。其一,`jit_requested` 门:内核对程序按「程序类型 + sysctl + cgroup 设置」判定是否请求 JIT,为假时原样返回——程序保持字节码走解释器(一节 1.1 的回退路径;在本机 ALWAYS_ON 内核上这条路不通,回指 1.4)。其二,`bpf_jit_blind_constants(prog)` 先行:常量致盲发生在一切翻译之前(站六展开);它返回的是**改写后的程序克隆**,`tmp != prog` 时后续编译用克隆。其三,失败出口:`IS_ERR(tmp)`——致盲失败立即返回原程序回退解释器;「编译还没开始,输在预处理」是 JIT 的第一类失败。
+
+### 站 2:do_jit 与两趟编译
+
+**签名**:`do_jit(struct bpf_prog *bpf_prog, int *addrs, u8 *image, u8 *rw_image, int oldproglen, struct jit_context *ctx, bool jmp_padding)`,定义在 `arch/x86/net/bpf_jit_comp.c:1075`(v6.6.78)。**职责**:JIT 的心脏——遍历每条 BPF 指令,查 `addrs[i]` 记录每条指令翻译后的机器码地址,逐条 lower 成 x86 指令序列。
+
+```c
+/* arch/x86/net/bpf_jit_comp.c:1075-1098(v6.6.78) */
+static int do_jit(struct bpf_prog *bpf_prog, int *addrs, u8 *image, u8 *rw_image,
+		  int oldproglen, struct jit_context *ctx, bool jmp_padding)
+{
+	bool tail_call_reachable = bpf_prog->aux->tail_call_reachable;
+	struct bpf_insn *insn = bpf_prog->insnsi;
+	bool callee_regs_used[4] = {};
+	int insn_cnt = bpf_prog->len;
+	bool tail_call_seen = false;
+	bool seen_exit = false;
+	u8 temp[BPF_MAX_INSN_SIZE + BPF_INSN_SAFETY];
+	int i, excnt = 0;
+	int ilen, proglen = 0;
+	u8 *prog = temp;
+	int err;
+
+	detect_reg_usage(insn, insn_cnt, callee_regs_used,
+			 &tail_call_seen);
+
+	/* tail call's presence in current prog implies it is reachable */
+	tail_call_reachable |= tail_call_seen;
+
+	emit_prologue(&prog, bpf_prog->aux->stack_depth,
+		      bpf_prog_was_classic(bpf_prog), tail_call_reachable,
+		      bpf_prog->aux->func_idx != 0);
+	push_callee_regs(&prog, callee_regs_used);
+```
+
+开局三步:寄存器活跃性分析(`detect_reg_usage`——算出哪些 BPF 被调用者保存寄存器真的被用到,决定序言要压栈哪些,没用的不压,省下运行时开销);调 `emit_prologue` 搭序言(注意它读的正是验证器算出的 `aux->stack_depth`,站三展开);压被调用者保存寄存器。此后进入逐条 switch——那是站四的领地。
+
+**「两趟编译」从哪来?**看入口函数的另一段(`arch/x86/net/bpf_jit_comp.c:2795-2806`,v6.6.78):第二次进入时,若上一趟的 `jit_data` 里还存着 `addrs`/`image`/`header`,就整组恢复、置 `extra_pass = true` 并 `goto skip_init_addrs` 跳过重新分配——切片器站 2 切的就是这 12 行。为什么要两趟?**第一趟时,每条指令的机器码长度未知,所有「跳到第 i 条指令」的目标地址都写不准**;第一趟跑完,`addrs[]` 把每条指令的机器码地址固定下来,第二趟重放时地址才填得对。编译主循环(`arch/x86/net/bpf_jit_comp.c:2830-2844`,v6.6.78)正是这个「反复 do_jit 直到长度收敛」的循环:
+
+```c
+/* arch/x86/net/bpf_jit_comp.c:2830-2844(v6.6.78) */
+	for (pass = 0; pass < MAX_PASSES || image; pass++) {
+		if (!padding && pass >= PADDING_PASSES)
+			padding = true;
+		proglen = do_jit(prog, addrs, image, rw_image, oldproglen, &ctx, padding);
+		if (proglen <= 0) {
+out_image:
+			image = NULL;
+			if (header) {
+				bpf_arch_text_copy(&header->size, &rw_header->size,
+						   sizeof(rw_header->size));
+				bpf_jit_binary_pack_free(header, rw_header);
+			}
+			/* Fall back to interpreter mode */
+			prog = orig_prog;
+			if (extra_pass) {
+				prog->bpf_func = NULL;
+				prog->jited = 0;
+```
+
+**失败出口**:`proglen <= 0`——任何一趟翻译失败(含站四的 `-EFAULT`),已分配的映像立即释放,注释原话 "Fall back to interpreter mode",程序退回字节码形态。翻译失败在正常程序上不应发生(操作码早被验证器放行,第 3 章),这条出口是给内核自身 bug 留的保险丝。
+
+### 站 3:emit_prologue 与寄存器映射
+
+**签名**:`emit_prologue(u8 **pprog, u32 stack_depth, bool ebpf_from_cbpf, bool tail_call_reachable, bool is_subprog)`,定义在 `arch/x86/net/bpf_jit_comp.c:343`(v6.6.78)。**职责**:生成每段 JIT 代码开头的固定序言——搭栈帧、留补丁位。但先看它的地基:**BPF 寄存器到 x86 寄存器的映射表**(`arch/x86/net/bpf_jit_comp.c:171-186`,v6.6.78):
+
+```c
+/* arch/x86/net/bpf_jit_comp.c:171-186(v6.6.78) */
+static const int reg2hex[] = {
+	[BPF_REG_0] = 0,  /* RAX */
+	[BPF_REG_1] = 7,  /* RDI */
+	[BPF_REG_2] = 6,  /* RSI */
+	[BPF_REG_3] = 2,  /* RDX */
+	[BPF_REG_4] = 1,  /* RCX */
+	[BPF_REG_5] = 0,  /* R8  */
+	[BPF_REG_6] = 3,  /* RBX callee saved */
+	[BPF_REG_7] = 5,  /* R13 callee saved */
+	[BPF_REG_8] = 6,  /* R14 callee saved */
+	[BPF_REG_9] = 7,  /* R15 callee saved */
+	[BPF_REG_FP] = 5, /* RBP readonly */
+	[BPF_REG_AX] = 2, /* R10 temp register */
+	[AUX_REG] = 3,    /* R11 temp register */
+	[X86_REG_R9] = 1, /* R9 register, 6th function argument */
+};
+```
+
+表里的数字不是寄存器名,是 **x86 编码号**(0–7 + REX 前缀扩展出 8–15,`is_ereg()` 据此判断要不要多编一个前缀字节)。对照第 2 章 2.1 的虚拟机模型,规律一目了然:BPF 的调用约定直接对齐 x86-64 的 System V ABI——r0 返回值→RAX,r1–r5 参数→RDI/RSI/RDX/RCX/R8,「调 helper 就是一次原生 call」的物理基础在此(第 4 章辅助函数白名单的落地);r6–r9→被调用者保存寄存器,helper 不会碰坏;帧指针 FP→RBP 只读。三个内部寄存器各有专职:AX→R10 供致盲(站六)、AUX→R11 是 JIT 搬运工、R9 留给蹦床。同表的 `reg2pt_regs[]`(:188–199)是同一映射在 `struct pt_regs` 偏移上的复制品,服务经典 BPF 兼容与上下文读取。
+
+序言本体分两段(`arch/x86/net/bpf_jit_comp.c:343-353` 与 `:354-372`,v6.6.78):
+
+```c
+/* arch/x86/net/bpf_jit_comp.c:343-353(v6.6.78) */
+static void emit_prologue(u8 **pprog, u32 stack_depth, bool ebpf_from_cbpf,
+			  bool tail_call_reachable, bool is_subprog)
+{
+	u8 *prog = *pprog;
+
+	/* BPF trampoline can be made to work without these nops,
+	 * but let's waste 5 bytes for now and optimize later
+	 */
+	EMIT_ENDBR();
+	memcpy(prog, x86_nops[5], X86_PATCH_SIZE);
+	prog += X86_PATCH_SIZE;
+```
+
+```c
+/* arch/x86/net/bpf_jit_comp.c:354-372(v6.6.78) */
+	if (!ebpf_from_cbpf) {
+		if (tail_call_reachable && !is_subprog)
+			EMIT2(0x31, 0xC0); /* xor eax, eax */
+		else
+			EMIT2(0x66, 0x90); /* nop2 */
+	}
+	EMIT1(0x55);             /* push rbp */
+	EMIT3(0x48, 0x89, 0xE5); /* mov rbp, rsp */
+
+	/* X86_TAIL_CALL_OFFSET is here */
+	EMIT_ENDBR();
+
+	/* sub rsp, rounded_stack_depth */
+	if (stack_depth)
+		EMIT3_off32(0x48, 0x81, 0xEC, round_up(stack_depth, 8));
+	if (tail_call_reachable)
+		EMIT1(0x50);         /* push rax */
+	*pprog = prog;
+}
+```
+
+序言四件事,件件有主:**5 字节 nop**(`X86_PATCH_SIZE`)是补丁位——蹦床(bpf trampoline)与站五的直接尾调用都会从这里原地改写;`push rbp; mov rbp, rsp` 搭帧;`sub rsp, round_up(stack_depth, 8)` 开出验证器算好的程序栈(8 字节对齐);`X86_TAIL_CALL_OFFSET` 处的第二个 ENDBR 是尾调用跳板落点——站五的 `poke->adj_off` 直接引用它。`push rax` 专为尾调用计数腾位(站五)。**失败出口**:序言只做定长编码,恒成功——失败集中在站四的翻译与站六的分配。
+
+### 站 4:指令 lowering 逐例
+
+**职责**:把 14 条锚点指令这样的 BPF 指令逐条翻成 x86——`do_jit` 大 switch 的领地。下面四例覆盖四类基本动作,每例先给 BPF 侧(锚点程序实产)、再给内核 lowering 代码;x86 机器码一列为源码级预期(实际输出需加载后 `bpftool prog dump jited`,四节⑤层)。
+
+**例① 立即数装载(ALU MOV K / LD IMM64)。**锚点指令 0/10/12 的 `r0 = 0x0/0x1/0x2`(机器码 `b7`)都走这条:
+
+```c
+/* arch/x86/net/bpf_jit_comp.c:1206-1215(v6.6.78) */
+		case BPF_ALU64 | BPF_MOV | BPF_K:
+		case BPF_ALU | BPF_MOV | BPF_K:
+			emit_mov_imm32(&prog, BPF_CLASS(insn->code) == BPF_ALU64,
+				       dst_reg, imm32);
+			break;
+
+		case BPF_LD | BPF_IMM | BPF_DW:
+			emit_mov_imm64(&prog, dst_reg, insn[1].imm, insn[0].imm);
+			insn++;
+			i++;
+			break;
+```
+
+`emit_mov_imm32`(`arch/x86/net/bpf_jit_comp.c:674` 起,v6.6.78)里藏着两处编码优化:立即数为 0 时改发 `xor %eax,%eax`(省 3 字节)——锚点的 `r0 = 0x0` 因此变两条指令变一条;立即数为正且无需符号传播时用 `mov %eax, imm32`(零扩展,省 2 字节)。64 位常量走 `BPF_LD | BPF_IMM | BPF_DW` 双宽指令,由 `emit_mov_imm64` 拼装。
+
+**例② 存内存(STX MEM)。**
+
+```c
+/* arch/x86/net/bpf_jit_comp.c:1483-1488(v6.6.78) */
+		case BPF_STX | BPF_MEM | BPF_B:
+		case BPF_STX | BPF_MEM | BPF_H:
+		case BPF_STX | BPF_MEM | BPF_W:
+		case BPF_STX | BPF_MEM | BPF_DW:
+			emit_stx(&prog, BPF_SIZE(insn->code), dst_reg, src_reg, insn->off);
+			break;
+```
+
+**例③ 取内存(LDX MEM)。**锚点指令 1/2 的 `r2 = *(u32 *)(r1 + 0x4)`(机器码 `61`)的娘家在此——B/W/H/DW 四宽度、MEM 与 PROBE_MEM 两形态,8 个 case 标签共用一个出口:
+
+```c
+/* arch/x86/net/bpf_jit_comp.c:1491-1498(v6.6.78) */
+		case BPF_LDX | BPF_MEM | BPF_B:
+		case BPF_LDX | BPF_PROBE_MEM | BPF_B:
+		case BPF_LDX | BPF_MEM | BPF_H:
+		case BPF_LDX | BPF_PROBE_MEM | BPF_H:
+		case BPF_LDX | BPF_MEM | BPF_W:
+		case BPF_LDX | BPF_PROBE_MEM | BPF_W:
+		case BPF_LDX | BPF_MEM | BPF_DW:
+		case BPF_LDX | BPF_PROBE_MEM | BPF_DW:
+```
+
+`PROBE_MEM`(探针版)是给「可能失效的内核指针」准备的:JIT 为它生成额外的地址边界修正代码,指针失效时跳过访存而不是崩溃——追踪族程序读内核结构体时,这是验证器静态检查之外的运行时保险(与第 3 章的边界检查互补)。
+
+**例④ 条件跳转(JMP 比较族)。**锚点指令 5 的 `if r3 > r2`(`2d`)与指令 11 的 `if r1 == 0xdd86`(`15`)都出自这里。比较寄存器版(JMP_X)十个 case 标签连排(`arch/x86/net/bpf_jit_comp.c:1703-1712`,v6.6.78):
+
+```c
+/* arch/x86/net/bpf_jit_comp.c:1703-1712(v6.6.78) */
+		case BPF_JMP | BPF_JEQ | BPF_X:
+		case BPF_JMP | BPF_JNE | BPF_X:
+		case BPF_JMP | BPF_JGT | BPF_X:
+		case BPF_JMP | BPF_JLT | BPF_X:
+		case BPF_JMP | BPF_JGE | BPF_X:
+		case BPF_JMP | BPF_JLE | BPF_X:
+		case BPF_JMP | BPF_JSGT | BPF_X:
+		case BPF_JMP | BPF_JSLT | BPF_X:
+		case BPF_JMP | BPF_JSGE | BPF_X:
+		case BPF_JMP | BPF_JSLE | BPF_X:
+```
+
+出口是同一对指令(`arch/x86/net/bpf_jit_comp.c:1723-1727`,v6.6.78)——一条 `cmp` 加一次条件跳转:
+
+```c
+/* arch/x86/net/bpf_jit_comp.c:1723-1727(v6.6.78) */
+			/* cmp dst_reg, src_reg */
+			maybe_emit_mod(&prog, dst_reg, src_reg,
+				       BPF_CLASS(insn->code) == BPF_JMP);
+			EMIT2(0x39, add_2reg(0xC0, dst_reg, src_reg));
+			goto emit_cond_jmp;
+```
+
+`goto emit_cond_jmp` 指向 switch 后面的公共出口(把比较结果转成跳转偏移的那段)——连同 JMP32 十个标签,20 种比较共享一条编码逻辑,「多样性压在 case 标签、共性压在出口」。锚点指令 11 是 `BPF_JEQ | BPF_K`(立即数比较)变体,lowering 同族(立即数版在 `:1732` 起)。
+
+**失败出口**:switch 的 `default` 直接 `return -EFAULT`(`arch/x86/net/bpf_jit_comp.c:1823-1824`,v6.6.78)——但如站二所说,验证过的程序到不了这里。
+
+### 站 5:helper 调用与 tail call
+
+**签名**:`bpf_jit_get_func_addr(const struct bpf_prog *prog, const struct bpf_insn *insn, bool extra_pass, u64 *func_addr, bool *func_addr_fixed)`,定义在 `kernel/bpf/core.c:1210`(v6.6.78)——通用层,所有架构共享。**职责**:给每条 `call` 指令算目标地址。第 4 章讲过辅助函数白名单跟着程序类型走;到了 JIT 阶段,问题变成「目标地址是多少、哪一趟才填得对」:
+
+```c
+/* kernel/bpf/core.c:1210-1234(v6.6.78) */
+int bpf_jit_get_func_addr(const struct bpf_prog *prog,
+			  const struct bpf_insn *insn, bool extra_pass,
+			  u64 *func_addr, bool *func_addr_fixed)
+{
+	s16 off = insn->off;
+	s32 imm = insn->imm;
+	u8 *addr;
+	int err;
+
+	*func_addr_fixed = insn->src_reg != BPF_PSEUDO_CALL;
+	if (!*func_addr_fixed) {
+		/* Place-holder address till the last pass has collected
+		 * all addresses for JITed subprograms in which case we
+		 * can pick them up from prog->aux.
+		 */
+		if (!extra_pass)
+			addr = NULL;
+		else if (prog->aux->func &&
+			 off >= 0 && off < prog->aux->func_cnt)
+			addr = (u8 *)prog->aux->func[off]->bpf_func;
+		else
+			return -EINVAL;
+	} else if (insn->src_reg == BPF_PSEUDO_KFUNC_CALL &&
+		   bpf_jit_supports_far_kfunc_call()) {
+```
+
+三类 `call`,三种地址策略。**helper 调用**(普通 `call`):地址恒定——`__bpf_call_base + imm`(函数体接续在 `:1235-1244`,helper 与基址都在核心内核,第一趟就能写对)。**BPF 子程序调用**(`BPF_PSEUDO_CALL`,bpf2bpf):第一趟只能填占位 `NULL`——子程序自己的机器码地址要等 `addrs[]` 收敛;`extra_pass` 为真才从 `prog->aux->func[off]->bpf_func` 取真地址。站二的两趟编译,一半理由就在这几行。**kfunc 调用**(`BPF_PSEUDO_KFUNC_CALL`):按内核是否支持远距 kfunc 调用分流。**失败出口**:子程序索引越界 `return -EINVAL`。
+
+**尾调用(tail call)是另一族「跳过去就不回来」的调用**,x86 侧有两种 lowering。间接版(`arch/x86/net/bpf_jit_comp.c:520-543`,v6.6.78)先做运行时边界检查:
+
+```c
+/* arch/x86/net/bpf_jit_comp.c:520-543(v6.6.78) */
+static void emit_bpf_tail_call_indirect(u8 **pprog, bool *callee_regs_used,
+					u32 stack_depth, u8 *ip,
+					struct jit_context *ctx)
+{
+	int tcc_off = -4 - round_up(stack_depth, 8);
+	u8 *prog = *pprog, *start = *pprog;
+	int offset;
+
+	/*
+	 * rdi - pointer to ctx
+	 * rsi - pointer to bpf_array
+	 * rdx - index in bpf_array
+	 */
+
+	/*
+	 * if (index >= array->map.max_entries)
+	 *	goto out;
+	 */
+	EMIT2(0x89, 0xD2);                        /* mov edx, edx */
+	EMIT3(0x39, 0x56,                         /* cmp dword ptr [rsi + 16], edx */
+	      offsetof(struct bpf_array, map.max_entries));
+
+	offset = ctx->tail_call_indirect_label - (prog + 2 - start);
+	EMIT2(X86_JBE, offset);                   /* jbe out */
+```
+
+直接版(`arch/x86/net/bpf_jit_comp.c:594-606`,v6.6.78)多了计数检查——尾调用链上限 33 层(`MAX_TAIL_CALL_CNT`),防程序互调成环:
+
+```c
+/* arch/x86/net/bpf_jit_comp.c:594-606(v6.6.78) */
+static void emit_bpf_tail_call_direct(struct bpf_jit_poke_descriptor *poke,
+				      u8 **pprog, u8 *ip,
+				      bool *callee_regs_used, u32 stack_depth,
+				      struct jit_context *ctx)
+{
+	int tcc_off = -4 - round_up(stack_depth, 8);
+	u8 *prog = *pprog, *start = *pprog;
+	int offset;
+
+	/*
+	 * if (tail_call_cnt++ >= MAX_TAIL_CALL_CNT)
+	 *	goto out;
+	 */
+	EMIT2_off32(0x8B, 0x85, tcc_off);             /* mov eax, dword ptr [rbp - tcc_off] */
+	EMIT3(0x83, 0xF8, MAX_TAIL_CALL_CNT);         /* cmp eax, MAX_TAIL_CALL_CNT */
+```
+
+选哪条路,分派点一句话(`arch/x86/net/bpf_jit_comp.c:1687-1700`,v6.6.78):立即数非零走直接版(目标在 `poke_tab` 里静态已知),否则走间接版(运行时查 `bpf_array`):
+
+```c
+/* arch/x86/net/bpf_jit_comp.c:1687-1700(v6.6.78) */
+		case BPF_JMP | BPF_TAIL_CALL:
+			if (imm32)
+				emit_bpf_tail_call_direct(&bpf_prog->aux->poke_tab[imm32 - 1],
+							  &prog, image + addrs[i - 1],
+							  callee_regs_used,
+							  bpf_prog->aux->stack_depth,
+							  ctx);
+			else
+				emit_bpf_tail_call_indirect(&prog,
+							    callee_regs_used,
+							    bpf_prog->aux->stack_depth,
+							    image + addrs[i - 1],
+							    ctx);
+			break;
+```
+
+**失败出口**(运行时语义):越界或计数耗尽,两种 lowering 都用条件跳转把控制流送到 `out` 标签——尾调用**静默不发生**,主程序继续按原路径执行;这是设计好的降级,不是错误。
+
+### 站 6:常量致盲与映像分配
+
+**为什么需要致盲?**BPF 指令里的立即数是用户可控字节——JIT 后它们原样躺进可执行内存,构成 JIT 喷射类攻击的原料; Spectre 类瞬态执行还可能把立即数当跳板。防御是 `bpf_jit_harden`(一节 1.3):开启后,**JIT 前先把含敏感立即数的指令改写掉**——通用层实现在 `kernel/bpf/core.c` 的 `bpf_jit_blind_constants`(:1428,遍历入口)逐条调 `bpf_jit_blind_insn`(:1250,单条改写)。看单条改写的核心(`kernel/bpf/core.c:1279-1300`,v6.6.78):
+
+```c
+/* kernel/bpf/core.c:1279-1300(v6.6.78) */
+	if (from->dst_reg == BPF_REG_AX || from->src_reg == BPF_REG_AX)
+		goto out;
+
+	if (from->imm == 0 &&
+	    (from->code == (BPF_ALU   | BPF_MOV | BPF_K) ||
+	     from->code == (BPF_ALU64 | BPF_MOV | BPF_K))) {
+		*to++ = BPF_ALU64_REG(BPF_XOR, from->dst_reg, from->dst_reg);
+		goto out;
+	}
+
+	switch (from->code) {
+	case BPF_ALU | BPF_ADD | BPF_K:
+	case BPF_ALU | BPF_SUB | BPF_K:
+	case BPF_ALU | BPF_AND | BPF_K:
+	case BPF_ALU | BPF_OR  | BPF_K:
+	case BPF_ALU | BPF_XOR | BPF_K:
+	case BPF_ALU | BPF_MUL | BPF_K:
+	case BPF_ALU | BPF_MOV | BPF_K:
+	case BPF_ALU | BPF_DIV | BPF_K:
+	case BPF_ALU | BPF_MOD | BPF_K:
+		*to++ = BPF_ALU32_IMM(BPF_MOV, BPF_REG_AX, imm_rnd ^ from->imm);
+		*to++ = BPF_ALU32_IMM(BPF_XOR, BPF_REG_AX, imm_rnd);
+		*to++ = BPF_ALU32_REG_OFF(from->code, from->dst_reg, BPF_REG_AX, from->off);
+		break;
+```
+
+三拍读法:①AX(即站三映射表里 R10)是用户不可见的临时寄存器,源指令已占用 AX 的直接跳过;②立即数为 0 的 MOV 有特例——改写成 `xor dst,dst`,零值无需保密;③其余立即数指令被拆成**随机异或对**:先 `mov AX, imm_rnd ^ imm`,再 `xor AX, imm_rnd`,两条之后 AX 里恰好是原立即数,原指令改为操作 AX——明文立即数从此不在指令流里出现,每次加载随机数 `imm_rnd` 都不同。对照锚点程序:`r0 = 0x0` 会命中②(变 `xor`);`if r1 == 0xdd86` 的立即数会被拆对(JMP_K 族在 `:1318` 起,回跳还有偏移补偿,`:1329`)。**教学点:致盲后的字节码与源码对不上是预期行为**——语义不变,形态全非,排错节回收这一点。
+
+遍历入口 `bpf_jit_blind_constants`(`kernel/bpf/core.c:1428-1443`,v6.6.78)只做三件事:过 `blinding_requested` 门(未请求或已致盲就原样返回)、`bpf_prog_clone_create` 克隆程序(原程序不动,克隆失败 `return ERR_PTR(-ENOMEM)`)、对克隆循环逐条调 `bpf_jit_blind_insn` 改写。**失败出口**:`ERR_PTR(-ENOMEM)`——正是站一入口里 `IS_ERR(tmp)` 接住的那个错误;致盲失败不硬闯,回退解释器。
+
+最后一站是**映像分配**:翻译好的机器码要放进一段最终只读可执行的内存。散页分配(每程序一段)在 6.6 已让位给 `bpf_prog_pack`——多程序共享 2MB 大页、位图分块管理(`struct bpf_prog_pack`,`kernel/bpf/core.c:850-854`,v6.6.78)。分配入口 `bpf_prog_pack_alloc`(`kernel/bpf/core.c:904-918`,v6.6.78)走两条路:超过 `BPF_PROG_PACK_SIZE` 的大程序独占整页——先 `bpf_fill_ill_insns` 填满非法指令、`set_vm_flush_reset_perms` 挂上释放复位标记、`set_memory_rox` 转只读可执行;小程序则在共享大页里 `bitmap_find_next_zero_area` 找位图空位切块(切片器站 6 切的是前 15 行)。**失败出口**:分配失败沿调用链上报,程序回退解释器——与致盲失败同一个兜底。
+
+### 二节收束:双视角与切片器
+
+**教师视角:两趟编译与一次解码的经济学。**六站连起来,「前移」二字有了具象:两趟编译把「跳转目标写不准」在加载时解决,代价是加载多走一趟,换来此后每次执行免掉间接分派(一节 1.2 的三笔账)。类比排版:第一遍校对定下各章节页码(`addrs[]`),第二遍才能把目录页码填对——没人说「校对两遍是浪费」,因为错页码的目录每天被查千万次。两个常见误区:把两趟理解成「编译器笨」——它是固定点迭代,长度收敛即停;以为 helper 调用也要两趟——固定地址第一趟就准,只有子程序调用在等 `addrs[]`。
+
+**学生动手**:三条命令把六站在自己的树上复现——
+
+```bash
+# ①六站全量切片(行号即本节引用事实)
+bash book/examples/chapter-06/02-jit-x86/trace-jit-x86.sh
+# ②只看某一站(例如站 3)
+bash book/examples/chapter-06/02-jit-x86/trace-jit-x86.sh | sed -n '/^## 站 3/,/^## 站 4/p'
+# ③换树自检(负路径:给一个不存在的树,应报错 exit 1)
+WALK_TREE=/nonexistent bash book/examples/chapter-06/02-jit-x86/trace-jit-x86.sh
+```
+
+预期输出:①六站各带「定位/代码段/职责」结构,汇总行 `TREE_VERSION=v6.6.78 STATIONS=6`,exit 0;②输出站 3 的寄存器映射表与序言两段;③`走读树目录不存在:/nonexistent`,exit 1(均本机实测)。
+
+**检查点**(自测后看提示):
+
+1. 序言开头为什么要放 5 字节 nop,而不是直接 `push rbp`?——提示:站三的 `X86_PATCH_SIZE` 补丁位是给谁留的?回看站五 direct 版的 `poke->tailcall_bypass` 与蹦床:原地改写需要一段**等长**的占位。
+2. 第一趟编译时,helper 调用与 bpf2bpf 子程序调用的目标地址各填了什么?——提示:回看站五 `get_func_addr`——`func_addr_fixed` 的分支条件;固定地址(helper)第一趟就准,占位(NULL)等第二趟。
+3. 打开 `bpf_jit_harden=2` 后,同一程序 JIT 出的机器码每次加载都不同——对吗?对在哪、不对在哪?——提示:站六的 `imm_rnd` 每次加载随机,异或对形态不同;但语义等价,程序行为不变。
+
+**独立示例**:本节六站的全部代码段与行号已工具化——[`02-jit-x86/`](../examples/chapter-06/02-jit-x86/),切片器只读源码树、不构建不加载;JIT 的输入样本(14 条字节码)见 [`01-bpf-asm/`](../examples/chapter-06/01-bpf-asm/)。
+
 
 <!-- ============================================================
      Task 8 占位:三、arm64:另一套后端的同构与差异
