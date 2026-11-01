@@ -219,14 +219,14 @@
 
 ### Chapter 7: Helpers and Map Internals
 
-- [ ] Write full chapter prose explaining helper dispatch, helper allowlists by program type, map operations, concurrency, and memory lifecycle.
-- [ ] Analyze map ops, helper prototypes, RCU protection, spin locks, per-CPU storage, and memory accounting.
-- [ ] Include integrated examples for hash map lookup/update, per-CPU counters, and event output through perf or ring buffer.
-- [ ] Create standalone Chapter 7 examples under `book/examples/chapter-07/`.
-- [ ] Compare ring buffer and perf buffer implementation and use cases.
-- [ ] Add text visualization comparing hash, array, LRU, per-CPU, perf event array, and ring buffer.
-- [ ] Add troubleshooting, summary, and references.
-- [ ] Main-agent review for API names, helper names, and map type consistency.
+- [x] Write full chapter prose explaining helper dispatch, helper allowlists by program type, map operations, concurrency, and memory lifecycle.
+- [x] Analyze map ops, helper prototypes, RCU protection, spin locks, per-CPU storage, and memory accounting.
+- [x] Include integrated examples for hash map lookup/update, per-CPU counters, and event output through perf or ring buffer.
+- [x] Create standalone Chapter 7 examples under `book/examples/chapter-07/`.
+- [x] Compare ring buffer and perf buffer implementation and use cases.
+- [x] Add text visualization comparing hash, array, LRU, per-CPU, perf event array, and ring buffer.
+- [x] Add troubleshooting, summary, and references.
+- [x] Main-agent review for API names, helper names, and map type consistency.
 
 ### Chapter 8: BTF and CO-RE Principles
 
