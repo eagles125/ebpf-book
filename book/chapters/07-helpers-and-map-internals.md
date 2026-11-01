@@ -25,6 +25,16 @@
 - 预告③(第 5 章三节):映射生命周期「从 fd 到一块内存」→ 二/三节接棒:内存这块怎么并发地读、写、回收、记账。
 - 预告④(示例 01 的并发窗口):01-hash-lookup-update README 提到「lookup 与 update 之间存在并发窗口」→ 二节 2.3 在源码层兑现:窗口两端的语义与竞态结果。
 
+三个示例各司其职,先对号再上车:
+
+| 示例 | 演示什么 | 正文落点 |
+|---|---|---|
+| [`01-hash-lookup-update/`](../examples/chapter-07/01-hash-lookup-update/) | hash 查找/更新闭环与并发窗口 | 二节 2.1/2.3 |
+| [`02-percpu-counter/`](../examples/chapter-07/02-percpu-counter/) | per-CPU 零锁计数与用户态聚合 | 三节 3.1 |
+| [`03-event-output/`](../examples/chapter-07/03-event-output/) | ringbuf/perf 双通道同源对照 | 四节 4.1–4.3 |
+
+学法建议一条:本章的每个机制都配了**运行型示例或切片器**——读到任何一个「为什么这么设计」,先去对应资产里跑一眼源码现场再回来,比纯读正文快一倍。本章也是全书从「读内核」走向「写程序」的转折点:第 8 章 BTF/CO-RE 之后,第 9 章起就是动手写程序了——本章的三个示例就是热身赛。
+
 路线图:一节走 helper 分发全链(带切片器五站);二节进 hash 内部(切片器六站前五站);三节 per-CPU、LRU 与记账(切片器第六站);四节两条事件通道(示例 03 实证);可视化给六类映射与两条通道的两张对照图;排错、课后、总结收尾。
 
 ## 一、辅助函数:从 call 指令到白名单
@@ -81,6 +91,8 @@ EXPORT_SYMBOL_GPL(__bpf_call_base);
 
 `noinline` 也值得停一下:它禁止编译器把 `__bpf_call_base` 内联进任何调用点,保证这个符号在最终内核映像里有**唯一确定的地址**——基址的「基」字由此而来。代价与收益的账本:一次间接的固定偏移,换来了 JIT 单趟编译 helper 调用、也换来了恶意程序无法把调用目标改到任意内核地址(imm 是验证器查表合法的 id,不是裸地址,回指第 3 章参数校验)。
 
+214 个 helper 里有一个特殊成员值得单独标记:**`bpf_tail_call`**(公共兜底白名单内,一节 1.3 贴码的 `case BPF_FUNC_tail_call` 可见)。它是唯一一个**改写控制流**的 helper——不是调用后返回,而是跳进另一张 prog 数组里的另一个程序、且不占用新的栈帧。第 6 章站五见过它的 JIT 两形态(直接/间接)与 33 层计数上限;从 helper 机制的视角看,它的特殊在于破坏了「call 之后必然回来」的约定,所以验证器对它的参数(prog 数组映射指针 + 索引)与后续指令可达性有专门分析(第 3 章)。记住这个特例,能帮你在读其他 213 个 helper 时守住「helper 不改控制流」的默认心智模型。
+
 「固定」的边界在哪里?反例是 **kfunc**。kfunc(内核函数直调,`BPF_PSEUDO_KFUNC_CALL`)的目标可能住在**可加载模块**里——模块的符号地址要等模块真正加载后才确定,「恒定偏移」的前提塌了。所以第 6 章站五贴过的 `bpf_jit_get_func_addr` 里有第三个分支:先问 `bpf_jit_supports_far_kfunc_call()`(内核是否支持远距 kfunc 调用),支持则走 `bpf_get_kfunc_addr` 按符号解析。helper 与 kfunc 的这条分界线,恰好把「核心内核 = 固定地址 = 基址相对寻址」这个论证从正反两面讲完整。
 
 **教师视角**。可以把 helper 体系想成一栋只有一层门卫的房子:214 个房间编号固定(imm),门卫(`__bpf_call_base`)坐在 0 号位,访客报编号、门卫指路——编号合法即领路,不合法在验证期就被拒之门外。常见误区有两个:其一,以为 helper 是「系统调用」——不,它只是内核函数直调,没有上下文切换(这正是 BPF 快的原因之一);其二,以为 imm 可以当跳板——imm 只能是 1..214 的 id,查不到 proto 的 id 过不了验证器,这条通道从一开始就没有「任意地址」的口子。
@@ -126,6 +138,19 @@ helper 的「函数面」不是全量 214 个都放行,而是**随程序类型�
 
 一个最小的实例:`bpf_map_lookup_elem_proto`(kernel/bpf/helpers.c:44,v6.6.78)——`ret_type = RET_PTR_TO_MAP_VALUE_OR_NULL`(返回值可能是 NULL,验证器强制判空)、`arg1_type = ARG_CONST_MAP_PTR`、`arg2_type = ARG_PTR_TO_MAP_KEY`。你写 BPF 代码时验证器逼你判空的那条报错,源头就是这一个字段。
 
+先给一张**家族全景**——214 个 helper 并非一盘散沙,按用途可归六族(每族举代表 id;全表见 include/uapi/linux/bpf.h 的 `___BPF_FUNC_MAPPER`,v6.6.78 计 214 个 FN):
+
+| 家族 | 代表 helper | 正文位置 |
+|---|---|---|
+| 映射操作 | `bpf_map_lookup_elem`/`update_elem`/`delete_elem`/`push/pop/peek_elem`/`lookup_percpu_elem` | 一节 1.4、二/三节 |
+| 事件输出 | `bpf_perf_event_output`/`ringbuf_output`/`ringbuf_reserve`/`ringbuf_submit`/`ringbuf_discard` | 四节 |
+| 尾调用与跳转 | `bpf_tail_call`(需同一张 prog 数组,见第 6 章站五 33 层计数) | 第 6 章 |
+| 程序上下文 | `bpf_get_current_pid_tgid`/`get_current_comm`/`get_smp_processor_id` | 示例 03 |
+| 取数与随机 | `bpf_ktime_get_ns`/`get_prandom_u32`/`get_numa_node_id`(公共兜底族) | 一节 1.3 |
+| 打印与追踪 | `bpf_trace_printk`/`bpf_trace_vprintf`(调试用,生产慎用) | 排错节 |
+
+这不是备忘录,是白名单机制的产品视角:每族在公共兜底或类型 `get_func_proto` 里的出现与否,直接决定「哪类程序能干什么」——四节 4.1 的 `bpf_perf_event_output` 之所以只在追踪族可见,答案不在这张表,在 `tracing_prog_func_proto` 的 switch 里。
+
 五个字段各管一道闸:`pkt_access = true` 的 helper(如 lookup_elem)允许把包指针当参数传——直接包访问(第 2 章 2.4)的合法通道;`might_sleep = true` 的 helper 只能睡在有调度的上下文里,软中断/XDP 这类原子上下文调用它会被验证器或运行时告警拦下。再看一眼 `bpf_map_update_elem` 的 proto(`bpf_map_update_elem_proto`,同文件):`arg4_type = ARG_ANYTHING` 之外多一个 `BPF_ANY/NOEXIST/EXIST` 的 flags 参——语义是「说明书里的一个整型参数」,真正的语义表在实现函数里,这正是二节 2.3 的入口。
 
 ### 1.5 学生动手:切片器五站
@@ -140,6 +165,15 @@ WALK_TREE=/nonexistent bash book/examples/chapter-07/04-helper-dispatch/trace-he
 ```
 
 预期输出(均本机实测):①五站各带「定位/代码段/职责」,汇总 `TREE_VERSION=v6.6.78 STATIONS=5`,exit 0;②站 3 的解析链与两层失败出口;③`走读树目录不存在:/nonexistent`,exit 1。
+
+再加一条**自己动手的一节收尾**:示例 [`01-hash-lookup-update/`](../examples/chapter-07/01-hash-lookup-update/) 编出的 `.bpf.o` 里,两条 helper 调用长这样(本机 llvm-objdump -d 实跑,编译级已验证):
+
+```text
+      12:	85 00 00 00 01 00 00 00	call 0x1     ← bpf_map_lookup_elem(id=1)
+      23:	85 00 00 00 02 00 00 00	call 0x2     ← bpf_map_update_elem(id=2)
+```
+
+操作码 `0x85` 就是 `BPF_JMP | BPF_CALL`,立即数字段 `0x1`/`0x2` 正是一节 1.1 说的 helper id——本节从「一条 call 指令」开始讲起,到亲手编出它结束;这个 imm 将在一节 1.3 的白名单里被查、在 1.2 的基址上被折算成地址、最终在二节的 ops 表里落到实现。
 
 **检查点**(自测后看提示):
 
@@ -218,7 +252,8 @@ static void *__htab_map_lookup_elem(struct bpf_map *map, void *key)
 
 **并发窗口的兑现**(示例 01 的 README 埋过):示例里「先 lookup、不命中再 update(NOEXIST)」两步之间没有原子性——两个 CPU 同时首包,可能双双 lookup 未命中,随后一个 NOEXIST 成功、一个撞上 -EEXIST 返回 -E2BIG 之外的第一类失败(表满则是 -E2BIG)。源码层看,`check_flags` 在**桶锁内**复查,`alloc_htab_elem` 对 NOEXIST 的裁决也在锁内——所以窗口只存在于「程序侧的两步」之间,内核侧的单次 update 原子无误。这解释了示例的处置:把 -EEXIST/-E2BIG 当正常事,或者改用 `BPF_ANY`。
 
-**第三种更新:`BPF_F_LOCK`**(值里带 `struct bpf_spin_lock` 的映射)值得单独一提:它走**元素级锁**在原位改值(不摘链、不分配),更新路径开头(:1124 起)有专门的快路——先无锁找元素、抓元素锁原位改、99.9% 到此为止;极小概率的「无锁时没找到、锁内找到了」再回落桶锁路径(上面贴码的后半就是这个兜底)。两级锁之外的第三级,粒度细到一个值。
+**第三种更新:`BPF_F_LOCK`**(值里带 `struct bpf_spin_lock` 的映射)。它有一个硬前提值得注意:内核怎么知道「值的哪个偏移是锁」?答案是 **BTF 字段记录**——建映射时校验值类型注解(`__attribute__((btf_type_tag))` 之外的 btf_record 机制),贴码里那句 `btf_record_has_field(map->record, BPF_SPIN_LOCK)` 检查不过直接 -EINVAL。这是 BTF 作为「内核类型说明书」第一次在本章出場:它不只服务 CO-RE(第 8 章正题),也是运行期字段级能力的登记簿。
+值得单独一提:它走**元素级锁**在原位改值(不摘链、不分配),更新路径开头(:1124 起)有专门的快路——先无锁找元素、抓元素锁原位改、99.9% 到此为止;极小概率的「无锁时没找到、锁内找到了」再回落桶锁路径(上面贴码的后半就是这个兜底)。两级锁之外的第三级,粒度细到一个值。
 
 **失败出口**汇总:未知 flags → -EINVAL;NOEXIST 撞已有键 → -EEXIST;EXIST 没找到 → -ENOENT;prealloc 表满 → -E2BIG(2.4);内存耗尽 → -ENOMEM。
 
@@ -274,6 +309,10 @@ WALK_TREE=/nonexistent bash book/examples/chapter-07/05-map-internals/trace-map-
 2. 同一 CPU 上,中断处理里的 BPF 程序更新同一个 hash 映射,为什么会撞 -EBUSY?——提示:站 3 的第一级 per-CPU 计数锁就是干这个的(重入保护),不是性能优化。
 3. prealloc 表更新为什么不会有 -ENOMEM?——提示:元素早在建表时分配;运行期只挂链。那 -E2BIG 从哪来(2.3 失败出口)?
 
+### 2.6 补全 ops 表的两类成员:批量与一次性票据
+
+二节主干只走了 lookup/update/delete 三个 ops,接口表(站 2)里还有两类值得点名。**batch 系**(`map_lookup_batch`/`map_update_batch`/`map_delete_batch`):一次系统调用处理一批键,配 `elem_flags` 与用户态批头——把 N 次 `bpf_map_*_elem` 的固定开销(上下文切换 + 锁路费)摊成一次;ops 表里没实现 batch 的类型会回落到逐键循环,语义等价、开销不同。**lookup_and_delete 系**(`map_lookup_and_delete_elem`,kernel/bpf/syscall.c:1905,v6.6.78;ops 表同名成员):读出即删除的原子票据——任务队列「取件」语义的正确实现,手写 lookup+delete 两步会重新打开 2.3 讨论过的并发窗口。三节 3.2 的 LRU 家族为它准备了专用变体(`htab_lru_map_lookup_and_delete_elem`):从 LRU 表取走即逐出,票据语义与容量回收一步到位。
+
 **独立示例**:hash 闭环见 [`01-hash-lookup-update/`](../examples/chapter-07/01-hash-lookup-update/);本节源码现场工具化在 [`05-map-internals/`](../examples/chapter-07/05-map-internals/)(六站中的前五站)。
 
 
@@ -291,6 +330,8 @@ per-CPU 映射把「一份共享值」变成「每 CPU 一份分身」:`BPF_MAP_
 
 代价模型一句话:**用 `CPU 数 × value_size` 的内存与用户态聚合步骤,换 BPF 侧的零锁**。高频计数(perf 场景)近乎总是划算;键空间巨大时(`ncpu × max_entries × value_size`)要算一算内存账——这正好引出 3.3。
 
+选型再细一层:**per-CPU array 还是 per-CPU hash?**键空间小而固定(CPU 号、队列号)用 array——下标即寻址、无哈希开销;键空间动态(exec 计数按二进制名)用 per-CPU hash——代价是每 CPU 独立的哈希表与桶锁(per-CPU hash 的桶锁 per-CPU 化,争用面进一步缩小)。示例 02 选 array 是因为「一个计数器」只有一个键;把它扩成「每个可执行文件一个计数器」,就该换 per-CPU hash 了。
+
 ### 3.2 LRU:满员之后的第三种答案
 
 hash 表满了怎么办?二节 2.4 给了两条路:prealloc 表报 -E2BIG,`NO_PREALLOC` 表看分配器脸色。**LRU**(least recently used,最近最少使用)给第三种答案:满员时**自动逐出最旧的键**,新键永远进得来。实现上它仍是 hash——`htab_lru_map_ops`(kernel/bpf/hashtab.c:2301,v6.6.78;切片器站 1 的注册表里同族注册)把 update/delete 换成 `htab_lru_map_update_elem`/`htab_lru_map_delete_elem`:更新前若满,先按 LRU 挑一个牺牲者、经 `bpf_lru_pop_free`(kernel/bpf/bpf_lru_list.c:499,v6.6.78)拿回一个空闲元素,再走与普通 hash 相同的锁内挂链。
@@ -300,7 +341,8 @@ hash 表满了怎么办?二节 2.4 给了两条路:prealloc 表报 -E2BIG,`NO_PR
 - **全局三链**:`BPF_LRU_LIST_T_ACTIVE / INACTIVE / FREE`(kernel/bpf/bpf_lru_list.h:17-19,v6.6.78)——活跃/不活跃/空闲,近似两时钟算法;全局链用一把 `raw_spinlock_t` 且 `____cacheline_aligned_in_smp`(:37)独占 cacheline;
 - **per-CPU 本地链**:`bpf_lru_locallist`(bpf_lru_list.h:40-48,v6.6.78,FREE/PENDING 两态)——各 CPU 先在本地攒「待归还」,攒够或需要时再汇入全局,把逐出操作的锁争用摊薄到各 CPU。
 
-`BPF_MAP_TYPE_LRU_HASH`(include/uapi/linux/bpf.h:933,v6.6.78)是连接追踪、限流、缓存类负载的默认选型;`lookup_and_delete` 变体(`htab_lru_map_lookup_and_delete_elem`,2.3 的 ops 表可见)支持「读出即逐出」的一次性票据语义。
+使用注意两条:其一,LRU 逐出的是**整个键值对**,值里有引用计数类资源(map_of_maps 的内层映射、sock 引用)时由 ops 的 put_ptr 回调释放(二节 2.3 贴码的 `map_fd_put_ptr` 分支)——逐出不等于泄漏;其二,`bpf_map_lookup_elem` 会为命中键「续命」,只想窥视不续命的负载要考虑 `peek` 语义或自建时间戳,这是 LRU 缓存类负载最常见的语义坑。
+`lookup_and_delete` 变体(`htab_lru_map_lookup_and_delete_elem`,2.3 的 ops 表可见)支持「读出即逐出」的一次性票据语义。
 
 ### 3.3 记账:内存记在谁的名下
 
@@ -381,7 +423,7 @@ __bpf_perf_event_output(struct pt_regs *regs, struct bpf_map *map,
 		return -ENOENT;
 ```
 
-四个出口读出四个事实:`BPF_F_INDEX_MASK` 允许指定 CPU(默认 `BPF_F_CURRENT_CPU` 走本 CPU,:625-626);索引越界 -E2BIG;该 CPU 还没挂事件 fd → -ENOENT(常见新手指错:数组开了 64 格但只有 4 个 CPU 挂了 fd);后段(:637-647)还要验证 fd 确是 `PERF_COUNT_SW_BPF_OUTPUT` 类型的软件事件、且必须在本 CPU 上消费(-EOPNOTSUPP)——**每 CPU 隔离**是 perf 通道的安全设计。通过后 `perf_event_output` 把记录推进当前 CPU 的 perf 环;环满产生**丢失**,丢失计数走用户态 `on_lost` 回调(示例 03 的 perf.c)。
+四个出口读出四个事实:`BPF_F_INDEX_MASK` 允许指定 CPU(默认 `BPF_F_CURRENT_CPU` 走本 CPU,:625-626);索引越界 -E2BIG;该 CPU 还没挂事件 fd → -ENOENT(常见新手指错:数组开了 64 格但只有 4 个 CPU 挂了 fd);后段(:637-647)还要验证 fd 确是 `PERF_COUNT_SW_BPF_OUTPUT` 类型的软件事件、且必须在本 CPU 上消费(-EOPNOTSUPP)——**每 CPU 隔离**是 perf 通道的安全设计。通过后 `perf_event_output` 把记录推进当前 CPU 的 perf 环;环满产生**丢失**,丢失计数走用户态 `on_lost` 回调(示例 03 的 perf.c)。内核侧的丢失记账挂在每个 perf 环上,`on_lost` 的 cnt 参数就是该环累计丢失数——它让「丢了多少」从猜测变成可查询的数字,这是 perf 通道在可观测性上仍然占优的一点。
 
 用户态侧是 libbpf 的 `perf_buffer__new`(逐 CPU `perf_event_open` 挂事件)+ `perf_buffer__poll` 轮询——示例 03 的 perf.c 十几行就是全部。
 
@@ -429,6 +471,8 @@ static void *__bpf_ringbuf_reserve(struct bpf_ringbuf *rb, u64 size)
 | 跨 CPU 顺序 | 各环独立,无全局顺序 | 提交顺序即全局顺序(单 producer_pos 定序) |
 | 丢失语义 | 环满丢本 CPU 事件,lost 计数可观测 | reserve 返回 NULL 静默丢弃(慢消费者限流) |
 | 用户态接口 | `perf_buffer__new/poll`(依赖 perf_event_open 档位) | `ring_buffer__new/poll` + mmap 直读(无 perf 依赖) |
+
+补一个 6.x 新成员:**user ring buffer**(`BPF_MAP_TYPE_USER_RINGBUF`,include/uapi/linux/bpf.h:962,v6.6.78;ops `user_ringbuf_map_ops`,kernel/bpf/ringbuf.c:370)——方向反转的第三条通道:**用户态写、BPF 读**(`bpf_user_ringbuf_peek` 一族,带 busy 位防并发),配置下发、控制面到数据面的批量传令可用它;与本章两条「BPF 写、用户态读」通道合起来,共享环形缓冲的双向版图就齐了。
 
 选型结论:**默认 ring buffer**——内存开销随实际事件量、全局顺序、无 perf_event_open 档位依赖(示例 03 README 的对照表同款);三种例外选 perf buffer:需要与 perf 生态对齐(采样、`perf report` 消费)、需要逐 CPU 硬隔离、或目标内核版本尚未引入 ringbuf(<5.8,随版本演进,以所用内核为准)。
 
@@ -487,6 +531,82 @@ ring buffer 单共享环      单 prod_pos 定序    mmap 共享大页      事�
 
 **解读(≥150 字)**:图的左列是「按 CPU 分而治之」——事件留在发生的 CPU 上,用户态逐环轮询,好处是无争用、坏处是全局顺序不存在;右列是「单点定序」——`producer_pos` 一个原子量决定全局次序,用户态确认消费后推进 `consumer_pos`,空间归还即限流解除。两列在「应用处理回调」汇合,对上层完全等价——这就是示例 03 能用同一事件源双实现的原因。丢失语义的差异在图上看是两处小字:左列环满「丢并计数」,右列「reserve 失败」——前者丢在内核侧,后者丢在 BPF 程序侧,排错时的第一分叉点(排错节)。
 
-<!-- ============================================================
-     Task 12 占位:常见问题与排错、课后扩展任务、总结、本章参考来源
-============================================================ -->
+## 常见问题与排错
+
+### 运行类
+
+**Q:示例 01/02 的计数一直是 0?**
+A:三步排查:程序加载了吗(`bpftool prog list` 可见,需 root);attach 到的口对不对(XDP 挂 lo 后要有真实流量——另一终端 `ping 127.0.0.1`);BPF 侧边界检查是否让包提前返回了 XDP_ABORTED(帧长不足时计数被跳过,预期行为)。运行级内容,全部属预期档复现步骤。
+
+**Q:`bpf_map_update_elem` 返回 -E2BIG?**
+A:hash 表满。两条出路:加大 `max_entries`(评估内存,三节 3.3 的账本);或换 `BPF_MAP_TYPE_LRU_HASH` 让内核逐出旧键(三节 3.2)。注意 LRU 与 `BPF_F_NO_PREALLOC` 互斥(二节 2.4)。
+
+**Q:加载报 Operation not permitted / EPERM?**
+A:本机 `unprivileged_bpf_disabled=2`(00-env ③ 段实测)——非特权加载被内核直接拒绝,`sudo` 是唯一正道;root 下仍 EPERM 则查 cgroup/LSM 与 `RLIMIT_MEMLOCK`(libbpf 1.3 会先尝试抬 limit,失败时打印提示——本章三个示例的运行档都从这里起步)。
+
+### 并发类
+
+**Q:per-CPU 计数的「合计」每次都不一样大,是 bug 吗?**
+A:不是。3.1 的快照语义:用户态整块拷回的瞬间计数仍在变,合计是近似值。要更「稳」的读数,把窗口拉长取趋势,或改读 per-CPU hash 的 `bpf_map_lookup_percpu_elem` 定点采样——精确性永远是相对某个时刻的。
+
+**Q:多线程用户态读 hash,偶尔读到「旧值」?**
+A:映射读是单键原子,但两次 `bpf_map_lookup_elem` 之间世界在变——这不是内核问题,是应用层一致性模型没想清楚。需要「读改写回」的原子性,要么搬进 BPF 侧(桶锁内完成,二节 2.3),要么用 `BPF_F_LOCK` 的元素级锁。
+
+**Q:LRU 表越用越「年轻」?**
+A:LRU 逐出的是「最近最少使用」,热键会被反复续命——观察到的现象通常是冷键消失、热键常驻,这正是设计目标。若热键也被逐出,先查 `max_entries` 是否远小于实际工作集(逐出风暴)。
+
+### 走读类
+
+**Q:切片器报 `STATION n: NOT FOUND`?**
+A:锚点漂移(内核改名/移动/内联),处置同第 5/6 章:回树 grep 新位置、改锚点与偏移、同步更新校准注释。机检三类失败(文件不在树/符号未命中/格式错)的完整处置流程见第 5 章四节,不重复展开。
+
+**Q:正文行号与我手头的树对不上?**
+A:版本漂移。本章行号全部锚定 v6.6.78;换树后以符号 grep 重定位(机检按符号不按行号,`verify-citations.sh` 仍应全绿——它查的是符号在场,不是行号一致)。
+
+### 编译类
+
+**Q:`bpftool gen skeleton` 失败或 skeleton 与 .bpf.c 不同步?**
+A:先 `make clean` 再全链重跑——skeleton 是 `.bpf.o` 的「影子头文件」,改了 BPF 侧代码而不重新生成是新手高频坑;映射名改了之后 loader 里 `skel->maps.<旧名>` 的编译错也源于此。
+
+**Q:libbpf 链接错误(undefined reference to `bpf_*__open` 等)?**
+A:三步:`-lbpf -lelf -lz` 三库都在;头文件版本与库版本一致(`pkg-config --modversion libbpf`);strict 模式符号(`_skeleton` 后缀族)需要 libbpf ≥0.6,本机 1.3.0 实测可用(00-env ② 段)。工具命令速查见[附录 B](../appendix/b-tool-command-index.md),多发行版安装指引见[附录 C](../appendix/c-distro-btf-build-guide.md)。
+
+### 排错速查表
+
+| 症状 | 第一疑点 | 出处 |
+|---|---|---|
+| 计数恒 0 | attach 口/流量/BPF 侧提前返回 | 运行类 |
+| -E2BIG | 表满 → 扩容或换 LRU | 二节 2.4、三节 3.2 |
+| 加载 EPERM | unprivileged_bpf_disabled=2 → sudo | 运行类 |
+| 合计数跳动 | per-CPU 快照语义,非 bug | 三节 3.1 |
+| STATION n: NOT FOUND | 锚点漂移 → 回树 grep | 走读类 |
+| XDP attach 失败 | 口不支持 native XDP 或驱动限制 → 换 lo/veth(generic 模式降级) | 运行类 |
+| 事件通道无输出 | perf 档位 / ringbuf 未 poll / 事件源未触发 | 四节 4.1/4.2 |
+
+## 课后扩展任务
+
+两项练习的完整任务书、提示与机检脚本在 `book/examples/chapter-07/exercises/`(任务与提示在前、参考思路在后;先修条件:示例 01/02 编译级跑通、两个切片器实跑过):
+
+- **练习① 映射操作链查证**([`exercises/01-map-op-chain/`](../examples/chapter-07/exercises/01-map-op-chain/)):产出「从 `bpf(2)` 的 `map_update_elem` 到 `htab_map_update_elem`」的完整调用链表——每一跳给出文件:行号;`check-chain.sh` 对链上锚点逐个 grep 断言。练的是第 5 章「沿调用链走读」的手艺在 ops 时代的进阶:链条里要穿过类型注册表与接口表两张表。
+- **练习② ringbuf 切片扩展**([`exercises/02-extend-ringbuf/`](../examples/chapter-07/exercises/02-extend-ringbuf/)):仿 `trace-map-internals.sh` 写 `trace-ringbuf.sh` 两站——`__bpf_ringbuf_reserve`(:408)区间与 `bpf_ringbuf_commit`+`bpf_ringbuf_notify`(:489/:150);`check-ringbuf.sh` 验收(锚点断言 + `STATIONS=2`)。练的是四节 4.2 的源码现场亲手再切一遍。
+
+## 总结
+
+五点内化,对应学习目标五条:
+
+1. **helper 分发全链**:call 指令以 imm 为 id,经 `get_func_proto` 白名单查到 `bpf_func_proto` 说明书,最终落到以 `__bpf_call_base` 为基址的固定地址——「白名单随程序类型滚动」与「固定地址」是同一段机制的两面(一节)。
+2. **hash 并发模型**:读免锁靠 RCU、写串行靠桶级自旋锁、重入防靠 per-CPU 计数、内存晚还靠 mem_alloc 的时代机制——无锁读的底气全在写侧纪律(二节)。
+3. **更新三语义与窗口**:NOEXIST/EXIST/ANY 由桶锁内的 `check_flags` 原子裁决;示例 01 的「lookup→update」窗口是程序侧两步之间的,内核单次调用原子(二节 2.3、示例 01)。
+4. **三个维度的变体**:per-CPU 用分身换零锁(近似快照读)、LRU 用逐出换容量弹性、memcg 用挂靠换内存问责——API 不变、ops 表后见真章(三节)。
+5. **两条事件通道**:perf 按 CPU 分环(隔离、无全局序、perf 生态)、ringbuf 单环定序(全局顺序、两段式发布、mmap 直读)——默认 ringbuf,三个例外场景选 perf(四节、示例 03)。
+
+第 7 章之后,程序「用」的东西全部拆过了:执行形态(第 6 章)、辅助函数与映射(本章)。第 8 章补最后一块基础设施——BTF 与 CO-RE:vmlinux.h 从哪来、类型 ID 怎么编址、`bpf_core_read` 的重定位如何在加载期完成(本章示例构建链里的 `bpftool btf dump` 就是它的入口)。
+
+## 本章参考来源
+
+- Linux v6.6.78 源码树(走读树,行号引用基准):`kernel/bpf/helpers.c`(helper 实现)、`kernel/bpf/hashtab.c`(hash/LRU 映射)、`kernel/bpf/arraymap.c`(数组族与 perf 事件数组)、`kernel/bpf/ringbuf.c`(环形缓冲区)、`kernel/bpf/bpf_lru_list.c`(LRU 逐出)、`kernel/trace/bpf_trace.c`(追踪族 helper 与 perf 输出)、`kernel/bpf/syscall.c`(注册表与记账)、`include/linux/bpf.h`(`bpf_map_ops`/`bpf_func_proto`)。
+- 内核文档 `Documentation/bpf/`:`maps.rst`(各映射类型语义与标志的官方口径)、`ringbuf.rst`(环形缓冲区设计与 reserve/commit 语义)、`bpf_design_QA.rst`(helper 设计问答)。
+- UAPI:`include/uapi/linux/bpf.h`(helper id 表 214 项、映射类型枚举、`BPF_F_NO_PREALLOC` 等标志)。
+- libbpf:`bpf.h`(`bpf_map_get_next_key`/`bpf_map_lookup_elem` 等 syscall 包装)、`libbpf.h`(`perf_buffer__new`/`ring_buffer__new` 用户态接口)、`bpf_helpers.h`(SEC 命名)。
+- 章节回指:第 2 章 4.1(八类映射速查)、第 3 章(helper 参数校验与失败画廊)、第 4 章 1.2(白名单随类型)、第 5 章三节(映射生命周期与文件地图)、第 6 章站五(helper 固定地址与 get_func_addr)、第 8 章(BTF/CO-RE,本章示例构建链的前瞻)。
+
