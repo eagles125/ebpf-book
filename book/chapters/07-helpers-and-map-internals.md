@@ -277,11 +277,79 @@ WALK_TREE=/nonexistent bash book/examples/chapter-07/05-map-internals/trace-map-
 **独立示例**:hash 闭环见 [`01-hash-lookup-update/`](../examples/chapter-07/01-hash-lookup-update/);本节源码现场工具化在 [`05-map-internals/`](../examples/chapter-07/05-map-internals/)(六站中的前五站)。
 
 
-<!-- ============================================================
-     Task 10 占位:三、per-CPU、LRU 与内存记账
-     per-CPU 语义与聚合/percpu_array_map_ops/LRU 三链/memcg 记账
-     消费:05-map-internals 站 6;示例 02
-============================================================ -->
+## 三、per-CPU、LRU 与内存记账
+
+二节聚焦「一个 hash 映射内部的并发」,本节把镜头拉远:同一种「键值存储」语义在三个维度的变体——per-CPU(并发维度)、LRU(容量维度)、记账(内存维度)。三个变体共享二节的 ops 框架,**换的是 ops 表,不变的是框架**——这是第 5 章「两层皮」设计在映射家族里的体现。
+
+### 3.1 per-CPU:分身计数,聚合归还
+
+per-CPU 映射把「一份共享值」变成「每 CPU 一份分身」:`BPF_MAP_TYPE_PERCPU_ARRAY`(include/uapi/linux/bpf.h:930,v6.6.78)与 `BPF_MAP_TYPE_PERCPU_HASH`,ops 分别是 `percpu_array_map_ops`(kernel/bpf/arraymap.c:775,v6.6.78)等。语义三条:
+
+- **BPF 侧只摸本 CPU**:`bpf_map_lookup_elem` 返回**当前 CPU** 槽位指针——示例 [`02-percpu-counter/`](../examples/chapter-07/02-percpu-counter/) 的收包计数因此零锁零争用;
+- **用户态读是整块拷回**:同一条 `bpf_map_lookup_elem` 从用户态发出,一次拷回 `CPU 数 × value_size` 的全部槽位,聚合(求和/取最大)由用户自己做——读出的是**近似快照**(逐槽拷贝之间计数还在变);
+- **跨 CPU 读有专用 helper**:`bpf_map_lookup_percpu_elem`(在公共兜底 `bpf_base_func_proto` 里,一节 1.3 贴码可见)带 CPU 号参数,程序可读**指定 CPU** 的分身——per-CPU 聚合统计的补丁通道。
+
+代价模型一句话:**用 `CPU 数 × value_size` 的内存与用户态聚合步骤,换 BPF 侧的零锁**。高频计数(perf 场景)近乎总是划算;键空间巨大时(`ncpu × max_entries × value_size`)要算一算内存账——这正好引出 3.3。
+
+### 3.2 LRU:满员之后的第三种答案
+
+hash 表满了怎么办?二节 2.4 给了两条路:prealloc 表报 -E2BIG,`NO_PREALLOC` 表看分配器脸色。**LRU**(least recently used,最近最少使用)给第三种答案:满员时**自动逐出最旧的键**,新键永远进得来。实现上它仍是 hash——`htab_lru_map_ops`(kernel/bpf/hashtab.c:2301,v6.6.78;切片器站 1 的注册表里同族注册)把 update/delete 换成 `htab_lru_map_update_elem`/`htab_lru_map_delete_elem`:更新前若满,先按 LRU 挑一个牺牲者、经 `bpf_lru_pop_free`(kernel/bpf/bpf_lru_list.c:499,v6.6.78)拿回一个空闲元素,再走与普通 hash 相同的锁内挂链。
+
+逐出的组织结构(与二节同思想:per-CPU 化避免争用):
+
+- **全局三链**:`BPF_LRU_LIST_T_ACTIVE / INACTIVE / FREE`(kernel/bpf/bpf_lru_list.h:17-19,v6.6.78)——活跃/不活跃/空闲,近似两时钟算法;全局链用一把 `raw_spinlock_t` 且 `____cacheline_aligned_in_smp`(:37)独占 cacheline;
+- **per-CPU 本地链**:`bpf_lru_locallist`(bpf_lru_list.h:40-48,v6.6.78,FREE/PENDING 两态)——各 CPU 先在本地攒「待归还」,攒够或需要时再汇入全局,把逐出操作的锁争用摊薄到各 CPU。
+
+`BPF_MAP_TYPE_LRU_HASH`(include/uapi/linux/bpf.h:933,v6.6.78)是连接追踪、限流、缓存类负载的默认选型;`lookup_and_delete` 变体(`htab_lru_map_lookup_and_delete_elem`,2.3 的 ops 表可见)支持「读出即逐出」的一次性票据语义。
+
+### 3.3 记账:内存记在谁的名下
+
+映射是长生命周期对象,内存必须可问责。v6.6 的答案是 **memcg(memory cgroup,内存控制组)记账**——映射的全部内存记在**创建者所在 cgroup** 名下。三个落点(切片器站 6):
+
+```c
+/* kernel/bpf/syscall.c:389-398(v6.6.78) */
+static void bpf_map_save_memcg(struct bpf_map *map)
+{
+	/* Currently if a map is created by a process belonging to the root
+	 * memory cgroup, get_obj_cgroup_from_current() will return NULL.
+	 * So we have to check map->objcg for being NULL each time it's
+	 * being used.
+	 */
+	if (memcg_bpf_enabled())
+		map->objcg = get_obj_cgroup_from_current();
+}
+```
+
+- **挂靠**:创建时 `map->objcg` 记下创建者 cgroup(:389);此后 `bpf_map_area_alloc`(:312)/`bpf_map_kmalloc` 一族分配都带 memcg 标志——账记在 objcg 上,而非调用者或内核自身;
+- **释放**:`bpf_map_release_memcg`(kernel/bpf/syscall.c:400,v6.6.78)在映射销毁时归还引用;
+- **root cgroup 例外**:贴码注释原话——创建者属于 root cgroup 时 objcg 为 NULL,使用处逐次判空。
+
+边界照例声明:memcg 记账是 6.x 的形态(此前的 memlock rlimit 记账方案已退役),随内核版本演进,以所用内核源码为准。JIT 侧另有独立账本:`bpf_jit_charge_modmem`/`bpf_jit_uncharge_modmem`(kernel/bpf/core.c:1008/:1020,v6.6.78)为每段 JIT 映像记账,配额正是第 6 章一节 1.3 的 `bpf_jit_limit`——**两本账、两个配额体系,但「长生命周期内核内存必须可问责」是同一个设计原则**。
+
+### 3.4 收口:内存生命周期三段
+
+「内存生命周期」至此收成三段:**分配**(建表,prealloc/NO_PREALLOC 决定一次性还是按需)→ **记账**(memcg 挂靠,JIT 侧 charge)→ **回收**(引用计数归零触发,元素经 RCU 时代延迟归还——二节 2.5)。与第 2 章八要素的「卸载」对上:最后一个引用释放时,free ops 沿这张账本把内存逐笔还给 objcg。
+
+**教师视角。**三个变体是同一道题的三种答卷:「并发怎么解」per-CPU 用分身绕开共享;「容量怎么解」LRU 用牺牲者腾位置;「内存怎么解」memcg 用记账挂靠 cgroup。共同的设计指纹是**不改变使用者的 API**——用户态还是那几个 `bpf_map_*` 命令,变化全部藏在 ops 表后面(2.1)。学生误区:把 per-CPU 的「合计」当精确值(3.1 的快照语义)、把 LRU 的「逐出」当错误(-E2BIG 不会出现在 LRU 表上,这是它与普通 hash 的行为差)。
+
+**学生动手。**
+
+```bash
+# per-CPU 语义实证:构建并(在 root 档)运行示例 02
+make -C book/examples/chapter-07/02-percpu-counter    # 编译级已验证
+# 记账与逐出现场:切片器站 6 + LRU ops(站 1 注册表可查)
+bash book/examples/chapter-07/05-map-internals/trace-map-internals.sh | sed -n '/^## 站 6/,$p'
+```
+
+预期输出(均本机实测):前者产物 pcpu_count;后者站 6 的 save_memcg 贴码与职责注。
+
+**检查点**(自测后看提示):
+
+1. 示例 02 的「合计」为什么是近似值?把用户态聚合改成逐 CPU 调 `bpf_map_lookup_percpu_elem` 会更准吗?——提示:3.1 的快照语义;跨多次系统调用的读数之间同样在变,准是相对的。
+2. LRU 表上 `bpf_map_update_elem` 返回 -E2BIG 可能吗?——提示:3.2 逐出机制;但 `BPF_F_NO_PREALLOC` 与 LRU 互斥(二节 2.4),想想为什么逐出需要预分配的元素池。
+3. 一个 cgroup 里的进程创建的映射,内存账记在哪?若该 cgroup 被删除,映射还在被使用会怎样?——提示:3.3 的 objcg 挂靠与释放时机;账本跟着映射,不跟着进程。
+
+**独立示例**:per-CPU 语义见 [`02-percpu-counter/`](../examples/chapter-07/02-percpu-counter/);本节源码现场在 [`05-map-internals/`](../examples/chapter-07/05-map-internals/) 站 1(注册表里的 LRU ops)与站 6(记账)。
 
 <!-- ============================================================
      Task 11 占位:四、事件输出:perf buffer 与 ring buffer(含可视化两图)
