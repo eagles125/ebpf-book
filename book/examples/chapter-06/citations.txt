@@ -1,0 +1,47 @@
+# 第 6 章引用锚点机检清单(v6.6.78)——格式:文件|符号|说明
+# 数据源:../scripts/verify-citations.sh 以本文件为唯一数据源,
+# 逐行到走读树 /work/linux/linux-6.6.78 里核对(文件存在 + grep -F 命中)。
+# 逐行实测留痕:初稿 32 行,1 处修正——bpf_jit_limit 声明为 long 而非 int
+# (core.c :565 「long bpf_jit_limit   __read_mostly;」),已按实跑修正。
+
+# ① kernel/bpf/core.c:三种执行形态与那排开关(正文一节)
+kernel/bpf/core.c|int bpf_jit_enable|JIT 总开关 sysctl(一节「四兄弟」之首)
+kernel/bpf/core.c|int bpf_jit_harden|常量致盲开关 sysctl(一节/二节站六)
+kernel/bpf/core.c|int bpf_jit_kallsyms|JIT 映像进 kallsyms 开关 sysctl(一节)
+kernel/bpf/core.c|long bpf_jit_limit|JIT 内存配额 sysctl(一节,声明为 long)
+kernel/bpf/core.c|___bpf_prog_run|解释器调度循环(一节)
+kernel/bpf/core.c|PROG_NAME_LIST|按栈长模板展开的分派表(一节)
+kernel/bpf/core.c|bpf_prog_select_runtime|三种执行形态的选通入口(一节/二节站一)
+kernel/bpf/core.c|bpf_int_jit_compile(fp|解释器→JIT 的调用点(一节/二节站一)
+kernel/bpf/core.c|bpf_jit_blind_insn|单条指令致盲改写(二节站六/练习二)
+kernel/bpf/core.c|bpf_jit_blind_constants|常量致盲遍历入口(二节站六/练习二)
+kernel/bpf/core.c|bpf_jit_get_func_addr|helper/tail call 地址解析(二节站五)
+kernel/bpf/core.c|bpf_prog_pack|JIT 映像打包分配聚合开关(二节站六)
+kernel/bpf/core.c|bpf_prog_pack_alloc|打包分配实现(二节站六)
+
+# ② arch/x86/net/bpf_jit_comp.c:x86_64 后端六站(正文二节)
+arch/x86/net/bpf_jit_comp.c|bpf_int_jit_compile|x86 JIT 编译入口(二节站一)
+arch/x86/net/bpf_jit_comp.c|emit_prologue|序言生成(二节站三)
+arch/x86/net/bpf_jit_comp.c|do_jit|指令 lowering 主循环(二节站二)
+arch/x86/net/bpf_jit_comp.c|aux->stack_depth|栈深读取(lowering 入口处)
+arch/x86/net/bpf_jit_comp.c|emit_bpf_tail_call_indirect|间接尾调用 lowering(二节站五)
+arch/x86/net/bpf_jit_comp.c|emit_bpf_tail_call_direct|直接尾调用 lowering(二节站五)
+arch/x86/net/bpf_jit_comp.c|extra_pass|两趟编译的第二趟标记(二节站二)
+
+# ③ arch/arm64/net:x86 之外的另一套后端(正文三节)
+arch/arm64/net/bpf_jit_comp.c|bpf_int_jit_compile|arm64 JIT 编译入口(三节)
+arch/arm64/net/bpf_jit_comp.c|build_body|指令遍历 lower 主循环(三节)
+arch/arm64/net/bpf_jit_comp.c|bpf2a64[BPF_REG_0]|BPF→arm64 寄存器映射表(三节)
+arch/arm64/net/bpf_jit_comp.c|emit_a64_mov_i64|64 位立即数装载 MOVZ-MOVK(三节)
+arch/arm64/net/bpf_jit.h|#define A64_R(x)|arm64 通用寄存器编号宏(三节)
+
+# ④ 核心对象与辅助结构
+include/linux/filter.h|struct bpf_binary_header|JIT 映像头(二节站六)
+include/linux/bpf.h|struct bpf_prog_aux|程序辅助信息(stack_depth 所在)
+include/linux/bpf.h|u32 stack_depth|程序栈深字段(lowering/tail call 用)
+include/linux/bpf.h|struct bpf_prog {|程序对象本体(一节/二节)
+
+# ⑤ UAPI:锚点程序直接涉及的常量与命令(一节/四节/01-bpf-asm)
+include/uapi/linux/bpf.h|BPF_PROG_LOAD|程序加载命令号
+include/uapi/linux/bpf.h|enum xdp_action|XDP 返回动作枚举(锚点程序返回值出处)
+include/uapi/linux/if_ether.h|ETH_P_IPV6|IPv6 以太类型(锚点程序 0x86dd 的可读名)
