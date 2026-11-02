@@ -117,7 +117,7 @@ base-ref: 8a11de8
 
 ### Task 2: 01-btf-kinds 编译级剖析
 
-- [ ] Task 2: 01-btf-kinds 编译级剖析
+- [x] Task 2: 01-btf-kinds 编译级剖析
 
 **tasks.md 条目**:矩阵①(type IDs/field offsets 资产面)。
 
