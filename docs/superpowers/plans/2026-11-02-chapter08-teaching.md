@@ -104,7 +104,7 @@ base-ref: 8a11de8
 
 ### Task 1: 00-env 自检 + 章级 README 骨架
 
-- [ ] Task 1: 00-env 自检 + 章级 README 骨架
+- [x] Task 1: 00-env 自检 + 章级 README 骨架
 
 **tasks.md 条目**:矩阵④(独立示例基座)+⑤(CONFIG/bpftool btf dump 前置);C5/C6。
 
