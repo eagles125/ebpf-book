@@ -143,7 +143,7 @@ base-ref: 8a11de8
 
 ### Task 4: 03-core-read 四件套(集成示例)
 
-- [ ] Task 4: 03-core-read 四件套(集成示例)
+- [x] Task 4: 03-core-read 四件套(集成示例)
 
 **tasks.md 条目**:矩阵③(读内核结构体字段的 CO-RE 示例)+④。
 
