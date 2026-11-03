@@ -130,7 +130,7 @@ base-ref: 8a11de8
 
 ### Task 3: 02-vmlinux-h 生成
 
-- [ ] Task 3: 02-vmlinux-h 生成
+- [x] Task 3: 02-vmlinux-h 生成
 
 **tasks.md 条目**:矩阵③(vmlinux.h)+⑤(bpftool btf dump);回收 ch07/ch09 构建链。
 
