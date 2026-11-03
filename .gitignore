@@ -29,3 +29,4 @@ book/examples/chapter-07/01-hash-lookup-update/hash_count
 book/examples/chapter-07/02-percpu-counter/pcpu_count
 book/examples/chapter-07/03-event-output/event_ringbuf
 book/examples/chapter-07/03-event-output/event_perf
+book/examples/chapter-08/03-core-read/core_read
