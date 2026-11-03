@@ -156,7 +156,7 @@ base-ref: 8a11de8
 
 ### Task 5: 04-relo-slicer 切片器(python 五站)
 
-- [ ] Task 5: 04-relo-slicer 切片器(python 五站)
+- [x] Task 5: 04-relo-slicer 切片器(python 五站)
 
 **tasks.md 条目**:矩阵②(libbpf 重定位行为资产面)。
 
