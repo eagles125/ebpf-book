@@ -120,6 +120,8 @@ def parse_elf_sections(data):
     与 x86-64 普通目标文件同布局;只读段头,不碰程序头)。"""
     if data[:4] != b'\x7fELF':
         fail(1, '不是 ELF 文件(开头缺 \\x7fELF 魔数)')
+    if len(data) < 64:
+        fail(1, f'文件仅 {len(data)} 字节,连 64 字节的 ELF 头都不完整(截断?)')
     ei_class, ei_data = data[4], data[5]
     if ei_class != 2 or ei_data != 1:
         fail(1, f'仅支持 64 位小端 ELF(EI_CLASS={ei_class} EI_DATA={ei_data});'
@@ -203,6 +205,8 @@ class BtfView:
         if ver != BTF_VERSION:
             fail(2, f'主 .BTF 头 version={ver} ≠ 1(本切片器只认 BTF_VERSION=1)')
         type_off, type_len, str_off, str_len = struct.unpack_from('<IIII', blob, 8)
+        self.hdr_len = hdr_len
+        self.str_off = str_off
         self.str_base = hdr_len + str_off
         self.str_len = str_len
         self.types_base = hdr_len + type_off
@@ -261,6 +265,8 @@ class BtfView:
         if kind == 2:                    # PTR
             return 8
         if kind == 3:                    # ARRAY:nelems × 元素大小(元素类型在尾料首字段)
+            if off + 24 > len(self.blob):
+                return None              # 尾料被截断,大小求不出(仅影响展示)
             elem, _idx, nelems = struct.unpack_from('<III', self.blob, off + 12)
             esz = self.resolve_size(elem, depth + 1)
             return None if esz is None else nelems * esz
@@ -339,6 +345,10 @@ def station1(obj_path, ctx):
     if btf is None:
         fail(1, '有 .BTF.ext 却没有主 .BTF:记录里的 sec_name_off/access_str_off '
                 '都以主 .BTF 字符串区为坐标系,缺主 .BTF 记录不可解码')
+    for tag, s in (('.BTF.ext', ext), ('.BTF', btf)):
+        if s['offset'] + s['size'] > len(data):
+            fail(1, f'{tag} 段(offset {s["offset"]} + size {s["size"]})'
+                    f'越出文件尺寸 {len(data)}——文件截断?')
     ctx['ext_bytes'] = data[ext['offset']:ext['offset'] + ext['size']]
     ctx['btf_bytes'] = data[btf['offset']:btf['offset'] + btf['size']]
     print()
@@ -361,6 +371,9 @@ def station2(ctx):
         fail(2, f'.BTF.ext 头 flags={flags} ≠ 0(libbpf 同样拒绝非零 flags,见走读树 btf.c :2808)')
     if hdr_len < 24:
         fail(2, f'.BTF.ext 头 hdr_len={hdr_len} < 24:连 func_info/line_info 偏移字段都不齐')
+    if len(ext) < hdr_len:
+        fail(2, f'.BTF.ext 段尺寸 {len(ext)} 字节 < 头声明的 hdr_len={hdr_len}'
+                '(段被截断?)——后续字段无法读取')
     print(f'OK    magic   = 0x{magic:04x}(BTF_MAGIC,BTF 家族统一门牌)')
     print(f'OK    version = {version}(BTF_VERSION=1)')
     print(f'OK    flags   = {flags}(libbpf 要求为 0)')
@@ -530,7 +543,11 @@ def field_chain(btf, root_tid, raw):
             if idx >= vlen:
                 steps.append(f'第 {depth} 层:成员下标 {idx} ≥ vlen {vlen}(越界,降级)')
                 return steps, None, has_bitfield, last_member
-            mn, mt, mo = struct.unpack_from('<III', btf.blob, off + 12 + 12 * idx)
+            m_off = off + 12 + 12 * idx
+            if m_off + 12 > len(btf.blob):
+                steps.append(f'第 {depth} 层:BTF 成员数组被截断,读不到成员 #{idx}(降级)')
+                return steps, None, has_bitfield, last_member
+            mn, mt, mo = struct.unpack_from('<III', btf.blob, m_off)
             bitpos = mo & 0xffffff                      # BTF_MEMBER_BIT_OFFSET
             bfsize = (mo >> 24) if kflag else 0         # BTF_MEMBER_BITFIELD_SIZE
             if bfsize:
@@ -545,6 +562,9 @@ def field_chain(btf, root_tid, raw):
             last_member = mname
             tid = mt
         elif kind == 3:               # ARRAY:下标编址
+            if off + 24 > len(btf.blob):
+                steps.append(f'第 {depth} 层:BTF 数组尾料被截断(降级)')
+                return steps, None, has_bitfield, last_member
             elem, _idx_t, nelems = struct.unpack_from('<III', btf.blob, off + 12)
             esz = btf.resolve_size(elem)
             if esz is not None and idx >= nelems:
@@ -569,9 +589,13 @@ def enumval_name(btf, root_tid, idx):
         return None
     off, _name, kind, vlen, _kflag, _u = t
     if kind == 6 and idx < vlen:      # ENUM:btf_enum(name,val)
+        if off + 12 + 8 * idx + 8 > len(btf.blob):
+            return None               # 枚举器数组被截断(降级)
         n, val = struct.unpack_from('<Ii', btf.blob, off + 12 + 8 * idx)
         return btf.cstr(n), val
     if kind == 19 and idx < vlen:     # ENUM64:btf_enum64(name,val_lo,val_hi)
+        if off + 12 + 12 * idx + 12 > len(btf.blob):
+            return None               # 枚举器数组被截断(降级)
         n, lo, hi = struct.unpack_from('<III', btf.blob, off + 12 + 12 * idx)
         return btf.cstr(n), (hi << 32) | lo
     return None
@@ -613,8 +637,8 @@ def station5(ctx):
     print('重要辨析:access_str_off 相对【主 .BTF 的字符串区】起点——'
           '.BTF.ext 自身没有字符串区(btf.rst 4.2 节未定义任何字符串段,段尾即最后一条'
           '记录;libbpf relo_core.c :1308 亦用 btf__name_by_offset(local_btf, ...) '
-          '取串)。本机实况:字符串区起点 = hdr_len 24 + str_off 18092 = 18116,'
-          '长度 12486 字节,其他构建数值不同。')
+          f'取串)。本机实况:字符串区起点 = hdr_len {btf.hdr_len} + str_off {btf.str_off} '
+          f'= {btf.str_base},长度 {btf.str_len} 字节,其他构建数值不同。')
 
     src_name = 'core.bpf.c'
     src_path = os.path.join(os.path.dirname(os.path.abspath(ctx['obj_path'])), src_name)
