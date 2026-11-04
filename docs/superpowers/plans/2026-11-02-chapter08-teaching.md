@@ -169,7 +169,7 @@ base-ref: 8a11de8
 
 ### Task 6: 05-kernel-relo 切片器(bash 五站)
 
-- [ ] Task 6: 05-kernel-relo 切片器(bash 五站)
+- [x] Task 6: 05-kernel-relo 切片器(bash 五站)
 
 **tasks.md 条目**:矩阵②(kernel BTF documentation 走读面)。
 
