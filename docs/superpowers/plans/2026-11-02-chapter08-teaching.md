@@ -94,7 +94,7 @@ base-ref: 8a11de8
 
 ### C7. 章节标题固定
 
-文件 `book/chapters/08-btf-and-co-re-principles.md`(新建);`# 第 8 章 BTF 与 CO-RE 原理`;十一小节:学习目标/本章导读/一、BTF:内核的类型说明书/二、BTF kind 体系与类型 ID 编址/三、CO-RE 编译期:从宏到重定位记录/四、两台重定位引擎/五、实战五层:一条 BPF_CORE_READ 的完整旅程/可视化:CO-RE 全链与两引擎对照/常见问题与排错/课后扩展任务/总结/本章参考来源。骨架用 HTML 注释占位未写小节。
+文件 `book/chapters/08-btf-and-co-re-principles.md`(新建);`# 第 8 章 BTF 与 CO-RE 原理`;十二个小节位(下显式名单 12 项为准;原「十一小节」为计数笔误,Task 8 审查修正):学习目标/本章导读/一、BTF:内核的类型说明书/二、BTF kind 体系与类型 ID 编址/三、CO-RE 编译期:从宏到重定位记录/四、两台重定位引擎/五、实战五层:一条 BPF_CORE_READ 的完整旅程/可视化:CO-RE 全链与两引擎对照/常见问题与排错/课后扩展任务/总结/本章参考来源。骨架用 HTML 注释占位未写小节。
 
 ### C8. 交叉链接
 
@@ -200,7 +200,7 @@ base-ref: 8a11de8
 
 **Files:** Create `book/chapters/08-btf-and-co-re-principles.md`
 
-- [ ] **Step 1: C7 骨架(HTML 注释占位十一小节)+ 章首示例目录链接**。
+- [ ] **Step 1: C7 骨架(HTML 注释占位 12 个小节位)+ 章首示例目录链接**。
 - [ ] **Step 2: 目标+导读(2–2.5k)**——目标 4–5 条;导读回收埋线:ch02 02:95(跨版本访问由 CO-RE 修正)、07:603(vmlinux.h 四问在本章作答)、07:36(第 9 章起依赖本章机制)。
 - [ ] **Step 3: 一节(8–10k)**——按设计 §3.2:BTF 三重身份(DWARF 大且只在编译期 vs BTF 紧凑且常驻内核;验证器 ctx 校验/attach_btf_id/字段级能力登记簿——回指 ch07:255 不展开);教师视角(为什么不用 DWARF);DWARF→BTF 转换=方法论级(pahole -J 流程+判读法+「本机未装 pahole」标注;CONFIG_DEBUG_INFO_BTF 在内核构建期由 pahole 完成);vmlinux+模块双层 BTF 实况(110 文件/7119843 字节/「本机实况」标注;`btf_parse_vmlinux` btf.c:5720、`btf_parse_module` :5789);`bpftool btf dump` 三用法预告(file 对象/file /sys/format c);学生动手(00-env 自检+02 生成);检查点 3 问;节末链接 00-env/02-vmlinux-h。
 - [ ] **Step 4: 篇幅自查(wc -m 一节 8–10k)+锚点行号实测**。
