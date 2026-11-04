@@ -208,7 +208,7 @@ base-ref: 8a11de8
 
 ### Task 9: 正文——「二、BTF kind 体系与类型 ID 编址」
 
-- [ ] Task 9: 正文——「二、BTF kind 体系与类型 ID 编址」
+- [x] Task 9: 正文——「二、BTF kind 体系与类型 ID 编址」
 
 **tasks.md 条目**:矩阵①(type IDs/field offsets)。
 
