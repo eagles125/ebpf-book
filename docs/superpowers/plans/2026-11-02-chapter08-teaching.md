@@ -182,7 +182,7 @@ base-ref: 8a11de8
 
 ### Task 7: citations.txt 全量 + verify-citations.sh 符号机检
 
-- [ ] Task 7: citations.txt 全量 + verify-citations.sh 符号机检
+- [x] Task 7: citations.txt 全量 + verify-citations.sh 符号机检
 
 **tasks.md 条目**:矩阵②(内核 BTF 文档与 libbpf 重定位行为锚点收口)。
 
