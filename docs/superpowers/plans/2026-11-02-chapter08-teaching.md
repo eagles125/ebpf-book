@@ -194,7 +194,7 @@ base-ref: 8a11de8
 
 ### Task 8: 正文——C7 骨架 + 目标导读 + 一节「BTF:内核的类型说明书」
 
-- [ ] Task 8: 正文——C7 骨架 + 目标导读 + 一节「BTF:内核的类型说明书」
+- [x] Task 8: 正文——C7 骨架 + 目标导读 + 一节「BTF:内核的类型说明书」
 
 **tasks.md 条目**:矩阵①(BTF goals/DWARF-to-BTF)+⑤(CONFIG_DEBUG_INFO_BTF/pahole/bpftool btf dump)。
 
