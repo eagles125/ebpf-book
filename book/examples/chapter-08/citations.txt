@@ -1,0 +1,56 @@
+# 第 8 章引用锚点机检清单(v6.6.78)——格式:文件|符号|说明
+# 数据源:../scripts/verify-citations.sh 以本文件为唯一数据源,
+# 逐行到走读树 /work/linux/linux-6.6.78 里核对(文件存在 + grep -F 命中符号,
+# 机检不按行号;说明列的「:行号(v6.6.78)」仅供人读)。
+# 逐行实测留痕:初稿按基线表写入,38 条锚点全部在树中命中,行号与基线无出入。
+# 一处口径留痕(③组):include/uapi/linux/bpf.h:7262-7275 实有 13 种重定位
+# kind(0–12),第 13 种 BPF_CORE_TYPE_MATCHES = 12 在 :7275;C1 基线「12 种
+# 0–11」口径按契约保留于条目说明,正文引用时按实测 13 种表述并标注本条留痕。
+
+# ① BTF 基础与解析:内核两台 BTF 装载入口(正文一节)
+kernel/bpf/btf.c|btf_parse_vmlinux|vmlinux 基础 BTF 解析入口(:5720)(一节)
+kernel/bpf/btf.c|btf_parse_module|模块 BTF 解析入口(:5789)(一节)
+kernel/bpf/btf.c|btf_parse_module(mod->name, mod->btf_data, mod->btf_data_size)|模块上线(MODULE_STATE_COMING)时装载模块 BTF(:7378)(一节)
+
+# ② kind 体系与类型 ID 编址:uapi 布局 + 内核检索(正文二节)
+include/uapi/linux/btf.h|BTF_KIND_INT|kind 枚举 INT(:61;枚举块 kind 值 :60-79,UNKN=0…ENUM64=19,NR_BTF_KINDS=20 在 :81)(二节)
+include/uapi/linux/btf.h|BTF_INFO_KIND|info 高 5 位取 kind(:55)(二节)
+include/uapi/linux/btf.h|BTF_INFO_VLEN|info 低 16 位取 vlen(:56)(二节)
+include/uapi/linux/btf.h|BTF_INFO_KFLAG|info bit31 取 kflag(:57)(二节)
+include/linux/btf.h|btf_type_by_id|类型 ID→btf_type 检索(:488)(二节)
+
+# ③ CO-RE 编译期:宏族与 UAPI 记录(正文三节;kind 数口径留痕见文件头)
+tools/lib/bpf/bpf_core_read.h|BPF_CORE_READ_BITFIELD_PROBED|位域读取·探针式(:70)(三节)
+tools/lib/bpf/bpf_core_read.h|BPF_CORE_READ_BITFIELD|位域读取·直接式(:88)(三节)
+tools/lib/bpf/bpf_core_read.h|bpf_core_field_exists|字段存在性兼容分支(:132)(三节)
+tools/lib/bpf/bpf_core_read.h|bpf_core_type_exists|类型存在性(:185)(三节)
+tools/lib/bpf/bpf_core_read.h|bpf_core_enum_value_exists|枚举值存在性(:216)(三节)
+tools/lib/bpf/bpf_core_read.h|bpf_core_read|定长字段读取原语(:246)(三节)
+tools/lib/bpf/bpf_core_read.h|BPF_CORE_READ_INTO|多级链式读取(:351)(三节)
+include/uapi/linux/bpf.h|enum bpf_core_relo_kind|重定位种类枚举(:7262;契约口径 12 种 0–11,实测 13 种 0–12)(三节)
+include/uapi/linux/bpf.h|struct bpf_core_relo {|重定位记录四字段 insn_off/type_id/access_str_off/kind(:7326-7330)(三节)
+
+# ④ libbpf 引擎:收集→重定位→轻骨架记录(正文四节)
+tools/lib/bpf/relo_core.c|__bpf_core_types_are_compat|本地/目标类型兼容判定(:146)(四节)
+tools/lib/bpf/relo_core.c|bpf_core_parse_spec|访问字符串→重定位规格(:263)(四节)
+tools/lib/bpf/relo_core.c|bpf_core_patch_insn|按 kind 改写指令(:1024)(四节)
+tools/lib/bpf/relo_core.c|bpf_core_format_spec|规格格式化供日志(:1156)(四节)
+tools/lib/bpf/relo_core.c|bpf_core_calc_relo_insn|单条重定位求值核心(:1280)(四节)
+tools/lib/bpf/relo_core.c|__bpf_core_types_match|成员级类型匹配(:1544)(四节)
+tools/lib/bpf/libbpf.c|bpf_object__collect_prog_relos|收集 .BTF.ext 重定位(:4236)(四节)
+tools/lib/bpf/libbpf.c|err = bpf_object__collect_prog_relos(obj, shdr, data)|.BTF.ext 段处理接线(:6763)(四节)
+tools/lib/bpf/libbpf.c|bpf_object__relocate_core|libbpf 重定位主入口(:5783;调用点 :6526)(四节)
+tools/lib/bpf/libbpf.c|bpf_gen__record_relo_core(obj->gen_loader, &cr)|轻骨架记录重定位(:7296)(四节)
+
+# ⑤ 内核引擎与 UAPI 载体:校验期接线→引擎→attr 字段→轻骨架提交(正文四/五节)
+kernel/bpf/btf.c|bpf_core_types_are_compat|内核侧类型兼容判定(:8094)(四节)
+kernel/bpf/btf.c|bpf_core_find_cands|候选类型查找(:8336)(四节)
+kernel/bpf/btf.c|bpf_core_apply|内核重定位引擎主入口(:8423)(四节)
+kernel/bpf/verifier.c|static int check_core_relo(struct bpf_verifier_env *env,|校验期重定位处理(:15718)(四节)
+kernel/bpf/verifier.c|err = bpf_core_apply(&ctx, &core_relo, i,|校验期调用内核引擎(:15778)(四节)
+kernel/bpf/verifier.c|err = check_core_relo(env, attr, uattr);|BPF_PROG_LOAD 校验接线(:15817)(四节)
+include/uapi/linux/bpf.h|attach_btf_obj_fd|attr 载体·vmlinux BTF fd(:1461)(四节)
+include/uapi/linux/bpf.h|core_relo_cnt|attr 载体·记录数(:1463)(四节)
+include/uapi/linux/bpf.h|core_relos|attr 载体·记录数组(:1465)(四节)
+include/uapi/linux/bpf.h|core_relo_rec_size|attr 载体·记录尺寸(:1466)(四节)
+tools/lib/bpf/gen_loader.c|core_relos = add_data(gen, gen->core_relos,|轻骨架把重定位提交进 load attr(:970)(四节)
