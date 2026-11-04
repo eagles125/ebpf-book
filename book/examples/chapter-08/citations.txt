@@ -2,7 +2,9 @@
 # 数据源:../scripts/verify-citations.sh 以本文件为唯一数据源,
 # 逐行到走读树 /work/linux/linux-6.6.78 里核对(文件存在 + grep -F 命中符号,
 # 机检不按行号;说明列的「:行号(v6.6.78)」仅供人读)。
-# 逐行实测留痕:初稿按基线表写入,38 条锚点全部在树中命中,行号与基线无出入。
+# 逐行实测留痕:初稿按基线表写入,38 条锚点全部在树中命中;37 条行号与基线
+# 一致,1 条实测修正:gen_loader.c :970→:971(基线 :970 实为 attr.core_relo_cnt
+# 赋值行,重定位数据提交行 core_relos = add_data(…) 在 :971)。
 # 一处口径留痕(③组):include/uapi/linux/bpf.h:7262-7275 实有 13 种重定位
 # kind(0–12),第 13 种 BPF_CORE_TYPE_MATCHES = 12 在 :7275;C1 基线「12 种
 # 0–11」口径按契约保留于条目说明,正文引用时按实测 13 种表述并标注本条留痕。
@@ -42,7 +44,8 @@ tools/lib/bpf/libbpf.c|err = bpf_object__collect_prog_relos(obj, shdr, data)|.BT
 tools/lib/bpf/libbpf.c|bpf_object__relocate_core|libbpf 重定位主入口(:5783;调用点 :6526)(四节)
 tools/lib/bpf/libbpf.c|bpf_gen__record_relo_core(obj->gen_loader, &cr)|轻骨架记录重定位(:7296)(四节)
 
-# ⑤ 内核引擎与 UAPI 载体:校验期接线→引擎→attr 字段→轻骨架提交(正文四/五节)
+# ⑤ 内核引擎与 UAPI 载体:校验期接线→引擎→attr 字段→轻骨架提交(正文四/五节;
+#   实测修正:gen_loader.c :970→:971,详见文件头实测留痕)
 kernel/bpf/btf.c|bpf_core_types_are_compat|内核侧类型兼容判定(:8094)(四节)
 kernel/bpf/btf.c|bpf_core_find_cands|候选类型查找(:8336)(四节)
 kernel/bpf/btf.c|bpf_core_apply|内核重定位引擎主入口(:8423)(四节)
@@ -53,4 +56,4 @@ include/uapi/linux/bpf.h|attach_btf_obj_fd|attr 载体·vmlinux BTF fd(:1461)(�
 include/uapi/linux/bpf.h|core_relo_cnt|attr 载体·记录数(:1463)(四节)
 include/uapi/linux/bpf.h|core_relos|attr 载体·记录数组(:1465)(四节)
 include/uapi/linux/bpf.h|core_relo_rec_size|attr 载体·记录尺寸(:1466)(四节)
-tools/lib/bpf/gen_loader.c|core_relos = add_data(gen, gen->core_relos,|轻骨架把重定位提交进 load attr(:970)(四节)
+tools/lib/bpf/gen_loader.c|core_relos = add_data(gen, gen->core_relos,|轻骨架把重定位提交进 load attr(:971)(四节)
