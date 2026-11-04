@@ -183,9 +183,182 @@ cd book/examples/chapter-08/02-vmlinux-h && ./gen-vmlinux-h.sh
 
 **独立示例**:本节两件资产——环境自检 [`00-env/`](../examples/chapter-08/00-env/)(五段自检+三档结论)与 vmlinux.h 生成 [`02-vmlinux-h/`](../examples/chapter-08/02-vmlinux-h/)(`format c` 实录与规模统计)。
 
-<!--
 ## 二、BTF kind 体系与类型 ID 编址
--->
+
+一节把 BTF 当说明书整体看,本节下到字节层:1.5 认过的每一行 dump 输出,在文件里都对应一段定长二进制记录。本节拆三件事——一条记录怎么编码(`struct btf_type` 三元组)、19 种 kind 各管什么、类型 ID 怎么编址;它们直接服务三/四节——CO-RE 重定位记录里填的就是 type_id,两台重定位引擎按 ID 查的就是这份编址。
+
+### 2.1 `struct btf_type`:一条记录 12 字节
+
+类型区的每条记录都是一个三元组,定义在 uapi 头文件里(include/uapi/linux/btf.h:31-53,v6.6.78):
+
+```c
+/* include/uapi/linux/btf.h:31-53(v6.6.78) */
+struct btf_type {
+	__u32 name_off;
+	/* "info" bits arrangement
+	 * bits  0-15: vlen (e.g. # of struct's members)
+	 * bits 16-23: unused
+	 * bits 24-28: kind (e.g. int, ptr, array...etc)
+	 * bits 29-30: unused
+	 * bit     31: kind_flag, currently used by
+	 *             struct, union, enum, fwd and enum64
+	 */
+	__u32 info;
+	/* "size" is used by INT, ENUM, STRUCT, UNION, DATASEC and ENUM64.
+	 * "size" tells the size of the type it is describing.
+	 *
+	 * "type" is used by PTR, TYPEDEF, VOLATILE, CONST, RESTRICT,
+	 * FUNC, FUNC_PROTO, VAR, DECL_TAG and TYPE_TAG.
+	 * "type" is a type_id referring to another type.
+	 */
+	union {
+		__u32 size;
+		__u32 type;
+	};
+};
+```
+
+4+4+4,一条记录 12 字节。三个字段各管一摊:
+
+- **`name_off`**:类型名字符串在字符串表(BTF 头里规划的另一段,与类型区平行)里的字节偏移。没有名字的记录(匿名结构体、CONST/PTR 这类包装层)`name_off` 指向空串,dump 里的 `'(anon)'`(匿名)即由此来,1.5 头两行全是;
+- **`info`**:一个 32 位位域打包,拆法写在源码注释里:低 16 位是 **vlen**(成员/参数/枚举值的个数),第 24-28 位是 **kind**,最高位是 **kind_flag**(位域标记,2.3 用)。三个读取宏各一行(:55-57):`BTF_INFO_KIND`、`BTF_INFO_VLEN`、`BTF_INFO_KFLAG`;
+- **`union { size; type; }`**:一鱼两吃。INT/ENUM/STRUCT/UNION/DATASEC/ENUM64 这六种「有实体尺寸」的 kind 用 **size**(字节数);PTR/TYPEDEF/VOLATILE/CONST/RESTRICT/FUNC/FUNC_PROTO/VAR/DECL_TAG/TYPE_TAG 这十种「引用别的类型」的 kind 用 **type**(指向被引用类型的 type_id)。同一记录按 kind 只会用其一,共用 4 字节不亏——这正是 1.2 那把「紧凑性」钥匙落到字段级的样子(例外是 ARRAY 与 FWD:前者的元素数在附加表 `btf_array` 里,后者连 struct/union 之分都借 kind_flag 一位来记,tools/lib/bpf/btf.c:2270)。
+
+解码示范,兑现 1.5 欠的那笔账。`[156855] STRUCT 'task_struct' size=9920 vlen=274`(本机实况,其他内核数值不同)读成:name_off 指向字符串表里的 `task_struct`;info 拆出 kind=4(STRUCT)、vlen=274;union 按 kind 取 size=9920。一行人话底下,是一次三元组解码加一次 union 取舍。
+
+三元组不是全部:某些 kind 在 12 字节之后还跟着**附加数据**(uapi 注释原话:struct btf_type is immediately followed by extra data,:85-87)。INT 跟一个 u32(编码:有符号/字符/布尔、位偏移、位宽,`BTF_INT_ENCODING`/`BTF_INT_OFFSET`/`BTF_INT_BITS` 三个宏 :92-94);STRUCT/UNION 跟 vlen 个成员表 `btf_member`(2.3);FUNC_PROTO 跟 vlen 个参数 `btf_param`(:145-148);ARRAY 跟一个三字段的 `btf_array`(元素类型/下标类型/元素个数,:111-115);DATASEC 跟 vlen 个 `btf_var_secinfo`(变量在段内的偏移与尺寸)。**定长头+变长附表**:解析器先读 12 字节定长头,再按 kind 与 vlen 决定附表多长。1.2 说的「`struct btf_type` 三元组加定长成员表」就是这套布局,而它在 2.4 还会送出更大的好处——定长,才能数组寻址。
+
+### 2.2 19 种 kind:四组分工
+
+kind 的全集是一段匿名枚举(uapi `btf.h:60-79`,1.1 已预告):`BTF_KIND_UNKN = 0` 占 0 号(未知,占位不用),真正的 kind 是 1–19 共 **19 种**;紧随其后的哨兵 `NR_BTF_KINDS`(:81)恰为 20。19 种按职责分四组:
+
+| 组 | kind(编号) | 一句话职责 |
+|---|---|---|
+| 基础(8) | INT(1)/PTR(2)/ARRAY(3)/STRUCT(4)/UNION(5)/ENUM(6)/ENUM64(19)/FWD(7) | 类型图的实体节点:整数、指针、数组、复合体、枚举(值超 32 位升级 ENUM64)、只声明未定义的前向占位 |
+| 修饰(3) | VOLATILE(9)/CONST(10)/RESTRICT(11) | 限定符,一行一个,`type` 指向被限定的类型 |
+| 功能(3) | TYPEDEF(8)/FUNC(12)/FUNC_PROTO(13) | 类型别名、函数实体、函数签名 |
+| 扩展(5) | VAR(14)/DATASEC(15)/FLOAT(16)/DECL_TAG(17)/TYPE_TAG(18) | 全局变量与其所在段、浮点、挂在声明/类型上的标签 |
+
+四组有个共同的读法:**基础组是「节点」,其余三组多是「边」**——修饰、TYPEDEF、FUNC 都只是一行指向别人的记录,结构信息长在 STRUCT/UNION/FUNC_PROTO 这些节点上。修饰组最典型:`[2] CONST '(anon)' type_id=1`(1.5 读过)就是一行 CONST 指向 type_id=1,再套 volatile 就再垫一行;01 资产覆盖表第 10 项的参数链(FUNC_PROTO→PTR→CONST→TYPEDEF→STRUCT)把这种链式堆叠演全了——kind 体系就是靠 type 字段把一串行穿成图。
+
+一个防混淆必须先钉死:本章有**两套 kind,互不相干**。本节这套是 BTF 类型 kind(uapi `btf.h:60-79`),回答「这条类型记录是什么」;三节还会遇到 CO-RE 重定位 kind(枚举 `bpf_core_relo_kind`,uapi `bpf.h:7262`),回答「这条重定位记录要补什么」。两套枚举分住两个 uapi 头文件,编号空间各自独立——三节展开后者,不再回来重讲。
+
+枚举注释里 kind_flag 那个 bit 31,原话「currently used by struct, union, enum, fwd and enum64」:只有带成员表/取值表的五种 kind 用它,用途一个——告诉解析器附表里的 offset 按哪种读法解释。这正是 2.3 的入口。
+
+### 2.3 成员表与位域:offset 按「位」记账
+
+STRUCT/UNION 的成员表是最常用的一张附表(include/uapi/linux/btf.h:122-132,v6.6.78):
+
+```c
+/* include/uapi/linux/btf.h:122-132(v6.6.78) */
+struct btf_member {
+	__u32	name_off;
+	__u32	type;
+	/* If the type info kind_flag is set, the btf_member offset
+	 * contains both member bitfield size and bit offset. The
+	 * bitfield size is set for bitfield members. If the type
+	 * info kind_flag is not set, the offset contains only bit
+	 * offset.
+	 */
+	__u32	offset;
+};
+```
+
+每个成员三个字段:名字、类型、偏移。偏移的单位是**位**,不是字节——这就是 dump 里 `bits_offset` 的底细。kind_flag 两种读法,配套两个宏(:138-139):
+
+- **kind_flag 未置**(结构体无位域成员):offset 是纯位偏移,值=字节偏移×8;
+- **kind_flag 已置**:offset 拆两段——高 8 位是位域宽度(`BTF_MEMBER_BITFIELD_SIZE`),低 24 位是位偏移(`BTF_MEMBER_BIT_OFFSET`)。
+
+01 实物先看无位域的一面。`bpftool btf dump file kinds.bpf.o` 里 STRUCT 'demo_dev' size=32 vlen=3 的成员行(clang 18 实测):
+
+```text
+[5] STRUCT 'demo_dev' size=32 vlen=3
+	'ifindex' type_id=6 bits_offset=0
+	'name' type_id=8 bits_offset=32
+	'caps' type_id=10 bits_offset=192
+```
+
+三个成员全按字节对齐,bits_offset 0/32/192 除以 8 正是字节偏移 0/4/24:name 在 ifindex 后第 4 字节,caps 在第 24 字节。对齐成员同样按位记账,只是值恰为 8 的倍数。
+
+位域成员才见真章。一个小探针:`struct my_type { int a; int b:3; int c:5; unsigned long long d; }`,再配一个外链接全局变量把它锚进 `.BTF`(01 资产「防优化」的同款手法),clang `-g -O2 -target bpf` 编译后 `bpftool btf dump file`,clang 18 实测:
+
+```text
+[1] STRUCT 'my_type' size=16 vlen=4
+	'a' type_id=2 bits_offset=0
+	'b' type_id=2 bits_offset=32 bitfield_size=3
+	'c' type_id=2 bits_offset=35 bitfield_size=5
+	'd' type_id=3 bits_offset=64
+```
+
+`b` 在位偏移 32、宽 3 位,`c` 在位偏移 35——**紧贴 b 的结尾排布**,这就是按位记账的本意;此刻 kind_flag 已置,bpftool 把原始 offset 拆成 bitfield_size/bits_offset 两段展示。内核文档 btf.rst 给过同款示例(struct t 三个位域成员,:994 一带),vmlinux 里也遍地都是:`bpftool btf dump file /sys/kernel/btf/vmlinux | grep -m2 bitfield_size`(本机实况,其他内核数值不同)。
+
+位域为什么值得单讲一拍?它给 CO-RE 添了活:读位域不能只补字节偏移,还得知道补完后的左/右移位数——三节的重定位 kind 里专门备了一对,届时重定位记录会与这个 offset 字段逐位对账。
+
+### 2.4 类型 ID 编址:数组下标,不是哈希
+
+编址规则,btf.rst :68-70 原话:「The type id 0 is reserved for void type...starting from id 1」——**void 占 0 号、类型区顺序解析、ID 从 1 依次递增**。01 资产是小尺寸实证:dump 35 行,ID 恰为 [1]…[35] 无空洞;vmlinux 是大尺寸实证:401978 行 dump,最大 ID `[170278]`(本机实况,其他内核数值不同)。
+
+ID 不只是行号,它还是**数组下标**:解析时类型区被拆成一条条记录按序装进数组,ID N 就是数组第 N 格。内核按 ID 取类型的入口是 `btf_type_by_id`(include/linux/btf.h:488 声明),实现在 kernel/bpf/btf.c:825(v6.6.78):
+
+```c
+/* kernel/bpf/btf.c:825-834(v6.6.78) */
+const struct btf_type *btf_type_by_id(const struct btf *btf, u32 type_id)
+{
+	while (type_id < btf->start_id)
+		btf = btf->base_btf;
+
+	type_id -= btf->start_id;
+	if (type_id >= btf->nr_types)
+		return NULL;
+	return btf->types[type_id];
+}
+```
+
+`return btf->types[type_id]`——数组下标寻址,O(1),无哈希无查找。1.2 埋的那句「内核用数组下标寻址(二节拆编码)」谜底就在这一行:12 字节定长头换来的正是随机访问的能力——记录不定长就只能顺序遍历,定长才能按下标直达。
+
+那个 while 值得停一下:`type_id < btf->start_id` 时换成 `btf->base_btf`,再减 `start_id` 才下标——这是 **split BTF** 的接续(1.3 的模块增量)。模块 BTF 解析的关键赋值(kernel/bpf/btf.c:5816-5818,v6.6.78):
+
+```c
+/* kernel/bpf/btf.c:5816-5818(v6.6.78) */
+	btf->base_btf = base_btf;
+	btf->start_id = base_btf->nr_types;
+	btf->start_str_off = base_btf->hdr.str_len;
+```
+
+模块第一个 ID = 基底(vmlinux)的类型总数:1.4 实况里模块首行 `[170279]` 紧接 vmlinux 最大 `[170278]`,机制就是这行——**两层不是两本独立说明书,是一本接续编页的合订本**,ID 命名空间跨层连号。
+
+「跨 Section 共享命名空间」是同一件事的小一号版:**一个 BTF blob 就是一套 ID 命名空间**,不按 ELF Section 分册。01 资产里 INT/PTR/STRUCT/VAR/DATASEC 混在 [1]…[35] 同一编号空间,`.rodata` 段变量与 FUNC 签名引用同一个 `int`;三个 DATASEC 排在编号末尾,引用的类型 ID 却散布全表。去重也挂在这套编址上:同一类型全 blob 只发一个 ID——kinds.bpf.o 里 `int` 只有一行 [6],被 struct 成员、VAR、ARRAY 处处引用。1.2 说的「去重后全局类型 ID 编址」到此闭环。
+
+编址还有边界:ID 20 位,上限 `BTF_MAX_TYPE = 0xfffff`(uapi btf.h:25),单个 blob 至多约百万类型;vlen 16 位(`BTF_MAX_VLEN = 0xffff`,:29)。本机 170278 离上限尚远,但「顺序解析、依次递增」意味着:**ID 只对所属 blob 有意义**——换内核换份 BTF,同一类型的编号就不同。156855 是本机坐标,不是宇宙常数(本机实况,其他内核数值不同)。
+
+### 2.5 教师视角:为什么 ID 而不是名字
+
+课堂论证,三个理由由弱到强:
+
+- **名字不可靠**。匿名结构体、CONST/PTR 这类包装记录一律 `'(anon)'`,无法按名索引;去重后的全表共享一个字符串表,同名 typedef 并不罕见。按 ID 寻址天然无歧义;
+- **名字不高效**。按名找类型要进字符串表取串逐字节比较,按 ID 找是数组下标一次命中(2.4 的 `btf->types[type_id]`);验证器处理指令时反复查类型,O(1) 与 O(名字长度) 的差距在这个位置是设计级的;
+- **记录要紧凑**。三节的重定位记录要在 `.BTF.ext` 里成千上万条,每条装一个 u32 足矣;改装名字就得配字符串偏移、加载期再做字符串比较——体积与解析成本双输。
+
+边界同样要讲:**ID 是 blob 内坐标,不是跨内核常数**。学生最容易把「task_struct id=156855」当可移植事实抄走——它只是本机这份 BTF 的顺序编号。这个「不可移植」不是缺陷而是分工:ID 负责 blob 内 O(1) 寻址,跨内核的类型对应交给 CO-RE 按名字与结构重建(三节的重定位、四节的候选查找)——两套机制各管一段,合起来才是「编译一次、处处运行」。
+
+**学生动手**,在 01 资产把本节内容逐一指认(均编译级,无 root):
+
+```console
+$ cd book/examples/chapter-08/01-btf-kinds && make
+$ bpftool btf dump file kinds.bpf.o     # 35 行逐行指认 kind,对照 README 覆盖表
+$ bpftool btf dump file /sys/kernel/btf/vmlinux | grep -m1 -E "^\[[0-9]+\] ENUM64"
+[9733] ENUM64 '(anon)' encoding=UNSIGNED size=8 vlen=40   # 本机实况
+```
+
+第一条对照 2.2 的四组表,把自编对象刻意覆盖的 11 类逐一认领;第三条从 vmlinux 抽样自编对象没有的 kind——ENUM64,枚举值超 32 位时的升级形态(size=8、vlen=40:40 个 64 位取值)。FWD/FLOAT/TYPE_TAG 的抽样命令与「别 grep 到 kind 枚举自身」那个坑,README 有完整交代。
+
+**检查点**(自测后看提示):
+
+1. `struct btf_type` 敢用一个 union 让 size 与 type 共用同一 4 字节,依据是什么?——提示:2.2 的四组表里,用 size 的六种与用 type 的十种是否互斥;再想想 1.2 立的那把「紧凑性」钥匙。
+2. 探针里 `'c'` 的 bits_offset=35、bitfield_size=5:这两个数的单位是什么?若把 bpftool 展示前的原始 offset 字段拿来,该怎么用 2.3 的两个宏拆开?——提示:位记账;高 8 位取宽度、低 24 位取偏移。
+3. 类型 ID 换个内核就变,三节的 CO-RE 重定位记录里为什么还敢记 type_id?——提示:2.4 的「blob 内坐标」;记录里的 type_id 是起点不是终点,四节的候选查找接下一棒。
+
+**独立示例**:本节实证面全在 [`01-btf-kinds/`](../examples/chapter-08/01-btf-kinds/)——多 kind 自编对象的逐行指认、类型 ID 编址观察、剩余 kind 的 vmlinux 抽样。
 
 <!--
 ## 三、CO-RE 编译期:从宏到重定位记录
