@@ -161,7 +161,7 @@ gen_btf()
 [2] CONST '(anon)' type_id=1
 ```
 
-  行格式先认三样:`[N]` 是**类型 ID**(从 1 起编址,void=0,编址法二节拆);`PTR`/`CONST` 是 **kind**(种类,下文沿用英文);`type_id=N` 指向被引用类型——BTF 的「图」就是这样一条条引用织出来的。顺着指针走两步试试:`[1]` PTR 指向 `type_id=3`,跳到 `[3]`;`[3]` 是 CONST,又指向 102965——两跳就落进了十万段位的大 ID,读 BTF 的基本功就此成形:看到 type_id 就跳过去,直到落到 INT/STRUCT 这类实体。全文件最大的一条:`[156855] STRUCT 'task_struct' size=9920 vlen=274`(size=结构体字节数,vlen=成员数;这几个数怎么读,二节解码;本机实况,其他内核数值不同);
+  行格式先认三样:`[N]` 是**类型 ID**(从 1 起编址,void=0,编址法二节拆);`PTR`/`CONST` 是 **kind**(种类,下文沿用英文);`type_id=N` 指向被引用类型——BTF 的「图」就是这样一条条引用织出来的。顺着指针走两步试试:`[1]` PTR 指向 `type_id=3`,跳到 `[3]`;`[3]` 是 CONST,又指向 102965——两跳就落进了十万段位的大 ID,读 BTF 的基本功就此成形:看到 type_id 就跳过去,直到落到 INT/STRUCT 这类实体。全表里最该认得的一条,自己 grep 一把就有:`bpftool btf dump file /sys/kernel/btf/vmlinux | grep "STRUCT 'task_struct'"` 给出 `[156855] STRUCT 'task_struct' size=9920 vlen=274`(size=结构体字节数,vlen=成员数;这几个数怎么读,二节解码;本机实况,其他内核数值不同);
 - **用法三,BTF 转 C**:`bpftool btf dump file /sys/kernel/btf/vmlinux format c`——把说明书翻译回 C 头文件,产物就是 vmlinux.h(本机 3500327 字节、166914 行、13897 个 struct 声明,本机实况)。第 7 章三个示例与第 9 章九个示例的 Makefile 里 `bpftool btf dump` 那条规则,机制本体就是这一行——[`02-vmlinux-h/`](../examples/chapter-08/02-vmlinux-h/) 把它拆成可复跑的脚本。
 
 **学生动手**两步,均编译级、无 root:
