@@ -232,7 +232,7 @@ base-ref: 8a11de8
 
 ### Task 11: 正文——「四、两台重定位引擎」
 
-- [ ] Task 11: 正文——「四、两台重定位引擎」
+- [x] Task 11: 正文——「四、两台重定位引擎」
 
 **tasks.md 条目**:矩阵②(libbpf relocation behavior)。
 
