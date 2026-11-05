@@ -360,9 +360,183 @@ $ bpftool btf dump file /sys/kernel/btf/vmlinux | grep -m1 -E "^\[[0-9]+\] ENUM6
 
 **独立示例**:本节实证面全在 [`01-btf-kinds/`](../examples/chapter-08/01-btf-kinds/)——多 kind 自编对象的逐行指认、类型 ID 编址观察、剩余 kind 的 vmlinux 抽样。
 
-<!--
 ## 三、CO-RE 编译期:从宏到重定位记录
--->
+
+一、二节拆的是说明书本身(2.1-2.4)。本节进编译期,兑现导读预告①的前半句——「重定位记录怎么来」。一句话立骨,后文为它作证:**clang 按本机 BTF 的偏移编译每一处字段访问,同时把「我用了哪个类型的哪个字段」登记成一条重定位记录,存进对象的 `.BTF.ext` 段**——偏移写进指令,含义写进记录;编译在本机做,修正留给加载期(四节)。
+
+### 3.1 问题陈述:老路是「每次启动重编」
+
+CO-RE 之前,跨内核跑 BPF 的主流是 BCC(BPF Compiler Collection,BPF 编译器集合):源码以文本发给目标机,现场调 clang 连着内核头一起编。老路三个代价:**头文件依赖**(内核头描述的是「这台机器装的源码树」的布局,错位就编不过或读错)、**每次启动重编**(编译在运行期,每次加载都付时延,目标机还得装 clang 与内核头)、**产物不可复用**(换内核重来)。CO-RE 的目标是一次清掉三件事:编译一次、处处运行。办法不是写死偏移、也不是搬走编译,而是**把偏移依赖显式化**:编译期照本机 BTF 编,同时记下每处访问的机器可读含义;加载期拿记录对目标 BTF 重算、补进改写量。记录怎么来是本节;怎么补,四节。
+
+### 3.2 工作流第一件:vmlinux.h——类型从哪来
+
+「照本机 BTF 编」的前提,是本机 BTF 变成 C 编译器吃得下的形态。1.5 用法三已给答案:`bpftool btf dump file /sys/kernel/btf/vmlinux format c` 把整本说明书翻译回一个 C 头文件——vmlinux.h(本机 3500327 字节、166914 行、13897 个 struct 声明,本机实况,其他内核数值不同;结构导读见 [`02-vmlinux-h/`](../examples/chapter-08/02-vmlinux-h/))。第 7 章三个示例与第 9 章九个示例的 Makefile 里同款 `bpftool btf dump` 规则,机制本体就是这一行——两章当「构建链第一环」用,02 资产拆它的机制。
+
+而这份头文件对 CO-RE 的真正意义在**文件头六行**:
+
+```c
+/* book/examples/chapter-08/02-vmlinux-h/vmlinux.h:1-6(本机生成实物) */
+#ifndef __VMLINUX_H__
+#define __VMLINUX_H__
+
+#ifndef BPF_NO_PRESERVE_ACCESS_INDEX
+#pragma clang attribute push (__attribute__((preserve_access_index)), apply_to = record)
+#endif
+```
+
+`preserve_access_index` 修饰**所有** record(结构体/联合体)——include 之后,每处 `task->pid` 都被 clang 自动配上「字段访问」重定位,无须手写标注(机制 3.4 拆)。第 2 章排错表给「换内核后字段读到错位数据」开的处方——「坚持 vmlinux.h + CO-RE 工作流,加载时由 libbpf 依据目标内核 BTF 重定位字段偏移」——「工作流」三个字,从本节起逐件兑现。
+
+### 3.3 工作流第二件:`-g`——没有它就没有 .BTF.ext(实证探针)
+
+类型有了,编译还得带开关:`-g`。内核文档原话:「The llvm is able to generate .BTF and .BTF.ext directly with -g for bpf target only」(Documentation/bpf/btf.rst:999,v6.6.78)——对 BPF 目标,llvm 靠 `-g` **直出** `.BTF` 与 `.BTF.ext`,不经 pahole(1.3 的「两条来路」)。不加 `-g` 会怎样?一枚最小探针见分晓:
+
+```c
+/* probe.c:最小探针,一个结构体、一次字段访问 */
+struct my_type { int a; int b; };
+
+int probe(struct my_type *t)
+{
+	return t->a + t->b;
+}
+```
+
+```console
+$ clang -O2 -target bpf -c probe.c -o probe_nog.o  # 不带 -g
+$ clang -g -O2 -target bpf -c probe.c -o probe_g.o  # 带 -g
+$ llvm-objdump -h probe_nog.o | tail -5            # 段表全部内容:
+  0               00000000 0000000000000000 
+  1 .strtab       00000033 0000000000000000 
+  2 .text         00000020 0000000000000000 TEXT
+  3 .llvm_addrsig 00000000 0000000000000000 
+  4 .symtab       00000048 0000000000000000 
+$ llvm-objdump -h probe_g.o                        # 摘录:其余 .debug_* 段略
+  4 .debug_info            0000005f 0000000000000000 DEBUG   # DWARF 也在
+ 11 .BTF                   000000c4 0000000000000000         # 类型图
+ 12 .BTF.ext               00000080 0000000000000000         # 记录的家
+ 13 .rel.BTF.ext           00000050 0000000000000000         # 作用于 .BTF.ext 自身的 ELF 重定位
+```
+
+(clang 18 实测;数值随版本浮动。)不带 `-g`:段表里除代码与符号表一无所有——**没有 `.BTF`,更没有 `.BTF.ext`,重定位记录无处安放**。带 `-g`:DWARF 一族与 BTF 家族并存(1.3 见过),三个段各司其职:`.BTF` 类型图(二节)、`.BTF.ext` 记录容器(3.5 拆内部)、`.rel.BTF.ext`(llvm 产、作用于 `.BTF.ext` **自身**的 ELF 重定位,本章不展开)。
+
+注意层级差:**`-g` 给的是容器,CO-RE 访问才填记录**。探针没有 CO-RE 访问,`.BTF.ext`(128 字节)里装的是 func_info/line_info,core_relo 小节长 0——拿 [`04-relo-slicer/`](../examples/chapter-08/04-relo-slicer/) 切它,站 3 直接 FAIL:「core_relo 小节仅 0 字节……记录数=0」(exit 1,clang 18 实测)。03 的 core.bpf.o 同样带 `-g`,`.BTF.ext` 却是 380 字节——多出的正是 core_relo 小节(3.8 实物);「漏了 `-g`」因此不报错不告警,可移植性在源头就被抽走。
+
+### 3.4 工作流第三件:内建与宏族——一行源码如何变成记录
+
+登记这个动作,机器做的是内建(builtin,编译器内置的特殊函数,不经头文件声明),人写的是宏;两头在 `tools/lib/bpf/bpf_core_read.h` 会师(v6.6.78)——**宏族每个成员都是某个内建的用户界面**。先认三个内建:
+
+- `__builtin_preserve_access_index(表达式)`:给整个字段访问表达式配重定位——`bpf_core_read` 的定义(:246-247)即一例:`bpf_probe_read_kernel(dst, sz, (const void *)__builtin_preserve_access_index(src))`;
+- `__builtin_preserve_field_info(访问, 信息项)`:捕捉字段某一方面的信息(偏移/大小/存在性/符号性/位域移位),信息项由宏选定;头文件开头的 `__CORE_RELO`(:41)是它的薄封装;
+- `__builtin_preserve_type_info` 与 `__builtin_preserve_enum_value`:类型级与枚举值级同族,3.6 的类型组/枚举值组各归其位。
+
+vmlinux.h 文件头的 pragma 等价于给全部 record 套上 `__attribute__((preserve_access_index))`——llvm_reloc.rst 原话:「Field offset relocations are generated automatically when ``__attribute__((preserve_access_index))`` is used」(:446-447,v6.6.78)。于是字段访问有**两条来路**:直接访问走 pragma「批发」,每处自动产记录;宏族走「零售」,显式包裹并经 `bpf_probe_read_kernel`(helper,辅助函数)读取,适合不能直接解引用的程序类型。03 的 `bpf_get_current_task_btf()` 给的是可信指针,直接读也合法;示例统一走宏族,记录显性可见。
+
+宏族逐个点名(行号均在 bpf_core_read.h,v6.6.78):
+
+| 宏 | 干什么 | 对应 kind(3.6) |
+|---|---|---|
+| `bpf_core_read`(:246)/`BPF_CORE_READ_INTO`(:351)/`BPF_CORE_READ`(:443) | 读值;链式访问逐段分解(:427-436 注释给了四步:逐段换根,末段取值) | FIELD_BYTE_OFFSET(0) |
+| `bpf_core_read_str`(:257)/`BPF_CORE_READ_STR_INTO`(:387) | 读字符串,NUL 截断拷贝 | FIELD_BYTE_OFFSET(0) |
+| `bpf_core_field_exists`(:132) | 字段在目标内核是否存在(两种形式:`p->f` 与 `struct t, f`) | FIELD_EXISTS(2) |
+| `bpf_core_type_exists`(:185)/`bpf_core_type_matches`(:195)/`bpf_core_type_size`(:205) | 类型存在/类型匹配/类型大小 | TYPE_EXISTS(8)/TYPE_MATCHES(12)/TYPE_SIZE(9) |
+| `bpf_core_enum_value_exists`(:216)/`bpf_core_enum_value`(:227) | 枚举值存在/枚举值取值 | ENUMVAL_EXISTS(10)/ENUMVAL_VALUE(11) |
+| `BPF_CORE_READ_BITFIELD_PROBED`(:70)/`BPF_CORE_READ_BITFIELD`(:88) | 读位域:前者经 probe 读(不支持直接内存读的程序类型),后者直接读;BYTE_OFFSET 定位、BYTE_SIZE 定宽、SIGNED 与移位量拼值 | 0/1/3/4/5 成组 |
+
+位域一行回收 2.3 的伏笔——「读位域不能只补字节偏移,还得知道左/右移位数」:五个 kind 成对出动,`BPF_CORE_READ_BITFIELD` 的实现(:88-113)逐行演明:定位、定宽、左移、按符号右移。
+
+埋线回收(第 2 章排错表第三组:「字段在编译期不存在→用 CO-RE 的字段存在性查询构造兼容分支」):`bpf_core_field_exists`(:132)就是那个查询,03 的兼容分支是本地实物——`kstack_offset` 在本机内核 BTF 里是 task_struct 成员(成员序 258、字节偏移 9544,本机实况),在 6.6.78 走读树里同名变量是 per-CPU 变量而非 task_struct 成员(03 资产考证);同一份 core.bpf.o 在两种内核上各自判、各走各的分支(运行行为预期档,03 README)。工作流至此三件齐:类型(vmlinux.h)、开关(`-g`)、表达(内建/宏族);第四件(记录怎么被消费)是四节的主题,接口钉住:**记录是登记不是修正,修正发生在加载期**。
+
+### 3.5 记录的家:.BTF.ext 与四字段
+
+记录长什么样?先看容器。btf.rst 4.2 节定义了 `.BTF.ext`(:726 起):「The .BTF.ext section encodes func_info, line_info and CO-RE relocations which needs loader manipulation before loading into the kernel」(:729-730,v6.6.78)。头部是 magic(0xEB9F,与 `.BTF` 同门牌)+版本+hdr_len,其后三个信息小节(func_info/line_info/core_relo);**core_relo 两字段是头的可选部分**——04 站 2 实物:core_relo_off=272、len=76;3.3 探针对象 len=0。头内偏移一律相对**头末尾**,读段易踩的坑。
+
+记录本体,uapi 一锤定音(include/uapi/linux/bpf.h:7326-7331,v6.6.78):
+
+```c
+/* include/uapi/linux/bpf.h:7326-7331(v6.6.78) */
+struct bpf_core_relo {
+	__u32 insn_off;
+	__u32 type_id;
+	__u32 access_str_off;
+	enum bpf_core_relo_kind kind;
+};
+```
+
+16 字节四字段(uapi 注释 :7282-7296 逐条交代):
+
+- **`insn_off`**:要补丁的指令在哪——ELF 层是段内**字节**偏移(72/8=9,正是 03 README 摘录里 `9: r1 = 0xaf0` 那条;内核 API 层按指令条数计,四节);
+- **`type_id`**:访问链根实体的类型 ID,**对象自己 BTF 里的坐标**——03 对象里 task_struct 是 `[12]`,内核 BTF 里是 `[156855]`(本机实况);2.4 的「blob 内坐标」在此兑现:加载期按名字与结构重建对应,不照搬 ID;
+- **`access_str_off`**:访问链字符串的偏移,**指向主 `.BTF` 的字符串区**——`.BTF.ext` 没有自己的字符串区(btf.rst:「Instead of type/string section, it contains func_info, line_info and core_relo sub-sections」,:754-756;uapi 同口径,:7287)。实证:libbpf 解析失败路径用 `btf__name_by_offset(local_btf, relo->access_str_off)` 取串(relo_core.c:1308,v6.6.78),`local_btf` 就是对象的主 `.BTF`;
+- **`kind`**:这条记录要补什么,3.6 的枚举。
+
+### 3.6 十三种 kind 与访问字符串
+
+kind 全集是 uapi 的又一段枚举(include/uapi/linux/bpf.h:7262-7276,v6.6.78),编号 0–12 共 **13 种**。先把 2.2 的防混淆再敲一遍:这不是 BTF 类型 kind(uapi `btf.h:60-79`,19 种,答「这条类型记录是什么」),而是 CO-RE 重定位 kind(答「这条记录要补什么」)——两个枚举分住两个 uapi 头,编号空间独立,数量也不同(19 对 13)。13 种按记录对象分三组:
+
+| 组 | kind(编号) | 一句话职责 |
+|---|---|---|
+| 字段类(6) | FIELD_BYTE_OFFSET(0)/FIELD_BYTE_SIZE(1)/FIELD_EXISTS(2)/FIELD_SIGNED(3)/FIELD_LSHIFT_U64(4)/FIELD_RSHIFT_U64(5) | 字段字节偏移/大小/存在/符号性/位域左移/位域右移——3.4 的读值、读串、兼容分支、位域全落这组 |
+| 类型类(5) | TYPE_ID_LOCAL(6)/TYPE_ID_TARGET(7)/TYPE_EXISTS(8)/TYPE_SIZE(9)/TYPE_MATCHES(12) | 本机类型 ID/目标类型 ID/类型存在/类型大小/类型匹配;TYPE_MATCHES 是较新内核追加的匹配语义(:7275) |
+| 枚举值类(2) | ENUMVAL_EXISTS(10)/ENUMVAL_VALUE(11) | 枚举值存在/枚举值整数值 |
+
+04 切片器的名称表(站 4)按这份枚举打印,断言口径从严取 [0,11](出现 12 按越界 FAIL 并点名)——TYPE_MATCHES 知道在 13 号位即可。
+
+字段类记录怎么表达「访问了哪个字段」?访问字符串(access string):冒号分隔的下标链(:7289-7292),首段是根下标(指针根解引用一次),其后每段是成员序或数组下标。uapi 三例(:7307-7310):
+
+```text
+&s->a      → "0:0"      (a 是字段 #0)
+&s->b[5]   → "0:1:0:5"  (匿名结构体 #1,b 是其中 #0,取元素 5)
+&s[10]->b  → "10:1"     (指针当数组用,根下标 10)
+```
+
+类型类记录的串恒为 `"0"`(:7293),枚举值类是值在枚举里的序号(:7294-7295)。解析语义在 libbpf 的 `bpf_core_parse_spec`(relo_core.c:263,v6.6.78):拆下标链、沿 BTF 逐层核对、累计偏移,产出访问规约(spec,访问链的机器可读形态);给人看的反方向是 `bpf_core_format_spec`(:1156),输出形如 `[<type-id>] (<type-name>) + <raw-spec> => <offset>@<spec>`。04 站 5 按同一语义解码:`"0:94"` → task_struct 成员 #94=pid。
+
+一条记录的一生至此凑齐:编译期 clang 发射,加载期按目标 BTF 重算、补进改写量。补**哪个字段**按指令类决定(llvm_reloc.rst :260-264,v6.6.78):ALU/LD 类补 imm(立即数,指令内直接编码的常数),LDX/STX/ST 类补 offset,JMP 类不补。03 的四条记录全是 `r1 = <imm>` 形态——工作流第四件(加载期补丁),四节开讲。
+
+### 3.7 教师视角:为什么记录在 .BTF.ext,而不是普通 ELF 重定位
+
+**教师视角**。llvm_reloc.rst 先把答案框住:「These relocation records are not related to ELF relocations and are encoded in .BTF.ext section」(:250-252,v6.6.78)。课堂论证三层:
+
+- **语义装不下**。普通 ELF 重定位补「把符号地址填进格子」;CO-RE 补的是语义值:字段偏移、存在性判定、类型大小、枚举取值,多数连着访问链一起算——四字段+下标链是自描述的小协议,塞进 ELF 的符号/加数模型两边都读不懂;
+- **消费者不同**。CO-RE 记录的第一读者是加载器与验证器,要的是「按 kind 分派、沿链重算」的结构化数据;`.BTF.ext` 把同类记录按程序段聚拢,加载器一遍收集;
+- **生命周期不同**。`.rel.BTF.ext` 恰好反衬主次:llvm 借它把「对象内部的未定值」填进记录;填好之后 CO-RE 的舞台就与 ELF 重定位无关——前者管对象内部自洽,后者管与目标内核对接。
+
+再点一层:记录让编译期与运行期**彻底解耦**——编译器只保证「按本机 BTF 是对的」,对不对得起目标内核,加载期对账;3.1 的目标落到格式层,就是这个段。
+
+### 3.8 实物判读:03 对象的四条记录(学生动手)
+
+**学生动手**,两步,编译级、无 root:
+
+```console
+$ cd book/examples/chapter-08/03-core-read && make  # 四步链零告警(逐条见 03 README)
+$ llvm-objdump -dr core.bpf.o | grep -F "CO-RE"  # 注解版:4 条记录
+		0000000000000048:  CO-RE <byte_off> [12] struct task_struct::pid (0:94)
+		0000000000000090:  CO-RE <byte_off> [12] struct task_struct::comm (0:129)
+		00000000000000c8:  CO-RE <field_exists> [12] struct task_struct::kstack_offset (0:258)
+		00000000000000e8:  CO-RE <byte_off> [12] struct task_struct::kstack_offset (0:258)
+$ cd ../04-relo-slicer && python3 slice-relos.py ../03-core-read/core.bpf.o | tail -4
+RELOS=4
+kind 分布:BPF_CORE_FIELD_BYTE_OFFSET×3、BPF_CORE_FIELD_EXISTS×1
+断言:记录数 > 0(实测 4)PASS;全部 kind ∈ [0,11] PASS
+```
+
+注解版给「哪条指令挂了哪条记录」;切片器给同一批记录的字节版(站 3 摘录,本机实况):
+
+| # | insn_off | type_id | access_str_off | kind | 访问链 | 源码 |
+|---|---|---|---|---|---|---|
+| 0 | 72 | 12 | 11446 | 0 | 0:94 | core.bpf.c:81 读 pid |
+| 1 | 144 | 12 | 11487 | 0 | 0:129 | :83 读 comm |
+| 2 | 200 | 12 | 11540 | 2 | 0:258 | :100 问存在 |
+| 3 | 232 | 12 | 11540 | 0 | 0:258 | :102 读 kstack_offset |
+
+读三处细节:①四条 type_id 全是 12——同一根类型,三条链分指成员;#2 与 #3 链相同,一条问存在、一条取偏移;②立即数:0/1/3 号是本机字节偏移(0xaf0=2800、0xd10=3344、0x2548=9544),2 号是占位的 1——存在性补的是「有则 1、无则 0」,补什么值编译期无从知道,这正是 kind 2 存在的意义;③13 种 kind 本对象只用了 2 种:**没读位域就没有 4/5**。切片器其余三站补注解版没有的:站 1 段布局(`.BTF.ext` 380 字节,对照 3.3 探针的 128 字节,多出的是 core_relo 小节)、站 2 段头(core_relo_off=272/len=76)、站 5 逐条解码(位偏移 22400=字节 2800,与立即数对账)。
+
+**检查点**(自测后看提示):
+
+1. 只删 `-g`、源码一字不动,会发生什么?在哪一步最先暴露?——提示:3.3 探针;无 `.BTF.ext` 即无记录可补,证据编译期就有(`llvm-objdump -h`)。
+2. 记录里 `access_str_off=11540` 指向的字符串住在哪?`.BTF.ext` 自己有字符串区吗?——提示:3.5;主 `.BTF` 的字符串区;没有(btf.rst :754;relo_core.c:1308 取串用 local_btf)。
+3. 记录里 type_id=12,内核 BTF 里 task_struct 是 156855——加载期凭什么对上?——提示:2.4 的「blob 内坐标」;12 只是本地根类型坐标,按名字与结构重建对应是四节的事。
+
+**独立示例**:本节两件资产——运行型示例 [`03-core-read/`](../examples/chapter-08/03-core-read/)(`BPF_CORE_READ` 闭环与兼容分支,编译级全链)与切片器 [`04-relo-slicer/`](../examples/chapter-08/04-relo-slicer/)(`.BTF.ext` 五站切片,`RELOS=4`)。
 
 <!--
 ## 四、两台重定位引擎
