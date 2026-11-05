@@ -220,7 +220,7 @@ base-ref: 8a11de8
 
 ### Task 10: 正文——「三、CO-RE 编译期:从宏到重定位记录」
 
-- [ ] Task 10: 正文——「三、CO-RE 编译期:从宏到重定位记录」
+- [x] Task 10: 正文——「三、CO-RE 编译期:从宏到重定位记录」
 
 **tasks.md 条目**:矩阵①(CO-RE relocation)+②+③(vmlinux.h 工作流)。
 
