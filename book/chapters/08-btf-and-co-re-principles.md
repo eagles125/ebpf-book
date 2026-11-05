@@ -546,9 +546,9 @@ kind 分布:BPF_CORE_FIELD_BYTE_OFFSET×3、BPF_CORE_FIELD_EXISTS×1
 
 ### 4.1 用户态引擎:collect 与 relocate
 
-libbpf 引擎嵌在 `bpf_object__load` 的加载链里(tools/lib/bpf/libbpf.c:7938-7946,v6.6.78),两站:
+libbpf 引擎两站分居两阶段:collect 在**对象打开期**:`bpf_object_open`(libbpf.c:7380,v6.6.78)于 :7457 调 `bpf_object__collect_relos`(:6736),分发点 :6763;relocate 嵌在 `bpf_object__load` 加载链(:7923 起,调用点 :7945):
 
-- **collect**:`bpf_object__collect_prog_relos`(libbpf.c:4236,v6.6.78)收集 ELF 重定位节(分发点 :6763);三节拆的 `.BTF.ext` 记录更早入场:对象初始化时 `btf_ext__new`(:2849)解析出 `core_relo_info`(:2861),relocate 时按节取用;
+- **collect**:`bpf_object__collect_prog_relos`(libbpf.c:4236,v6.6.78)收集程序节的 ELF 重定位;三节拆的 `.BTF.ext` 记录同在打开期先行备好:`btf_ext__new`(:2849)解析出 `core_relo_info`(:2861),relocate 时按节取用;
 - **relocate**:`bpf_object__relocate_core`(libbpf.c:5783,v6.6.78),由 `bpf_object__relocate`(:6519)调用(:6526)。进门先看 `core_relo_info.len`,为 0 直接返回(:5796);有则建候选缓存(:5808),逐节逐条处理。
 
 分叉在循环体内(libbpf.c:5861-5878,v6.6.78):先 `record_relo_core`(:5861)把记录挂上程序,随后——
@@ -559,15 +559,15 @@ libbpf 引擎嵌在 `bpf_object__load` 的加载链里(tools/lib/bpf/libbpf.c:79
 				continue;
 ```
 
-`gen_loader` 不在场(普通骨架)→ 当场 resolve(:5871 `bpf_core_resolve_relo`)、当场 patch(:5878 `bpf_core_patch_insn`),`bpf_object__load` 返回时指令已不是编译期那批字节;在场(轻骨架)→ 登记完 `continue`(:5868),补丁权让给内核(4.4)——这一行就是「谁补」分流的全部代码证据。
+`gen_loader` 不在场(普通骨架)→ 当场 resolve(:5871 `bpf_core_resolve_relo`)、当场 patch(:5878 `bpf_core_patch_insn`),`bpf_object__load` 返回时指令已不是编译期那批字节;在场(轻骨架)→ 登记完 `continue`(:5868),补丁权让给内核(4.4)——「谁补」分流的全部代码证据。
 
 ### 4.2 补丁四步与失败语义
 
 `bpf_core_resolve_relo`(libbpf.c:5739)总装四步,解算核心在 relo_core.c(v6.6.78,下列行号均该文件):
 
-1. **候选查找** `bpf_core_find_cands`(libbpf.c:5604):目标 BTF 先 vmlinux、后模块(:5631/:5649);按「本质名」匹配——类型名剥掉 `___flavor` 式后缀再比(:5623);
-2. **兼容检查** `__bpf_core_types_are_compat`(relo_core.c:146):递归逐成员比对——STRUCT/UNION 看成员布局,PTR 沿指向下钻,FUNC_PROTO 比参数表;按名匹配的宽口径是 `__bpf_core_types_match`(:1544)。同名不等于同构,这一步挡「名字撞车」;
-3. **计算** `bpf_core_calc_relo_insn`(relo_core.c:1280):`bpf_core_parse_spec`(:263,三节 3.6)把访问字符串拆成本地规约,逐候选套算;多候选必须同答案,偏移或决策有歧义即失败(:1365/:1375);TYPE_ID_LOCAL 例外,直接取本地类型 ID(:1319-1327);
+1. **候选查找** `bpf_core_find_cands`(libbpf.c:5604):目标 BTF 先 vmlinux 后模块(:5631/:5649);按「本质名」匹配——剥掉 `___flavor` 式后缀再比(:5623);
+2. **兼容检查** `__bpf_core_types_are_compat`(relo_core.c:146):递归逐成员比对——STRUCT/UNION 看成员布局,PTR 沿指向下钻,FUNC_PROTO 比参数表,同名不等于同构;按名匹配的宽口径 `__bpf_core_types_match`(:1544);
+3. **计算** `bpf_core_calc_relo_insn`(relo_core.c:1280):`bpf_core_parse_spec`(:263,三节 3.6)拆访问字符串成本地规约,逐候选套算;多候选必须同答案,偏移或决策有歧义即失败(:1365/:1375);TYPE_ID_LOCAL 例外,直接取本地类型 ID(:1319-1327);
 4. **补丁** `bpf_core_patch_insn`(relo_core.c:1024):按指令类改写 imm 或 offset(3.6 的 llvm_reloc.rst 口径);`poison` 在案则把指令改写成非法 helper 调用(:1033-1042)。
 
 失败语义(预期口径,全部在加载期暴露):
@@ -598,7 +598,7 @@ libbpf 引擎嵌在 `bpf_object__load` 的加载链里(tools/lib/bpf/libbpf.c:79
 - **候选**:持 `cand_cache_mutex` 调 `bpf_core_find_cands`(:8453;函数头 :8336)——先 `bpf_get_btf_vmlinux()`(:8347),按本质名在 vmlinux 找同名(:8360),落空再遍历模块 BTF(:8391/:8400);锁从查缓存持到 BTF 指针抄进候选列表(:8475,防模块 BTF 半路卸载);
 - **算与补**:`bpf_core_calc_relo_insn`(:8482)、`bpf_core_patch_insn`(:8487)——注意传的是 `relo->insn_off / 8`:三节 3.5 埋的「内核 API 层按指令条数计」在此对账——attr 里的 insn_off 仍是字节坐标(uapi 注释原话 "instruction offset (in bytes)",bpf.h:7283),但必须落在指令边界,内核进门即折成指令条数,此后全程按条记账;轻骨架反向,登记时把下标乘 8 折回字节(4.4)。
 
-兼容判定内核侧是 `bpf_core_types_are_compat`(:8094),递归深度上限 2(:8073);libbpf 侧同名包装传 32(libbpf.c:5686)。同一套比对规则与 kind 语义,两侧各自实现、各自调参,靠 uapi 记录结构对齐行为——「逻辑同源、各自维护,接口对齐 uapi」的实物注脚。
+兼容判定内核侧是 `bpf_core_types_are_compat`(:8094),递归深度上限 2(:8073);libbpf 侧同名包装传 32(libbpf.c:5686)。同一套比对规则与 kind 语义,两侧各自实现、各自调参,靠 uapi 记录结构对齐行为——「逻辑同源、各自维护,接口对齐 uapi」的注脚。
 
 ### 4.4 谁在用内核态:轻骨架与 gen_loader
 
@@ -611,16 +611,16 @@ CO-RE 记录在轻骨架路径的四站:
 3. **提交**:`bpf_object_load_prog` 提交点分叉(libbpf.c:6953-6959)——gen 在场不真发系统调用,改调 `bpf_gen__prog_load`(gen_loader.c:934):attr 三连在 :969-972(rec_size= `sizeof(struct bpf_core_relo)`、cnt=条数、数组装入数据 blob);attr 存 blob 内偏移而非内核指针,`emit_rel_store`(:990)编成运行时存储指令;
 4. **内核补丁**:加载器程序运行,`bpf_sys_bpf(BPF_PROG_LOAD, attr)` 一发,记录从 4.3 收件窗口进来,由内核引擎补**目标程序**的指令。
 
-一句口径收束:**普通骨架 libbpf 补丁,轻骨架内核补丁**。记录同一种,通道同一条,补丁对象不同——前者改 libbpf 手里将要提交的指令数组,后者改加载器程序 blob 里带着的目标程序指令。
+一句口径收束:**普通骨架 libbpf 补丁,轻骨架内核补丁**。记录同一种,通道同一条,补丁对象不同——前者改 libbpf 将要提交的指令数组,后者改加载器程序 blob 里的目标程序指令。
 
 ### 4.5 教师视角:为什么内核也要一台
 
 **教师视角**。学生最常问:libbpf 明明能补,内核何必再造一台?论证两层:
 
-- **场景**:轻骨架的卖点是加载路径极简——骨架产物缩到几十 KB、不带 libbpf 全套依赖,目标机上没有 libbpf;补丁的活总要有人干,只能在内核接;
+- **场景**:轻骨架的卖点是加载路径极简——骨架产物缩到几十 KB、不带 libbpf 全套依赖;补丁的活总要有人干,只能在内核接;
 - **时序**:加载器程序在内核里运行时,目标程序的字节已在内核手里;`bpf_sys_bpf` 是同步调用,attr 进门就是 verifier 的地界,「先回用户态补一趟」在时序上不存在。引擎长在内核,是时序决定的,不是偏好。
 
-顺带纠正一个误读:「两台引擎」不是两套语义——kind 表一张(uapi bpf.h:7262)、记录结构一个(:7326)、失败口径一套;差异只在壳层与调参(4.3 的深度 32 对 2)。**协议统一,实现分治**。
+纠正一个误读:「两台引擎」不是两套语义——kind 表一张(uapi bpf.h:7262)、记录结构一个(:7326)、失败口径一套;差异只在壳层与调参(4.3 的深度 32 对 2)。**协议统一,实现分治**。
 
 ### 4.6 学生动手:05 五站实录
 
