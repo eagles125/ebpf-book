@@ -139,7 +139,7 @@ gen_btf()
 
 `/sys/kernel/btf/` 下是**双层**结构:一层主说明书(vmlinux),一层增量(每个已加载模块一个文件)。本机实况(其他内核数值不同):
 
-- **vmlinux**:7119843 字节、mode 444 全局可读——CO-RE 的重定位跑在用户态 libbpf 里,说明书全局可读,无特权进程也读得到它;
+- **vmlinux**:7119843 字节、mode 444 全局可读——普通骨架(常规 skeleton 加载路径)的 CO-RE 重定位跑在用户态 libbpf 里,说明书全局可读,无特权进程也读得到它;轻骨架的补丁由内核完成,见四节;
 - **模块**:每个已加载模块一个小文件,抽样 `aesni_intel` 仅 5408 字节——split BTF 只记增量,与 vmlinux 的 7119843 字节差三个数量级;
 - **文件总数随已加载模块集浮动**:本章设计基线实测 110(1 个 vmlinux+109 个模块),成稿复查 109(1+108)——模块加载/卸载,窗口就变;00-env ③ 段每次实跑重新计数。这正是「本机实况」标注要防的事:把快照数当常数。
 
@@ -538,9 +538,140 @@ kind 分布:BPF_CORE_FIELD_BYTE_OFFSET×3、BPF_CORE_FIELD_EXISTS×1
 
 **独立示例**:本节两件资产——运行型示例 [`03-core-read/`](../examples/chapter-08/03-core-read/)(`BPF_CORE_READ` 闭环与兼容分支,编译级全链)与切片器 [`04-relo-slicer/`](../examples/chapter-08/04-relo-slicer/)(`.BTF.ext` 五站切片,`RELOS=4`)。
 
-<!--
 ## 四、两台重定位引擎
--->
+
+三节结尾钉了一句:**记录是登记不是修正,修正发生在加载期**。本节兑现它:导读预告①的后半句(第 2 章 1.6 「跨版本访问由 CO-RE 重定位在加载时修正」的「加载时」)与第 7 章总结的「重定位何时完成」,答案是**加载期**。同一个加载动作里两台引擎轮值:普通骨架由 libbpf 在用户态补;轻骨架(light skeleton,把加载流程本身编成 BPF 程序的生成式骨架方案)由内核在验证期补。
+
+两台引擎吃的记录同一种(三节的四字段 `struct bpf_core_relo`),通道同一条(uapi),两侧解算逻辑同源、各自维护,接口对齐 uapi——差异只在壳层:谁来收集、缓存、接线。
+
+### 4.1 用户态引擎:collect 与 relocate
+
+libbpf 引擎嵌在 `bpf_object__load` 的加载链里(tools/lib/bpf/libbpf.c:7938-7946,v6.6.78),两站:
+
+- **collect**:`bpf_object__collect_prog_relos`(libbpf.c:4236,v6.6.78)收集 ELF 重定位节(分发点 :6763);三节拆的 `.BTF.ext` 记录更早入场:对象初始化时 `btf_ext__new`(:2849)解析出 `core_relo_info`(:2861),relocate 时按节取用;
+- **relocate**:`bpf_object__relocate_core`(libbpf.c:5783,v6.6.78),由 `bpf_object__relocate`(:6519)调用(:6526)。进门先看 `core_relo_info.len`,为 0 直接返回(:5796);有则建候选缓存(:5808),逐节逐条处理。
+
+分叉在循环体内(libbpf.c:5861-5878,v6.6.78):先 `record_relo_core`(:5861)把记录挂上程序,随后——
+
+```c
+/* tools/lib/bpf/libbpf.c:5868-5869(v6.6.78) */
+			if (prog->obj->gen_loader)
+				continue;
+```
+
+`gen_loader` 不在场(普通骨架)→ 当场 resolve(:5871 `bpf_core_resolve_relo`)、当场 patch(:5878 `bpf_core_patch_insn`),`bpf_object__load` 返回时指令已不是编译期那批字节;在场(轻骨架)→ 登记完 `continue`(:5868),补丁权让给内核(4.4)——这一行就是「谁补」分流的全部代码证据。
+
+### 4.2 补丁四步与失败语义
+
+`bpf_core_resolve_relo`(libbpf.c:5739)总装四步,解算核心在 relo_core.c(v6.6.78,下列行号均该文件):
+
+1. **候选查找** `bpf_core_find_cands`(libbpf.c:5604):目标 BTF 先 vmlinux、后模块(:5631/:5649);按「本质名」匹配——类型名剥掉 `___flavor` 式后缀再比(:5623);
+2. **兼容检查** `__bpf_core_types_are_compat`(relo_core.c:146):递归逐成员比对——STRUCT/UNION 看成员布局,PTR 沿指向下钻,FUNC_PROTO 比参数表;按名匹配的宽口径是 `__bpf_core_types_match`(:1544)。同名不等于同构,这一步挡「名字撞车」;
+3. **计算** `bpf_core_calc_relo_insn`(relo_core.c:1280):`bpf_core_parse_spec`(:263,三节 3.6)把访问字符串拆成本地规约,逐候选套算;多候选必须同答案,偏移或决策有歧义即失败(:1365/:1375);TYPE_ID_LOCAL 例外,直接取本地类型 ID(:1319-1327);
+4. **补丁** `bpf_core_patch_insn`(relo_core.c:1024):按指令类改写 imm 或 offset(3.6 的 llvm_reloc.rst 口径);`poison` 在案则把指令改写成非法 helper 调用(:1033-1042)。
+
+失败语义(预期口径,全部在加载期暴露):
+
+- **目标 BTF 找不到 → -ESRCH**:`btf__load_vmlinux_btf` 遍历完候选路径一无所获,pr_warn "failed to find valid kernel BTF" 后返回 -ESRCH(tools/lib/bpf/btf.c:4803-4804,v6.6.78);带 CO-RE 记录的对象必触发装载——`obj_needs_vmlinux_btf` 见 core_relo 记录即真(libbpf.c:3045,判定 :3053);
+- **记录对不上本地 BTF → -EINVAL**:type_id 越界、根类型无名字、访问串解析失败(libbpf.c:5617-5622;relo_core.c:1301-1313);
+- **候选列表为空 → 不算错,按 kind 分流**:查找成功但目标 BTF 无同名类型,relo_core.c:1395-1412 的注释把这定性为「可能是预期」:EXISTS 类补 0,其余把指令 poison(投毒,libbpf 术语:改写成调用非法 helper 的指令,让验证器在日志里点名)——死代码被验证器消灭,活代码加载失败并指到指令号。
+
+### 4.3 内核态引擎:attr 载体、verifier 收件窗口与 bpf_core_apply
+
+记录怎么进内核?uapi 载体,`BPF_PROG_LOAD` attr 尾部的三字段(include/uapi/linux/bpf.h:1463-1466,v6.6.78):
+
+```c
+/* include/uapi/linux/bpf.h:1463-1466(v6.6.78) */
+		__u32		core_relo_cnt;	/* number of bpf_core_relo */
+		__aligned_u64	fd_array;	/* array of FDs */
+		__aligned_u64	core_relos;
+		__u32		core_relo_rec_size; /* sizeof(struct bpf_core_relo) */
+```
+
+与 func_info/line_info 同款「计数+指针+单条尺寸」三件套。为什么是**条数+每条尺寸**、不写死数组类型?uapi 结构体会演进,`core_relo_rec_size` 是**协商字段**:用户态自报每条多大,内核按自己认识的尺寸取交集——`expected_size = sizeof(struct bpf_core_relo)`,`ncopy = min(expected_size, rec_size)`(verifier.c:15746-15747);多出的尾部扩充字段必须全零(`bpf_check_uarg_tail_zero` :15754,注释原话 "future proofing when sizeof(bpf_core_relo) changes" :15753),非零则 -E2BIG、内核把认识的尺寸写回 attr;上限 252 字节(:15716,与 func_info 同帽)。
+
+收件窗口 `check_core_relo`(kernel/bpf/verifier.c:15718,v6.6.78):从 `prog->aux->btf` 组 `bpf_core_ctx`(verifier 日志+程序 BTF),计数为 0 直接放行(:15733-15735);注释(:15750-15752)点破差别:**取一条、补一条**(原话 "copy and apply each CO-RE relocation record one at a time")——每条补丁直接改写正在验证的指令,出错必须立刻停。循环体内三道门:尾部校验(:15754)、insn_off 须为 8 的倍数且不越程序长度(:15771,否则 -EINVAL),然后递给引擎(:15778);总接线在 `check_btf_info`(:15817)。
+
+引擎本体 `bpf_core_apply`(kernel/bpf/btf.c:8423,v6.6.78),一条记录三步走完:
+
+- **先验**:除 TYPE_ID_LOCAL 外都要候选(:8426);按 3 份 spec 开约 4k 工作区(:8433-8437);type_id 查不到即 -EINVAL(:8440-8445,"bad type id");
+- **候选**:持 `cand_cache_mutex` 调 `bpf_core_find_cands`(:8453;函数头 :8336)——先 `bpf_get_btf_vmlinux()`(:8347),按本质名在 vmlinux 找同名(:8360),落空再遍历模块 BTF(:8391/:8400);锁从查缓存持到 BTF 指针抄进候选列表(:8475,防模块 BTF 半路卸载);
+- **算与补**:`bpf_core_calc_relo_insn`(:8482)、`bpf_core_patch_insn`(:8487)——注意传的是 `relo->insn_off / 8`:三节 3.5 埋的「内核 API 层按指令条数计」在此对账——attr 里的 insn_off 仍是字节坐标(uapi 注释原话 "instruction offset (in bytes)",bpf.h:7283),但必须落在指令边界,内核进门即折成指令条数,此后全程按条记账;轻骨架反向,登记时把下标乘 8 折回字节(4.4)。
+
+兼容判定内核侧是 `bpf_core_types_are_compat`(:8094),递归深度上限 2(:8073);libbpf 侧同名包装传 32(libbpf.c:5686)。同一套比对规则与 kind 语义,两侧各自实现、各自调参,靠 uapi 记录结构对齐行为——「逻辑同源、各自维护,接口对齐 uapi」的实物注脚。
+
+### 4.4 谁在用内核态:轻骨架与 gen_loader
+
+「内核也要一台」不是理论需求,轻骨架是唯一用户。libbpf 的 gen_loader 能把**加载流程本身**编成一枚 BPF 程序——加载器程序(loader program):建映射、载 BTF、提交程序,全由它在内核里经 `bpf_sys_bpf`(helper,辅助函数)发起(gen_loader.c:272 `BPF_FUNC_sys_bpf`;BPF_PROG_LOAD 发射点 :1018)。开关是 `bpf_object__gen_loader`(libbpf.c:8508)。加载器程序一跑,用户态 libbpf 早已不在环上——补丁只能内核做。
+
+CO-RE 记录在轻骨架路径的四站:
+
+1. **登记**:4.1 的 `record_relo_core`(libbpf.c:5705)先把记录挂上程序;加载前 `bpf_program_record_relos`(libbpf.c:7263)逐条转交 `bpf_gen__record_relo_core`(:7296),insn_off 在此从指令下标乘 8 折回字节(:7290 `.insn_off = relo->insn_idx * 8`);
+2. **攒货**:gen 侧数组追加(gen_loader.c:851);
+3. **提交**:`bpf_object_load_prog` 提交点分叉(libbpf.c:6953-6959)——gen 在场不真发系统调用,改调 `bpf_gen__prog_load`(gen_loader.c:934):attr 三连在 :969-972(rec_size= `sizeof(struct bpf_core_relo)`、cnt=条数、数组装入数据 blob);attr 存 blob 内偏移而非内核指针,`emit_rel_store`(:990)编成运行时存储指令;
+4. **内核补丁**:加载器程序运行,`bpf_sys_bpf(BPF_PROG_LOAD, attr)` 一发,记录从 4.3 收件窗口进来,由内核引擎补**目标程序**的指令。
+
+一句口径收束:**普通骨架 libbpf 补丁,轻骨架内核补丁**。记录同一种,通道同一条,补丁对象不同——前者改 libbpf 手里将要提交的指令数组,后者改加载器程序 blob 里带着的目标程序指令。
+
+### 4.5 教师视角:为什么内核也要一台
+
+**教师视角**。学生最常问:libbpf 明明能补,内核何必再造一台?论证两层:
+
+- **场景**:轻骨架的卖点是加载路径极简——骨架产物缩到几十 KB、不带 libbpf 全套依赖,目标机上没有 libbpf;补丁的活总要有人干,只能在内核接;
+- **时序**:加载器程序在内核里运行时,目标程序的字节已在内核手里;`bpf_sys_bpf` 是同步调用,attr 进门就是 verifier 的地界,「先回用户态补一趟」在时序上不存在。引擎长在内核,是时序决定的,不是偏好。
+
+顺带纠正一个误读:「两台引擎」不是两套语义——kind 表一张(uapi bpf.h:7262)、记录结构一个(:7326)、失败口径一套;差异只在壳层与调参(4.3 的深度 32 对 2)。**协议统一,实现分治**。
+
+### 4.6 学生动手:05 五站实录
+
+**学生动手**,走读内核引擎五站(只读树,无 root;每站附 ≤25 行代码段与职责注,完整实录见 [`05-kernel-relo/`](../examples/chapter-08/05-kernel-relo/) README):
+
+```console
+$ bash book/examples/chapter-08/05-kernel-relo/trace-kernel-relo.sh
+# 走读树:WALK_TREE=/work/linux/linux-6.6.78(头部只读声明行略)
+
+## 站 1:内核引擎入口 bpf_core_apply
+### 定位(grep -n 实测;v6.6.78 校准)
+8423:int bpf_core_apply(struct bpf_core_ctx *ctx, const struct bpf_core_relo *relo,
+8453:		cc = bpf_core_find_cands(ctx, relo->type_id);
+
+## 站 2:候选查找 bpf_core_find_cands 与兼容判定 bpf_core_types_are_compat
+### 定位(grep -n 实测;v6.6.78 校准)
+8336:bpf_core_find_cands(struct bpf_core_ctx *ctx, u32 local_type_id)
+8094:int bpf_core_types_are_compat(const struct btf *local_btf, __u32 local_id,
+
+## 站 3:verifier 接线 check_core_relo
+### 定位(grep -n 实测;v6.6.78 校准)
+15718:static int check_core_relo(struct bpf_verifier_env *env,
+15739:	rec_size = attr->core_relo_rec_size;
+15778:		err = bpf_core_apply(&ctx, &core_relo, i,
+15817:	err = check_core_relo(env, attr, uattr);
+
+## 站 4:UAPI 载体 union bpf_attr 的 core_relo 三字段
+### 定位(grep -n 实测;v6.6.78 校准)
+1463:		__u32		core_relo_cnt;	/* number of bpf_core_relo */
+1465:		__aligned_u64	core_relos;
+1466:		__u32		core_relo_rec_size; /* sizeof(struct bpf_core_relo) */
+
+## 站 5:轻骨架提交 bpf_gen__prog_load
+### 定位(grep -n 实测;v6.6.78 校准)
+851:void bpf_gen__record_relo_core(struct bpf_gen *gen,
+970:	attr.core_relo_cnt = gen->core_relo_cnt;
+990:	emit_rel_store(gen, attr_field(prog_load_attr, core_relos), core_relos);
+
+== 汇总 ==
+TREE_VERSION=v6.6.78 STATIONS=5
+```
+
+五站对号:站 1=4.3 引擎本体(「查候选→算结果→改指令」);站 2=候选与兼容;站 3=收件窗口(「取一条、补一条」);站 4=uapi 载体;站 5=轻骨架提交。正文引用的行号与脚本 grep 出的同源——**正文与实物同一坐标**。
+
+**检查点**(自测后看提示):
+
+1. 普通骨架与轻骨架,CO-RE 补丁各发生在哪一步?分流的代码证据是哪一行?——提示:4.1 的 `continue`(:5868)。
+2. `core_relo_rec_size` 为什么是协商字段?新用户态带扩充字段对旧内核,协商以什么收场?——提示:4.3;`bpf_check_uarg_tail_zero`;-E2BIG 加写回内核认识的尺寸。
+3. 加载器程序运行后,libbpf 为什么再无机会补丁?引擎长在内核,是场景决定还是时序决定?——提示:4.4/4.5;`bpf_sys_bpf` 是同步调用,attr 进门即 verifier。
+
+**独立示例**:本节实物是内核引擎切片器 [`05-kernel-relo/`](../examples/chapter-08/05-kernel-relo/)——五站走读内核态重定位引擎(入口/候选与兼容/verifier 接线/uapi 载体/轻骨架提交),只读树、无 root 可复跑。
 
 <!--
 ## 五、实战五层:一条 BPF_CORE_READ 的完整旅程
