@@ -132,7 +132,7 @@ fi
 
 内核段只取主版本号分三档：6.x 全部示例可用，09 的 Netfilter 程序类型另需 6.6+——`scripts/verify-build.sh` 的机检门禁按主+次版本精确判定，与本行仅按主版本的提示在 6.0–6.5 内核上会分歧，以机检为准；5.x 满足示例 01–08；更低则给 WARN。这一行是 WARN 而不是 FAIL：内核版本无法用包管理器补装，脚本只提示、不拦截。
 
-工具链段用一个通用函数逐项检查六件：
+工具链段用一个通用函数逐项检查六件。`check()` 在脚本开头定义一次，工具链段连续调用六次；下面把定义与这六次调用拼为一处展示（各自与脚本逐字一致）：
 
 ```bash
 check() {
@@ -146,12 +146,13 @@ check() {
     fi
 }
 
-check 'clang（编译 BPF C）'            clang --version
-check 'gcc（编译用户态 loader）'       gcc --version
+echo "== 工具链 =="
+check 'clang（编译 BPF C）'        clang --version
+check 'gcc（编译用户态 loader）'   gcc --version
 check 'bpftool（BTF dump / skeleton）' bpftool version
-check 'make'                           make --version
-check 'libbpf 头文件（libbpf-dev）'    test -f /usr/include/bpf/bpf_helpers.h
-check 'Go（仅 09-netfilter-go 需要）'  go version
+check 'make'                        make --version
+check 'libbpf 头文件（libbpf-dev）' test -f /usr/include/bpf/bpf_helpers.h
+check 'Go（仅 09-netfilter-go 需要）' go version
 ```
 
 `check <名称> <命令...>` 丢弃命令输出、只看退出码；失败打印 FAIL 并把 `fail` 置 1，但不退出、不中断——六件一次查完，便于一眼看清缺什么。本机实跑摘录（BTF 段在层②走读，其余行见 00-env README 完整实录）：
@@ -269,7 +270,7 @@ exit "$fail"
 | 05-open-file-kprobe | loader 按 `PID COMM FILE` 三列打印打开的文件（第 8 节） |
 | 06-open-file-perf-event | 输出同 05，事件通道换成 perf buffer（第 9 节） |
 | 07-open-file-return | loader 打印 `PID COMM RET FILE`，RET 为 `fd=N` 或 `ERR=N(errno 名)`（第 10 节） |
-| 08-open-file-tracepoint | loader 打印 `PID COMM fd=N FILE`，挂载点换成 openat tracepoint（第 11 节） |
+| 08-open-file-tracepoint | loader 打印 `PID COMM RET FILE`，RET 为 `fd=N` 或 `ERR=N(errno 名)`，挂载点换成 openat tracepoint（第 11 节） |
 | 09-netfilter-go | `nfctl block` 下发黑名单后命中端口流量被 drop，`stats` 打印 pass/drop 计数（第 12 节） |
 
 环境五层就绪后，下一节从第一个示例 Hello World 开始，逐层兑现它们。
@@ -286,7 +287,7 @@ Hello World 示例的目标是让读者第一次看到 eBPF 输出。相较第 1
 #include "vmlinux.h"
 #include <bpf/bpf_helpers.h>
 
-char LICENSE[] SEC("license") = "GPL";
+char LICENSE[] SEC("license") = "Dual BSD/GPL";
 
 SEC("tracepoint/syscalls/sys_enter_execve")
 int hello(void *ctx)
@@ -530,12 +531,12 @@ exit 阶段：读取返回值 ret，关联 pid 查 filename，输出并删除临
 BPF_MAP_TYPE_HASH inflight;
 ```
 
-输出示例：
+输出示例（列宽按 `openret.c` 中 `handle_event` 的 printf 格式串逐列排布）：
 
 ```text
-PID     COMM        RET     FILE
-1001    cat         3       /etc/hosts
-1002    cat         -2      /not-exist
+PID      COMM             RET        FILE
+1001     cat              fd=3    /etc/hosts
+1002     cat              ERR=-2  (ENOENT) /not-exist
 ```
 
 返回值示例要把“两个事件拼成一次完整操作”讲清楚。
@@ -597,7 +598,7 @@ Go 控制面形态（示意；完整实现在 [`09-netfilter-go`](../examples/ch
 ```go
 package main
 
-// 后续完整章节使用 cilium/ebpf 或 libbpfgo/libbpf-rs 方案之一。
+// 实现选型：github.com/cilium/ebpf（v0.16，与示例 go.mod 一致）。
 // 目标：加载对象、打开 map、写入规则、attach netfilter hook、打印统计。
 func main() {}
 ```
