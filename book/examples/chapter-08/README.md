@@ -8,7 +8,7 @@
 
 - **环境自检**(`00-env/`):五段式盘点——走读树与四个走读文件、工具链三件带真实探针、BTF 家族、CONFIG 三项、pahole 缺席声明,末尾按本章三档口径给结论;
 - **kind 剖析**(`01-btf-kinds/`):刻意覆盖多 kind 的 BPF 源码,用 `bpftool btf dump file` 逐一指认 kind 与类型 ID 编址;
-- **vmlinux.h 生成**(`02-vmlinux-h/`):`bpftool btf dump format c` 把内核 BTF 变成 3.5MB 的头文件,并回收 ch07/ch09 构建链里同款步骤的机制解释;
+- **vmlinux.h 生成**(`02-vmlinux-h/`):`bpftool btf dump format c` 把内核 BTF 变成 3.5MB(本机实况)的头文件,并回收 ch07/ch09 构建链里同款步骤的机制解释;
 - **CO-RE 编译与切片**(`03-core-read/`+`04-relo-slicer/`):第一个 `BPF_CORE_READ` 程序(编译级验证)+ 纯标准库 Python 切片器解剖 `.BTF.ext` 里的重定位记录;
 - **内核引擎对照**(`05-kernel-relo/`):bash 切片器五站走读内核态重定位引擎 `bpf_core_apply`,与 03/04 的 libbpf 用户态引擎两两对照。
 
@@ -20,8 +20,8 @@
 | `01-btf-kinds/` | 编译级剖析 | `kinds.bpf.c`(刻意覆盖 struct/union/enum/typedef/const/ptr/array/func/func_proto/全局变量 VAR+DATASEC/btf_decl_tag)+`Makefile`(仅编译不链接)+`README` 覆盖表与类型 ID 编址观察;剩余 kind(FWD/FLOAT/ENUM64/TYPE_TAG)从 vmlinux BTF 抽样指认 | 编译级已验证(clang `-g -target bpf` + `bpftool btf dump file`) | Task 2 落地 |
 | `02-vmlinux-h/` | 编译级生成 | `gen-vmlinux-h.sh`(`bpftool btf dump file /sys/kernel/btf/vmlinux format c` + 规模统计)+`README`(生成方法、3.5MB 规模统计「本机实况」、头文件结构导读、回收 ch07/ch09 构建链);产物不入库 | 编译级已验证(bpftool btf dump format c) | Task 3 落地 |
 | `03-core-read/` | 运行型示例 | 四件套:`core.bpf.c`(tracepoint sched/sched_process_exec,`bpf_get_current_task_btf()` + `BPF_CORE_READ` 读 pid/comm,含 `bpf_core_field_exists` 兼容分支)+`loader.c`(libbpf skeleton 全链)+`Makefile`(ch09 bootstrap 模式)+`README`;编译级全链零告警 | 编译级已验证;加载运行为预期输出示例(运行级待验证,需 root) | Task 4 落地 |
-| `04-relo-slicer/` | 切片器(python) | `slice-relos.py` 五站:①ELF 段布局(.BTF/.BTF.ext/.rel.BTF.ext 尺寸)②btf_ext 头(magic/长度/偏移)③core_relo 记录解析(insn_off/type_id/access_str_off/kind)④kind 对照 uapi 枚举 ⑤access string 解码与源码字段对照;仅标准库 | 编译级已验证(实跑切片,记录数>0 断言) | Task 5 落地 |
-| `05-kernel-relo/` | 切片器(bash) | `trace-kernel-relo.sh` 五站:①内核引擎入口 `bpf_core_apply` ②候选查找 `bpf_core_find_cands` 与兼容 `bpf_core_types_are_compat` ③verifier 接线 `check_core_relo` ④UAPI 载体(attr core_relos 三字段)⑤轻骨架提交 `gen_loader.c`——与 libbpf 引擎对照 | 编译级已验证(只读走读树切片) | Task 6 落地 |
+| `04-relo-slicer/` | 切片器(python) | `slice-relos.py` 五站:①ELF 段布局(.BTF/.BTF.ext/.rel.BTF.ext 尺寸)②btf_ext 头(magic/长度/偏移)③core_relo 记录解析(insn_off/type_id/access_str_off/kind)④kind 对照 uapi 枚举 ⑤access string 解码与源码字段对照;仅标准库 | 编译级已验证(实跑切片,记录数>0 断言) | Task 5 落地,实测全绿(RELOS=4,断言全 PASS) |
+| `05-kernel-relo/` | 切片器(bash) | `trace-kernel-relo.sh` 五站:①内核引擎入口 `bpf_core_apply` ②候选查找 `bpf_core_find_cands` 与兼容 `bpf_core_types_are_compat` ③verifier 接线 `check_core_relo` ④UAPI 载体(attr core_relos 三字段)⑤轻骨架提交 `gen_loader.c`——与 libbpf 引擎对照 | 编译级已验证(只读走读树切片) | Task 6 落地,实测全绿(五站全中,`STATIONS=5`) |
 | `scripts/` | 符号机检 | `verify-citations.sh`:机检树根 citations.txt,逐行验文件在场 + `grep -F` 符号命中,输出 TOTAL/PASS/FAIL 汇总 | 编译级(只读机检) | Task 7 落地 |
 | `exercises/` | 课后扩展 | `01-relo-kind-detect/`(对预置 demo.bpf.o 用 04 切片器判读每条重定位记录的 kind 语义)、`02-core-compat/`(用 `bpf_core_field_exists`/`bpf_core_type_exists` 构造跨版本兼容分支),防剧透结构(任务与提示在前、参考思路独立成节后置) | 编译级(机检/编译断言) | Task 14 落地 |
 | `citations.txt` | 锚点清单 | 树根,格式「文件\|符号\|说明」,五组约 40 行:①BTF 基础与解析 ②kind 体系 ③CO-RE 编译期(宏族七条)④libbpf 引擎 ⑤内核引擎+UAPI 载体 | 编译级(机检数据源) | Task 7 落地 |
@@ -46,7 +46,13 @@
 
 ## 机检汇总
 
-(占位:由 Task 13 回填——机检脚本 `scripts/verify-citations.sh` 落地后,此处回填 TOTAL/PASS/FAIL 终跑实测、负路径门禁行为与五组锚点分布。)
+机检脚本 `scripts/verify-citations.sh` 以树根 `citations.txt` 为唯一数据源(38 条锚点,五组:①BTF 基础与解析 3 条/②kind 体系 5 条/③CO-RE 编译期 9 条/④libbpf 引擎 11 条/⑤内核引擎+UAPI 载体 10 条;每条只验「文件在场 + `grep -F` 符号命中」,按符号不按行号)。终跑实测(2026-11-08,走读树 `/work/linux/linux-6.6.78`):
+
+```text
+TOTAL=38 PASS=38 FAIL=0 WALK_TREE=/work/linux/linux-6.6.78 TREE_VERSION=v6.6.78
+```
+
+exit 0,全绿。负路径门禁实测:`WALK_TREE=/nonexistent-tree` 重跑,38 条全部按「文件不在树」记 FAIL,汇总 `TOTAL=38 PASS=0 FAIL=38` 后 exit 1——FAIL≠0 即非零退出;行号漂移不影响判定(机检不按行号)。
 
 ## 走读树版本声明
 
