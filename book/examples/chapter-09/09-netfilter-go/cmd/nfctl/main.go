@@ -109,8 +109,10 @@ func run() error {
 	}
 
 	// PinByName：map 已 pin 则复用（规则保留），否则 pin 到 bpffs。
+	// cilium/ebpf v0.16：pin 基路径由 MapOptions.PinPath 给出，是否 pin
+	// 由 BPF 侧 __uint(pinning, LIBBPF_PIN_BY_NAME) 决定。
 	coll, err := ebpf.NewCollectionWithOptions(spec, ebpf.CollectionOptions{
-		Maps: ebpf.MapOptions{Pin: ebpf.PinByName},
+		Maps: ebpf.MapOptions{PinPath: "/sys/fs/bpf"},
 	})
 	if err != nil {
 		return fmt.Errorf("加载 BPF 程序（内核是否 6.6+？）: %w", err)
@@ -124,11 +126,14 @@ func run() error {
 
 	// 挂到当前网络命名空间的 IPv4 LOCAL_OUT 钩子，优先级 0。
 	// 在 netns 中运行（见 scripts/netns-lab.sh），只影响该 netns。
-	nfLink, err := link.AttachNetfilter(link.Netfilter{
-		Protocol: unix.NFPROTO_IPV4,
-		Hooknum:  uint32(unix.NF_INET_LOCAL_OUT),
-		Priority: 0,
-	}, prog)
+	// cilium/ebpf v0.16：AttachNetfilter 收单参 NetfilterOptions，
+	// 程序与钩子参数都在其中。
+	nfLink, err := link.AttachNetfilter(link.NetfilterOptions{
+		Program:        prog,
+		ProtocolFamily: unix.NFPROTO_IPV4,
+		HookNumber:     uint32(unix.NF_INET_LOCAL_OUT),
+		Priority:       0,
+	})
 	if err != nil {
 		return fmt.Errorf("挂载 netfilter 钩子: %w", err)
 	}

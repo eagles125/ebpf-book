@@ -30,3 +30,11 @@ book/examples/chapter-07/02-percpu-counter/pcpu_count
 book/examples/chapter-07/03-event-output/event_ringbuf
 book/examples/chapter-07/03-event-output/event_perf
 book/examples/chapter-08/03-core-read/core_read
+book/examples/chapter-09/01-hello-world/hello
+book/examples/chapter-09/02-pid-filter/pid_filter
+book/examples/chapter-09/03-container-security/container_guard
+book/examples/chapter-09/04-ring-buffer/ringbuf_exec
+book/examples/chapter-09/05-open-file-kprobe/opensnoop_kprobe
+book/examples/chapter-09/06-open-file-perf-event/opensnoop_perf
+book/examples/chapter-09/07-open-file-return/openret
+book/examples/chapter-09/08-open-file-tracepoint/opensnoop_tp

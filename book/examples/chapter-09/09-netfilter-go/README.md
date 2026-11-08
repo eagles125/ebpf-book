@@ -50,7 +50,7 @@
 
 ```bash
 cd book/examples/chapter-09/09-netfilter-go
-go mod tidy     # 首次：生成 go.sum
+go mod tidy     # 首次或更换依赖版本时执行（go.sum 已随示例入库）
 make            # vmlinux.h -> bpf/nf_guard.bpf.o -> nfctl
 ```
 
@@ -125,8 +125,9 @@ sudo rm /sys/fs/bpf/nf_guard_rules /sys/fs/bpf/nf_guard_stats   # 彻底清理 m
 
 ## 验证状态
 
-- 编译验证：本仓库编写环境（x86_64、内核 7.0、clang 18、libbpf 1.3）
-  `bpf/nf_guard.bpf.o` 编译通过；`nfctl` 通过 `go build`。
+- 编译验证：本仓库编写环境（x86_64、内核 7.0、clang 18、libbpf 1.3、cilium/ebpf v0.16.0）
+  `make` 全链（vmlinux.h -> `bpf/nf_guard.bpf.o` -> `nfctl`）编译通过，
+  `go build ./...` 与 `go vet ./...` 实测零报错（`go.sum` 随示例入库）。
 - 待运行验证：编写环境为非 root，未执行加载、挂载与隔离拓扑实验；
   README 中所有“预期”输出均为教学说明。Netfilter BPF 的 verifier 行为
   与 `cilium/ebpf` link API 细节建议在 6.6+ 特权环境按“常见失败点”逐项核对。
