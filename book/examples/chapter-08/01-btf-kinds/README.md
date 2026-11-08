@@ -23,14 +23,14 @@ $ llvm-objdump -h kinds.bpf.o        # 确认 .BTF 在场(本机实况,尺寸随
   17 .BTF.ext               00000080 ...
   18 .rel.BTF.ext           00000050 ...
 
-$ bpftool btf dump file kinds.bpf.o  # 35 行类型,逐一指认见下表
+$ bpftool btf dump file kinds.bpf.o  # 35 条类型记录,逐一指认见下表
 ```
 
 `.BTF` 在场即「clang -g 把类型图编进了对象文件」;`.BTF.ext` 是按程序段组织的行号/重定位扩展信息(本对象没有 CO-RE 重定位,03-core-read 会看到它变大)。kind 枚举的权威定义在内核 uapi:`include/uapi/linux/btf.h` 的 kind 枚举块(:60-79,v6.6.78),共 20 种 kind(UNKN=0…ENUM64=19)。
 
 ## 覆盖表:源码项 → BTF kind → bpftool 输出行摘录
 
-`bpftool btf dump file kinds.bpf.o` 全量输出 35 行(ID 1–35);下表按源码覆盖项摘录对应行(本机实况,clang 18.1.3 实测):
+`bpftool btf dump file kinds.bpf.o` 全量输出 35 条类型记录(ID 1–35,物理 dump 行数含成员/取值行更多);下表按源码覆盖项摘录对应行(本机实况,clang 18.1.3 实测):
 
 | # | 源码项 | BTF kind | bpftool 输出行摘录 |
 |---|---|---|---|

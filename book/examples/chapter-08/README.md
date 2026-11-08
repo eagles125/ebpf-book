@@ -16,14 +16,14 @@
 
 | 目录 | 类别 | 内容 | 验证档 | 落地状态 |
 |---|---|---|---|---|
-| `00-env/` | 环境自检 | `check-env.sh`:五段——①走读树版本+四走读文件(btf.c/relo_core.c/bpf_core_read.h/btf.h uapi)②工具链三件带探针(bpftool btf dump 取 vmlinux 第 1 行、clang 空文件 `-g -target bpf` 编译、python3)③BTF 家族(/sys/kernel/btf 文件计数、vmlinux 大小与权限、模块 BTF 抽样 1 个)④CONFIG 三项(DEBUG_INFO_BTF / DEBUG_INFO_BTF_MODULES / MODULE_ALLOW_BTF_MISMATCH)⑤pahole 缺席声明;无树 exit 2,末尾三档结论 | 编译级(只读无 root 自检) | 已落地(Task 1):本机实跑 exit 0,输出与设计基线一致(110 文件、CONFIG 两 y 一未设、pahole 方法论档) |
+| `00-env/` | 环境自检 | `check-env.sh`:五段——①走读树版本+四走读文件(btf.c/relo_core.c/bpf_core_read.h/btf.h uapi)②工具链三件带探针(bpftool btf dump 取 vmlinux 第 1 行、clang 空文件 `-g -target bpf` 编译、python3)③BTF 家族(/sys/kernel/btf 文件计数、vmlinux 大小与权限、模块 BTF 抽样 1 个)④CONFIG 三项(DEBUG_INFO_BTF / DEBUG_INFO_BTF_MODULES / MODULE_ALLOW_BTF_MISMATCH)⑤pahole 缺席声明;无树 exit 2,末尾三档结论 | 编译级(只读无 root 自检) | 已落地(Task 1):本机实跑 exit 0,输出与设计基线一致(110 文件,时点记录、CONFIG 两 y 一未设、pahole 方法论档) |
 | `01-btf-kinds/` | 编译级剖析 | `kinds.bpf.c`(刻意覆盖 struct/union/enum/typedef/const/ptr/array/func/func_proto/全局变量 VAR+DATASEC/btf_decl_tag)+`Makefile`(仅编译不链接)+`README` 覆盖表与类型 ID 编址观察;剩余 kind(FWD/FLOAT/ENUM64/TYPE_TAG)从 vmlinux BTF 抽样指认 | 编译级已验证(clang `-g -target bpf` + `bpftool btf dump file`) | Task 2 落地 |
 | `02-vmlinux-h/` | 编译级生成 | `gen-vmlinux-h.sh`(`bpftool btf dump file /sys/kernel/btf/vmlinux format c` + 规模统计)+`README`(生成方法、3.5MB 规模统计「本机实况」、头文件结构导读、回收 ch07/ch09 构建链);产物不入库 | 编译级已验证(bpftool btf dump format c) | Task 3 落地 |
 | `03-core-read/` | 运行型示例 | 四件套:`core.bpf.c`(tracepoint sched/sched_process_exec,`bpf_get_current_task_btf()` + `BPF_CORE_READ` 读 pid/comm,含 `bpf_core_field_exists` 兼容分支)+`loader.c`(libbpf skeleton 全链)+`Makefile`(ch09 bootstrap 模式)+`README`;编译级全链零告警 | 编译级已验证;加载运行为预期输出示例(运行级待验证,需 root) | Task 4 落地 |
 | `04-relo-slicer/` | 切片器(python) | `slice-relos.py` 五站:①ELF 段布局(.BTF/.BTF.ext/.rel.BTF.ext 尺寸)②btf_ext 头(magic/长度/偏移)③core_relo 记录解析(insn_off/type_id/access_str_off/kind)④kind 对照 uapi 枚举 ⑤access string 解码与源码字段对照;仅标准库 | 编译级已验证(实跑切片,记录数>0 断言) | Task 5 落地,实测全绿(RELOS=4,断言全 PASS) |
 | `05-kernel-relo/` | 切片器(bash) | `trace-kernel-relo.sh` 五站:①内核引擎入口 `bpf_core_apply` ②候选查找 `bpf_core_find_cands` 与兼容 `bpf_core_types_are_compat` ③verifier 接线 `check_core_relo` ④UAPI 载体(attr core_relos 三字段)⑤轻骨架提交 `gen_loader.c`——与 libbpf 引擎对照 | 编译级已验证(只读走读树切片) | Task 6 落地,实测全绿(五站全中,`STATIONS=5`) |
 | `scripts/` | 符号机检 | `verify-citations.sh`:机检树根 citations.txt,逐行验文件在场 + `grep -F` 符号命中,输出 TOTAL/PASS/FAIL 汇总 | 编译级(只读机检) | Task 7 落地 |
-| `exercises/` | 课后扩展 | `01-relo-kind-detect/`(对预置 demo.bpf.o 用 04 切片器判读每条重定位记录的 kind 语义)、`02-core-compat/`(用 `bpf_core_field_exists`/`bpf_core_type_exists` 构造跨版本兼容分支),防剧透结构(任务与提示在前、参考思路独立成节后置) | 编译级(机检/编译断言) | Task 14 落地 |
+| `exercises/` | 课后扩展 | `01-relo-kind-detect/`(对预置源码自建的 demo.bpf.o 用 04 切片器判读每条重定位记录的 kind 语义;`check-relo-kind.sh` 8 项断言)、`02-core-compat/`(用 `bpf_core_field_exists`/`bpf_core_type_exists` 构造跨版本兼容分支;`check-compat.sh` 编译级+锚点 6 项断言),防剧透结构(任务与提示在前、参考思路独立成节后置) | 编译级(机检/编译断言) | 已落地(Task 14):两练习 check 脚本本机实跑全绿(①TOTAL=8 PASS=8、②TOTAL=6 PASS=6;负路径均实测 exit 1) |
 | `citations.txt` | 锚点清单 | 树根,格式「文件\|符号\|说明」,五组约 40 行:①BTF 基础与解析 ②kind 体系 ③CO-RE 编译期(宏族七条)④libbpf 引擎 ⑤内核引擎+UAPI 载体 | 编译级(机检数据源) | Task 7 落地 |
 
 ## 学习路径
@@ -41,7 +41,7 @@
 ## 验证状态约定(本章三档口径)
 
 - **编译级已验证**:本机无 root 可复现,全部以实跑输出为证——`bpftool btf dump` / `format c` 生成 vmlinux.h、clang `-g -target bpf` 产出 `.BTF`/`.BTF.ext`/`.rel.BTF.ext`、skeleton 生成、gcc 链接、切片器与机检实跑、只读 CONFIG/BTF/ELF 段读取;
-- **预期输出示例·运行级待验证**:skeleton 加载、attach、CO-RE 字段修正后实际读取——本机无 root 且 `kernel.unprivileged_bpf_disabled=2`,一律标「预期输出示例 / 运行级待验证」,不是本地运行结果(03 的读取输出属此档);
+- **预期输出示例·运行级待验证**:skeleton 加载、attach、CO-RE 字段修正后实际读取、compat 分支运行行为(练习②)——本机无 root 且 `kernel.unprivileged_bpf_disabled=2`,一律标「预期输出示例 / 运行级待验证」,不是本地运行结果(03 的读取输出属此档);
 - **方法论级(pahole)**:DWARF→BTF 转换只给流程与判读法,标「本机未装 pahole,转换级验证需自备工具链」——本章其余资产只消费现成 BTF,不受影响。
 
 ## 机检汇总

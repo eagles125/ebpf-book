@@ -33,7 +33,7 @@
 | [`04-relo-slicer/`](../examples/chapter-08/04-relo-slicer/) | python 切片器:`.BTF.ext` 五站 | 三节 |
 | [`05-kernel-relo/`](../examples/chapter-08/05-kernel-relo/) | bash 切片器:内核引擎五站 | 四节 |
 
-验证口径是本章的特色,三档先立好:编译级(本机无 root 实跑复现)、运行级(预期输出示例)、方法论级(pahole,给流程与判读法)。学法建议同前章:读到任何「为什么这么设计」,先去对应资产跑一眼现场再回来。
+验证口径三档先立好:编译级(本机无 root 实跑复现)、运行级(预期输出示例)、方法论级(pahole,给流程与判读法)。学法建议同前章:读到「为什么这么设计」,先去对应资产跑一眼现场再回来。
 
 ## 一、BTF:内核的类型说明书
 
@@ -45,7 +45,7 @@
 
 - **源码头文件**(`include/linux/sched.h` 一类):权威,但 BPF 程序不能 include 内核头(类型依赖会拖进半个内核,第 2 章的 CO-RE 工作流因此只用 vmlinux.h);且源码树描述的是「这一版源码」的布局,不是「目标机正在跑」的布局。
 - **DWARF**(调试信息标准格式,首现解释:编译器 `-g` 产出的调试数据,含类型、变量、行号、内联帧):全,但它是编译期产物,1.2 详谈内核为什么用不起。
-- **BTF(BPF Type Format,BPF 类型格式)**:一份紧凑的类型图,编码在 `include/uapi/linux/btf.h`(kind 全集的枚举目录在 :60-79,v6.6.78),官方文档 `Documentation/bpf/btf.rst`(走读树在场)。名字里的 T(Type)是历史:内核文档开篇的原话是「The name BTF was used initially to describe data types」——它最初只为描述数据类型而生,后来才扩展出函数信息与行号信息(btf.rst:9-10);本章聚焦类型面。三种候选里只有它**常驻内核**。
+- **BTF(BPF Type Format,BPF 类型格式)**:一份紧凑的类型图,编码在 `include/uapi/linux/btf.h`(kind 全集的枚举目录在 :60-79,v6.6.78),官方文档 `Documentation/bpf/btf.rst`(走读树在场)。名字里的 T(Type)是历史:内核文档开篇原话「The name BTF was used initially to describe data types」,后来才扩展出函数信息与行号信息(btf.rst:9-10);本章聚焦类型面。三种候选里只有它**常驻内核**。
 
 「常驻」不是修辞,有最硬的代码证据。内核侧解析 vmlinux BTF 的函数 `btf_parse_vmlinux`(kernel/bpf/btf.c:5720,v6.6.78)开头没几行,就把数据指针指向了内核映像自己:
 
@@ -64,7 +64,7 @@
 	snprintf(btf->name, sizeof(btf->name), "vmlinux");
 ```
 
-`__start_BTF`/`__stop_BTF`(:5577-5578 声明)是链接脚本圈出的 `.BTF` 段首尾——**说明书嵌在被描述者的映像里**:不依赖文件系统、不依赖用户态工具,内核一起来它就在。运行期在 `/sys/kernel/btf/vmlinux` 看到的文件(本机 7132199 字节、mode 444 全局可读;本机实况,其他内核数值不同)只是这段常驻数据的 sysfs 窗口——mode 444 意味着无特权的用户态也能把它读走,本机所有 `bpftool` 命令均为无 root 实跑。
+`__start_BTF`/`__stop_BTF`(:5577-5578 声明)是链接脚本圈出的 `.BTF` 段首尾——**说明书嵌在被描述者的映像里**:不依赖文件系统、不依赖用户态工具,内核一起来它就在。运行期在 `/sys/kernel/btf/vmlinux` 看到的文件(本机 7132199 字节、mode 444 全局可读;本机实况,其他内核数值不同)只是这段常驻数据的 sysfs 窗口——mode 444 意味着无特权用户态也能读走,本机 `bpftool` 命令均无 root 实跑。
 
 常驻是为了喂给内核自己的消费者。BTF 因此有**三重内核身份**,外加本章主线的第四重:
 
@@ -173,7 +173,7 @@ bash book/examples/chapter-08/00-env/check-env.sh
 cd book/examples/chapter-08/02-vmlinux-h && ./gen-vmlinux-h.sh
 ```
 
-预期看到:①四个走读文件在场、bpftool/clang/python3 探针逐个 OK(其中 bpftool 探针会打出 vmlinux 第 1 行,正是 1.5 认过的 `[1] VOLATILE '(anon)' type_id=131699`)、BTF 家族计数(随模块浮动,本机复查 109)、CONFIG 两 y 一未设、pahole 缺席声明与三档结论;②生成完成后的规模统计(字节/行数/struct 数,本机实况)。两步完整实录见各自 README。
+预期看到:①四个走读文件在场、bpftool/clang/python3 探针逐个 OK(bpftool 探针会打出上文认过的 vmlinux 第 1 行 `[1] VOLATILE '(anon)' type_id=131699`)、BTF 家族计数(随模块浮动,本机复查 109)、CONFIG 两 y 一未设、pahole 缺席声明与三档结论;②生成完成后的规模统计(字节/行数/struct 数,本机实况)。两步完整实录见各自 README。
 
 **检查点**(自测后看提示):
 
@@ -296,7 +296,7 @@ struct btf_member {
 
 ### 2.4 类型 ID 编址:数组下标,不是哈希
 
-编址规则,btf.rst :68-70 原话:「The type id 0 is reserved for void type...starting from id 1」——**void 占 0 号、类型区顺序解析、ID 从 1 依次递增**。01 资产是小尺寸实证:35 行 dump,ID 恰为 [1]…[35] 无空洞;vmlinux 是大尺寸实证:402652 行,最大 ID `[170550]`(本机实况,其他内核数值不同)。
+编址规则,btf.rst :68-70 原话:「The type id 0 is reserved for void type...starting from id 1」——**void 占 0 号、类型区顺序解析、ID 从 1 依次递增**。01 资产是小尺寸实证:35 条类型记录,ID 恰为 [1]…[35] 无空洞;vmlinux 是大尺寸实证:402652 行,最大 ID `[170550]`(本机实况,其他内核数值不同)。
 
 ID 不只是行号,它还是**数组下标**:类型区按序拆进数组,ID N 即数组第 N 格。内核按 ID 取类型的入口是 `btf_type_by_id`(include/linux/btf.h:488 声明),实现在 kernel/bpf/btf.c:825(v6.6.78):
 
@@ -345,7 +345,7 @@ const struct btf_type *btf_type_by_id(const struct btf *btf, u32 type_id)
 
 ```console
 $ cd book/examples/chapter-08/01-btf-kinds && make
-$ bpftool btf dump file kinds.bpf.o     # 35 行逐行指认 kind,对照 README 覆盖表
+$ bpftool btf dump file kinds.bpf.o     # 35 条类型记录逐行指认 kind,对照 README 覆盖表
 $ bpftool btf dump file /sys/kernel/btf/vmlinux | grep -m1 -E "^\[[0-9]+\] ENUM64"
 [9020] ENUM64 '(anon)' encoding=UNSIGNED size=8 vlen=40   # 本机实况,其他内核数值不同
 ```
@@ -443,7 +443,7 @@ vmlinux.h 文件头的 pragma 等价于给全部 record 套上 `__attribute__((p
 
 位域一行回收 2.3 的伏笔——「读位域不能只补字节偏移,还得知道左/右移位数」:五个 kind 成对出动,`BPF_CORE_READ_BITFIELD` 的实现(:88-113)逐行演明:定位、定宽、左移、按符号右移。
 
-埋线回收(第 2 章排错表第三组:「字段在编译期不存在→用 CO-RE 的字段存在性查询构造兼容分支」):`bpf_core_field_exists`(:132)就是那个查询,03 的兼容分支是本地实物——`kstack_offset` 在本机内核 BTF 里是 task_struct 成员(成员序 258、字节偏移 9544,本机实况),在 6.6.78 走读树里同名变量是 per-CPU 变量而非 task_struct 成员(03 资产考证);同一份 core.bpf.o 在两种内核上各自判、各走各的分支(运行行为预期档,03 README)。工作流至此三件齐:类型(vmlinux.h)、开关(`-g`)、表达(内建/宏族);第四件(记录怎么被消费)是四节的主题,接口钉住:**记录是登记不是修正,修正发生在加载期**。
+埋线回收(第 2 章排错表第三组:「字段在编译期不存在→用 CO-RE 的字段存在性查询构造兼容分支」):`bpf_core_field_exists`(:132)就是那个查询,03 的兼容分支是本地实物——`kstack_offset` 在本机内核 BTF 里是 task_struct 成员(成员序 258、字节偏移 9544,本机实况),在 6.6.78 走读树里同名变量是 per-CPU 变量而非 task_struct 成员(03 资产考证);同一份 core.bpf.o 在两种内核各自判、各走各的分支(运行行为预期档,03 README)。工作流至此三件齐:类型(vmlinux.h)、开关(`-g`)、表达(内建/宏族);第四件(记录怎么被消费)是四节的主题,接口钉住:**记录是登记不是修正,修正发生在加载期**。
 
 ### 3.5 记录的家:.BTF.ext 与四字段
 
@@ -568,7 +568,7 @@ libbpf 引擎两站分居两阶段:collect 在**对象打开期**:`bpf_object_op
 `bpf_core_resolve_relo`(libbpf.c:5739)总装四步,解算核心在 relo_core.c(v6.6.78,下列行号均该文件):
 
 1. **候选查找** `bpf_core_find_cands`(libbpf.c:5604):目标 BTF 先 vmlinux 后模块(:5631/:5649);按「本质名」匹配——剥掉 `___flavor` 式后缀再比(:5623);
-2. **兼容检查** `__bpf_core_types_are_compat`(relo_core.c:146):递归逐成员比对——STRUCT/UNION 看成员布局,PTR 沿指向下钻,FUNC_PROTO 比参数表,同名不等于同构;按名匹配的宽口径 `__bpf_core_types_match`(:1544);
+2. **兼容检查** `__bpf_core_types_are_compat`(relo_core.c:146):kind 兼容为底,只沿 PTR/ARRAY/FUNC_PROTO 递归,STRUCT/UNION 到 kind 即同——成员布局的核对在算补的访问链匹配(`bpf_core_spec_match`,relo_core.c:557),同名不等于同构;按名匹配的宽口径 `__bpf_core_types_match`(:1544);
 3. **计算** `bpf_core_calc_relo_insn`(relo_core.c:1280):`bpf_core_parse_spec`(:263,三节 3.6)拆访问字符串成本地规约,逐候选套算;多候选必须同答案,偏移或决策有歧义即失败(:1365/:1375);TYPE_ID_LOCAL 例外,直接取本地类型 ID(:1319-1327);
 4. **补丁** `bpf_core_patch_insn`(relo_core.c:1024):按指令类改写 imm 或 offset(3.6 的 llvm_reloc.rst 口径);`poison` 在案则把指令改写成非法 helper 调用(:1033-1042)。
 
@@ -576,7 +576,7 @@ libbpf 引擎两站分居两阶段:collect 在**对象打开期**:`bpf_object_op
 
 - **目标 BTF 找不到 → -ESRCH**:`btf__load_vmlinux_btf` 遍历完候选路径一无所获,pr_warn "failed to find valid kernel BTF" 后返回 -ESRCH(tools/lib/bpf/btf.c:4803-4804,v6.6.78);带 CO-RE 记录的对象必触发装载——`obj_needs_vmlinux_btf` 见 core_relo 记录即真(libbpf.c:3045,判定 :3053);
 - **记录对不上本地 BTF → -EINVAL**:type_id 越界、根类型无名字、访问串解析失败(libbpf.c:5617-5622;relo_core.c:1301-1313);
-- **候选列表为空 → 不算错,按 kind 分流**:查找成功但目标 BTF 无同名类型,relo_core.c:1395-1412 的注释把这定性为「可能是预期」:EXISTS 类补 0,其余把指令 poison(投毒,libbpf 术语:改写成调用非法 helper 的指令,让验证器在日志里点名)——死代码被验证器消灭,活代码加载失败并指到指令号。
+- **候选列表为空 → 不算错,按 kind 分流**:查找成功但目标 BTF 无同名类型,relo_core.c:1395-1412 的注释把这定性为「可能是预期」:EXISTS 类补 0,其余把指令 poison(投毒,libbpf 术语:改写成调用非法 helper,让验证器点名)——死代码被验证器消灭,活代码加载失败并指到指令号。
 
 ### 4.3 内核态引擎:attr 载体、verifier 收件窗口与 bpf_core_apply
 
@@ -598,7 +598,7 @@ libbpf 引擎两站分居两阶段:collect 在**对象打开期**:`bpf_object_op
 
 - **先验**:除 TYPE_ID_LOCAL 外都要候选(:8426);按 3 份 spec 开约 4k 工作区(:8433-8437);type_id 查不到即 -EINVAL(:8440-8445,"bad type id");
 - **候选**:持 `cand_cache_mutex` 调 `bpf_core_find_cands`(:8453;函数头 :8336)——先 `bpf_get_btf_vmlinux()`(:8347),按本质名在 vmlinux 找同名(:8360),落空再遍历模块 BTF(:8391/:8400);锁从查缓存持到 BTF 指针抄进候选列表(:8475,防模块 BTF 半路卸载);
-- **算与补**:`bpf_core_calc_relo_insn`(:8482)、`bpf_core_patch_insn`(:8487)——注意传的是 `relo->insn_off / 8`:三节 3.5 的 insn_off 口径在此对账——attr 里的 insn_off 仍是字节坐标(uapi 注释原话 "instruction offset (in bytes)",bpf.h:7283),verifier 门只校验它落在指令边界(%8,verifier.c:15771),字节折成指令条数发生在算补时(引擎以 :8487 的 `insn_off / 8` 定位补丁指令);轻骨架反向,登记时把下标乘 8 折回字节(4.4)。
+- **算与补**:`bpf_core_calc_relo_insn`(:8482)、`bpf_core_patch_insn`(:8487)——注意传的是 `relo->insn_off / 8`:3.5 的 insn_off 口径在此对账——attr 里的 insn_off 仍是字节坐标(uapi 注释原话 "instruction offset (in bytes)",bpf.h:7283),verifier 门只校验它落在指令边界(%8,verifier.c:15771),字节折成指令条数发生在算补时;轻骨架反向,登记时把下标乘 8 折回字节(4.4)。
 
 兼容判定内核侧是 `bpf_core_types_are_compat`(:8094),递归深度上限 2(:8073);libbpf 侧同名包装传 32(libbpf.c:5686)。同一套比对规则与 kind 语义,两侧各自实现、各自调参,靠 uapi 记录结构对齐行为——「逻辑同源、各自维护,接口对齐 uapi」的注脚。
 
@@ -716,7 +716,7 @@ $ cd book/examples/chapter-08/02-vmlinux-h && ./gen-vmlinux-h.sh   # 摘录:规�
 
 ### 5.3 层③ 剖析:自编对象先当一次小说明书
 
-读 40 万行的大书之前,先用 [`01-btf-kinds/`](../examples/chapter-08/01-btf-kinds/) 编一本 35 行的小书练手(二节 2.5 已逐行指认,此处回放最该认得的一行):
+读 40 万行的大书之前,先用 [`01-btf-kinds/`](../examples/chapter-08/01-btf-kinds/) 编一本 35 条类型记录的小书练手(二节 2.5 已逐行指认,此处回放最该认得的一行):
 
 ```console
 $ cd book/examples/chapter-08/01-btf-kinds && make
@@ -773,7 +773,7 @@ $ sudo ./core_read                      # 预期输出示例 / 运行级待验�
 poll 一轮结束:收到 1 条事件,销毁对象退出
 ```
 
-字段修正演示就在末字段:`kstack_offset_exists=1` 是 `bpf_core_field_exists` 在**目标内核**判「有」;同一份 .bpf.o 拿到 6.6 内核,预期输出 `kstack_offset_exists=0 kstack_offset=0`(哨兵值)——6.6.78 走读树里 kstack_offset 是 per-CPU 变量、不是 task_struct 成员(3.4 的双树考证),同一份对象两种内核各走各的分支。诚实补一句:本机演示中三条偏移「改写前后」数值相同(编译机与目标机同机),修正量只在跨内核时显形——届时 imm 被重算成目标内核的偏移,后续按该偏移的读取才落得到字段。
+字段修正演示就在末字段:`kstack_offset_exists=1` 是 `bpf_core_field_exists` 在**目标内核**判「有」;同一份 .bpf.o 拿到 6.6 内核,预期输出 `kstack_offset_exists=0 kstack_offset=0`(哨兵值)——6.6.78 走读树里 kstack_offset 是 per-CPU 变量、不是 task_struct 成员(3.4 的双树考证),同一份对象两种内核各走各的分支。诚实补一句:本机演示中三条偏移「改写前后」数值相同(编译机与目标机同机),修正量只在跨内核时显形——届时 imm 被重算成目标内核偏移,读取才落得到字段。
 
 ### 5.6 缺失-BTF 回退策略:三情形,三选项
 
@@ -785,9 +785,11 @@ poll 一轮结束:收到 1 条事件,销毁对象退出
 
 确认缺了再谈回退,三选项按序评估:
 
-1. **升级内核/换带 BTF 的内核 = 正解**。一劳永逸,CO-RE 全链复活;发行版没给就按[附录 C](../appendix/c-distro-btf-build-guide.md) 自行构建。变体:内核版本相同、只是没编 BTF——把**同版本**内核的 BTF 文件喂给 libbpf(open 选项 `btf_custom_path`,tools/lib/bpf/libbpf.h:142;带 CO-RE 记录的对象本会在加载期强制装载内核 BTF,给了自定义路径即不强制,libbpf.c:3053)——前提是 BTF 与目标内核同源,错版本的说明书比没有更危险;
+1. **升级内核/换带 BTF 的内核 = 正解**。一劳永逸,CO-RE 全链复活;发行版没给就按[附录 C](../appendix/c-distro-btf-build-guide.md) 自行构建。变体:内核版本相同、只是没编 BTF——把**同版本**内核的 BTF 文件喂给 libbpf(open 选项 `btf_custom_path`,tools/lib/bpf/libbpf.h:142;带 CO-RE 记录的对象加载期本会强制装载内核 BTF,给了自定义路径即不强制,libbpf.c:3053)——前提是 BTF 与目标内核同源,错版本的说明书比没有更危险;
 2. **BCC 运行期编译 = 旧路回退**。不要求目标 BTF,现场对目标内核编译——代价是 3.1 立案的三件事原样回来:头文件依赖、每次启动重编、产物不可复用。过渡或一次性任务可用,当架构选是倒退;
 3. **固定偏移裸读 = 危险末选**。把本机偏移写死进程序——把 2.4「ID 是 blob 坐标」的教训换成字节坐标重犯一遍。第 2 章排错表早有点名:「按固定偏移硬读会读错位置」(ch02:851,该行开的处方正是 vmlinux.h+CO-RE 工作流);CO-RE 的存在就是为了让这条路消失。
+
+三选项之外,把「可移植≠绝对」钉成两句:CO-RE 兜的是**版本窗口**内的漂移(类型定义与编译机同源的内核之间),窗口外即本节三情形;字段存在≠语义一致——存在性判定只挡「没有」,不保「有而未变」。
 
 ### 5.7 模块 BTF 与 attach_btf_obj_fd:第二层说明书的用法
 
@@ -900,7 +902,7 @@ A:内核没嵌 BTF(5.6 情形二,`btf_vmlinux_init` 量出 0 早退),sysfs 不�
 
 两项练习的完整任务书、提示与验收脚本在 `book/examples/chapter-08/exercises/`(任务与提示在前、参考思路在后;先修:03 编译级全链跑通、04 切片器实跑过):
 
-- **练习① 重定位记录判读**([`exercises/01-relo-kind-detect/`](../examples/chapter-08/exercises/01-relo-kind-detect/)):对预置源码自建的 demo.bpf.o 跑 04 切片器,判读每条记录「补丁什么、怎么补」——kind 语义对照 3.6 的 13 种;`check-relo-kind.sh` 断言指定 kind 在场、记录数 ≥3。练的是 3.5 四字段与 3.6 kind 表的逆向判读。
+- **练习① 重定位记录判读**([`exercises/01-relo-kind-detect/`](../examples/chapter-08/exercises/01-relo-kind-detect/)):对预置源码自建的 demo.bpf.o 跑 04 切片器,判读每条记录「补丁什么、怎么补」——kind 语义对照 3.6 的 13 种;`check-relo-kind.sh` 断言指定 kind 在场、记录数 ≥3。
 - **练习② 跨版本兼容分支**([`exercises/02-core-compat/`](../examples/chapter-08/exercises/02-core-compat/)):仿 03 用 `bpf_core_field_exists`/`bpf_core_type_exists` 构造兼容分支——第 2 章排错表「字段在编译期不存在」处方的落地版;`check-compat.sh` 两级断言(编译级通过+机检锚点在场)。
 
 ## 总结
