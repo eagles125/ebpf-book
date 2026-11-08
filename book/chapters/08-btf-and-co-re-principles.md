@@ -786,7 +786,7 @@ poll 一轮结束:收到 1 条事件,销毁对象退出
 
 ### 5.7 模块 BTF 与 attach_btf_obj_fd:第二层说明书的用法
 
-1.4 的双层实况在此落地:模块自带 split BTF(增量,接续 vmlinux 的 ID 编址——本机模块抽样首行 `[170551]`,恰在 vmlinux 最大 ID `[170550]` 之后,本机实况)。谁消费它?追**模块内**符号的程序:fentry/fexit 挂到某模块的函数时,attach 目标的类型 ID 要在**该模块的 BTF** 里解析,加载参数用 `attach_btf_obj_fd`(include/uapi/linux/bpf.h:1461,v6.6.78)带走这份 BTF 的 fd——uapi 注释原话「or valid module BTF object fd or 0 to attach to vmlinux」(:1460):0 给 vmlinux,fd 给模块。链路三站:libbpf 侧 `btf__load_module_btf`(tools/lib/bpf/btf.c:4809)按名拼 `/sys/kernel/btf/<模块名>`(:4813),解析出以 vmlinux 为基底的 split BTF,fd 缓存进 `prog->attach_btf_obj_fd`(libbpf.c:6875);内核侧加载时 `btf_get_by_fd(attr->attach_btf_obj_fd)` 取回(kernel/bpf/syscall.c:2641),并校验确属内核 BTF(`btf_is_kernel`,:2644)。它与四节的补丁通道并行不悖:追内核类型的 CO-RE 重定位不受影响——4.3 的候选查找本来就先 vmlinux 后模块(:8391/:8400)。
+1.4 的双层实况在此落地:模块自带 split BTF(增量,接续 vmlinux 的 ID 编址——本机模块抽样首行 `[170551]`,恰在 vmlinux 最大 ID `[170550]` 之后,本机实况)。谁消费它?追**模块内**符号的程序:fentry/fexit 挂到某模块的函数时,attach 目标的类型 ID 要在**该模块的 BTF** 里解析,加载参数用 `attach_btf_obj_fd`(include/uapi/linux/bpf.h:1461,v6.6.78)带走这份 BTF 的 fd——uapi 注释原话「or valid module BTF object fd or 0 to attach to vmlinux」(:1460):0 给 vmlinux,fd 给模块。链路三站:libbpf 解析 attach 目标时,`find_kernel_btf_id`(libbpf.c:9359,v6.6.78)在 vmlinux 落空后调 `load_module_btfs`(libbpf.c:5507,调用点 :9374)——按 BTF ID 逐个取回内核里的模块 BTF fd、逐模块比对,命中模块的 `mod->fd`(:9383)缓存进 `prog->attach_btf_obj_fd`(libbpf.c:6875);内核侧加载时 `btf_get_by_fd(attr->attach_btf_obj_fd)` 取回(kernel/bpf/syscall.c:2641),并校验确属内核 BTF(`btf_is_kernel`,:2644)。公开 API `btf__load_module_btf`(tools/lib/bpf/btf.h:118 导出;btf.c:4809 按名拼 `/sys/kernel/btf/<模块名>` 解析 split BTF)是用户态自用的解析入口,不在 attach 自动链上——libbpf 内部对它零调用。它与四节的补丁通道并行不悖:追内核类型的 CO-RE 重定位不受影响——4.3 的候选查找本来就先 vmlinux 后模块(:8391/:8400)。
 
 ### 5.8 教师视角与全链清单
 
