@@ -230,14 +230,14 @@
 
 ### Chapter 8: BTF and CO-RE Principles
 
-- [ ] Write full chapter prose explaining BTF goals, DWARF-to-BTF conversion, type IDs, field offsets, and CO-RE relocation.
-- [ ] Analyze kernel BTF documentation and libbpf relocation behavior.
-- [ ] Include integrated CO-RE example that reads a kernel structure field using `vmlinux.h`.
-- [ ] Create standalone Chapter 8 examples under `book/examples/chapter-08/`.
-- [ ] Explain `CONFIG_DEBUG_INFO_BTF`, `pahole`, `bpftool btf dump`, and missing-BTF fallback strategies.
-- [ ] Add text visualization for compile-time BTF, object relocation records, runtime target BTF, and patched access.
-- [ ] Add troubleshooting, summary, and references.
-- [ ] Main-agent review for CO-RE boundary conditions and non-absolute portability language.
+- [x] Write full chapter prose explaining BTF goals, DWARF-to-BTF conversion, type IDs, field offsets, and CO-RE relocation.
+- [x] Analyze kernel BTF documentation and libbpf relocation behavior.
+- [x] Include integrated CO-RE example that reads a kernel structure field using `vmlinux.h`.
+- [x] Create standalone Chapter 8 examples under `book/examples/chapter-08/`.
+- [x] Explain `CONFIG_DEBUG_INFO_BTF`, `pahole`, `bpftool btf dump`, and missing-BTF fallback strategies.
+- [x] Add text visualization for compile-time BTF, object relocation records, runtime target BTF, and patched access.
+- [x] Add troubleshooting, summary, and references.
+- [x] Main-agent review for CO-RE boundary conditions and non-absolute portability language.
 
 ### Chapter 9: Observability Getting Started with ebpf.top
 
