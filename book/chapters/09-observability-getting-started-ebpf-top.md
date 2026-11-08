@@ -108,42 +108,171 @@ eBPF 程序：读取上下文 -> 过滤 -> 读写 map -> 输出事件
 
 **独立示例**：[`book/examples/chapter-09/00-env/`](../examples/chapter-09/00-env/)（`check-env.sh` 环境自检脚本）。
 
-完整章节应提供发行版命令和环境验证脚本。计划脚本：
+本章是全书第一个“动手密集”的章节，环境说明按五层组织：**依赖**（要装什么）、**编译**（怎么编出来）、**部署**（编出来之后，运行还差什么）、**运行**（怎么加载和卸载）、**效果**（跑起来能看到什么）。五层不是并列清单，而是依赖链：依赖不齐则编译停摆，权限不足则运行降级，每层把守一个失败面——第 2、5、8 章的五层环境同此结构，本章把它落到 9 个入门示例上。
+
+`check-env.sh` 把层①–③的前提做成一次无 root 自检，按五段输出：内核、BTF/CO-RE、工具链六件、运行时环境、汇总。本节逐段走读它的源码与实跑输出；脚本全文、逐段解读与完整实录见 [`00-env/README.md`](../examples/chapter-09/00-env/README.md)。本机实况全章通用，先行声明（其他机器数值不同）：内核 7.0.0-42-generic、无 root、`kernel.unprivileged_bpf_disabled=2`、tracefs 未挂载。
+
+### 层① 依赖：内核基线与工具链六件
+
+依赖层回答“要装什么”。脚本第一段与第三段负责盘点：
 
 ```bash
-#!/usr/bin/env bash
-set -euo pipefail
+echo "== 内核 =="
+printf 'kernel: %s\n' "$(uname -r)"
 
-printf 'kernel: '
-uname -r
-
-printf 'bpftool: '
-bpftool version | head -n 1
-
-if [ -r /sys/kernel/btf/vmlinux ]; then
-  echo 'BTF: /sys/kernel/btf/vmlinux exists'
+kver_major="$(uname -r | cut -d. -f1)"
+if [ "${kver_major:-0}" -ge 6 ]; then
+    echo 'OK    内核版本 >= 6.x，满足全部示例要求（Netfilter 示例需 6.6+）'
+elif [ "${kver_major:-0}" -ge 5 ]; then
+    echo 'OK    内核版本 5.x，满足示例 01-08（09-netfilter-go 需 6.6+）'
 else
-  echo 'BTF: missing; CO-RE examples may fail'
-fi
-
-if [ -d /sys/kernel/tracing/events ]; then
-  echo 'tracefs: mounted at /sys/kernel/tracing'
-else
-  echo 'tracefs: not mounted; try sudo mount -t tracefs tracefs /sys/kernel/tracing'
+    echo 'WARN  内核版本低于 5.10，多数示例可能不受支持'
 fi
 ```
 
-这些环境项不是“装上就行”的依赖清单，而是 eBPF 工具链的五个关键部件。
+内核段只取主版本号分三档：6.x 全部示例可用，09 的 Netfilter 程序类型另需 6.6+——`scripts/verify-build.sh` 的机检门禁按主+次版本精确判定，与本行仅按主版本的提示在 6.0–6.5 内核上会分歧，以机检为准；5.x 满足示例 01–08；更低则给 WARN。这一行是 WARN 而不是 FAIL：内核版本无法用包管理器补装，脚本只提示、不拦截。
 
-`clang/LLVM` 负责把受限 C 编译为 BPF 字节码。普通 C 程序编译成 x86_64 或 arm64 机器码，而 eBPF 内核态程序通常使用 `clang -target bpf` 编译成 BPF ELF 对象。例如 Hello World 的 `hello.bpf.c` 会生成 `hello.bpf.o`，里面包含 BPF 指令、map 定义、license、section 名称和 BTF/重定位信息。这里说“受限 C”，是因为 eBPF C 不是完整用户态 C：不能随意调用 libc，不能 malloc，不能阻塞睡眠，栈空间有限，循环和指针访问都要让 verifier 能证明安全。
+工具链段用一个通用函数逐项检查六件：
 
-`bpftool` 是学习和排错阶段最重要的瑞士军刀。它可以用 `bpftool feature probe` 检查当前内核支持哪些程序类型、map 类型和 helper；可以用 `bpftool btf dump file /sys/kernel/btf/vmlinux format c > vmlinux.h` 从内核 BTF 生成 `vmlinux.h`；可以用 `bpftool gen skeleton hello.bpf.o > hello.skel.h` 生成 libbpf skeleton；还可以用 `bpftool prog list`、`bpftool map list` 查看系统里已经加载的程序和 map。当示例加载失败时，先用 bpftool 确认系统能力，通常比盲目改代码更快。
+```bash
+check() {
+    # check <名称> <检查命令...>
+    local name="$1"; shift
+    if "$@" >/dev/null 2>&1; then
+        printf 'OK    %s\n' "$name"
+    else
+        printf 'FAIL  %s\n' "$name"
+        fail=1
+    fi
+}
 
-`libbpf-dev` 提供两类东西：用户态 loader API 和 BPF 侧头文件。用户态代码会调用 `bpf_object__open()`、`bpf_object__load()`、`bpf_program__attach()`，或者使用 skeleton 生成的 `xxx_bpf__open_and_load()`、`xxx_bpf__attach()`；BPF 侧代码会包含 `<bpf/bpf_helpers.h>`，使用 `SEC()`、`__uint()`、`__type()` 等宏来声明 section 和 map。没有 libbpf-dev，你可能能写 BPF C 文件，但很难用现代方式加载和管理它。
+check 'clang（编译 BPF C）'            clang --version
+check 'gcc（编译用户态 loader）'       gcc --version
+check 'bpftool（BTF dump / skeleton）' bpftool version
+check 'make'                           make --version
+check 'libbpf 头文件（libbpf-dev）'    test -f /usr/include/bpf/bpf_helpers.h
+check 'Go（仅 09-netfilter-go 需要）'  go version
+```
 
-`BTF` 是 CO-RE 的类型信息基础。BTF 可以理解为更紧凑、面向 BPF 的内核类型描述。`/sys/kernel/btf/vmlinux` 存在时，工具可以知道当前内核里的 `task_struct`、tracepoint 上下文、网络结构等类型长什么样。CO-RE 依赖这些类型信息，在程序加载时把“我要读这个字段”重定位到当前内核的真实偏移。没有 BTF，很多老式示例仍可运行，但可移植性会明显下降。
+`check <名称> <命令...>` 丢弃命令输出、只看退出码；失败打印 FAIL 并把 `fail` 置 1，但不退出、不中断——六件一次查完，便于一眼看清缺什么。本机实跑摘录（BTF 段在层②走读，其余行见 00-env README 完整实录）：
 
-`tracefs/debugfs` 是早期学习和排错的重要输出入口。Hello World 用 `bpf_printk()` 输出的文本不是写到 stdout，而是进入内核 tracing buffer，通常通过 `/sys/kernel/tracing/trace_pipe` 查看。tracefs 还暴露 tracepoint 列表和字段格式，例如 `events/syscalls/sys_enter_openat/format`。debugfs 在一些老系统上仍承载 tracing 路径。入门阶段如果“程序好像运行了但没有输出”，tracefs 是否挂载、trace_pipe 路径是否正确，是第一批要检查的问题。
+```text
+== 内核 ==
+kernel: 7.0.0-42-generic
+OK    内核版本 >= 6.x，满足全部示例要求（Netfilter 示例需 6.6+）
+== 工具链 ==
+OK    clang（编译 BPF C）
+OK    gcc（编译用户态 loader）
+```
+
+六件各自缺了会卡在哪、怎么补：
+
+| 检查项 | 缺失后果 | 补装（Ubuntu/Debian，方法论级） |
+|---|---|---|
+| clang | BPF 侧编译失败，`*.bpf.o` 出不来 | `sudo apt install clang llvm` |
+| gcc | loader 链接失败 | `sudo apt install gcc` |
+| bpftool | vmlinux.h 生成与 skeleton 生成两步都停 | `sudo apt install bpftool` |
+| make | 构建无法启动 | `sudo apt install make` |
+| libbpf-dev | loader 编译报找不到 `<bpf/bpf_helpers.h>` | `sudo apt install libbpf-dev` |
+| Go | 仅 09 的 `go build` 失败 | `sudo apt install golang-go` |
+
+这些依赖不是“装上就行”的清单项，其中三件值得多说两句。`clang/LLVM` 负责把受限 C 编译为 BPF 字节码：普通 C 程序编译成 x86_64 或 arm64 机器码，而 eBPF 内核态程序使用 `clang -target bpf` 编译成 BPF ELF 对象——Hello World 的 `hello.bpf.c` 会生成 `hello.bpf.o`，里面包含 BPF 指令、map 定义、license、section 名称和 BTF/重定位信息。这里说“受限 C”，是因为 eBPF C 不是完整用户态 C：不能随意调用 libc，不能 malloc，不能阻塞睡眠，栈空间有限，循环和指针访问都要让 verifier 能证明安全。
+
+`bpftool` 是学习和排错阶段最重要的瑞士军刀：`feature probe` 查内核支持的程序类型、map 类型和 helper；`btf dump` 从内核 BTF 生成 `vmlinux.h`；`gen skeleton` 生成 libbpf 骨架头；`prog list`、`map list` 观察系统里已加载的程序和 map。示例加载失败时，先用 bpftool 确认系统能力，通常比盲目改代码更快。
+
+`libbpf-dev` 提供两侧接口：用户态 loader API（`bpf_object__open()`、`bpf_object__load()`、`bpf_program__attach()`，或 skeleton 生成的 `xxx_bpf__open_and_load()`、`xxx_bpf__attach()`）与 BPF 侧头文件（`<bpf/bpf_helpers.h>` 的 `SEC()`、`__uint()`、`__type()` 宏）。没有它，BPF C 文件写得出来，却很难用现代方式加载和管理。
+
+### 层② 编译：BTF、vmlinux.h 与三步构建链
+
+编译层回答“怎么编出来”。脚本第二段检查编译链的第一块基石：
+
+```bash
+echo "== BTF / CO-RE =="
+if [ -r /sys/kernel/btf/vmlinux ]; then
+    echo 'OK    /sys/kernel/btf/vmlinux 存在（CONFIG_DEBUG_INFO_BTF 已启用）'
+else
+    echo 'FAIL  /sys/kernel/btf/vmlinux 缺失：CO-RE 示例无法编译，参见附录 C'
+    fail=1
+fi
+```
+
+这一项与工具链缺项同为 FAIL 级，但成因不同：BTF 取决于内核配置 `CONFIG_DEBUG_INFO_BTF`，不是装一个包就能补齐的（自编内核路径见[附录 C](../appendix/c-distro-btf-build-guide.md)）。它之所以排在最前，是因为本章每个示例 `make` 的第一条命令就是 `bpftool btf dump file /sys/kernel/btf/vmlinux format c > vmlinux.h`——BTF 缺失，01–09 没有一个能编译。`BTF` 是 CO-RE 的类型信息基础：`/sys/kernel/btf/vmlinux` 存在时，工具知道当前内核里 `task_struct`、tracepoint 上下文、网络结构等类型长什么样，CO-RE 在加载时把“我要读这个字段”重定位到当前内核的真实偏移（机制与规模第 8 章已拆）。没有 BTF，很多老式示例仍可运行，但可移植性会明显下降。
+
+有了 vmlinux.h，示例统一走 libbpf-bootstrap 式三步链（实验目录一节已述）：`clang -g -target bpf` 把 BPF C 编成 `.bpf.o`——`-g` 是命门，BTF 与 CO-RE 重定位记录靠它进入对象；`bpftool gen skeleton` 把对象、map、程序的句柄封成骨架头；`gcc` 链接用户态 loader。整条链无 root 即可完成，逐示例的编译级机检由 `scripts/verify-build.sh` 承担；第一个完整实例见第 4 节与 [`01-hello-world/`](../examples/chapter-09/01-hello-world/)。
+
+### 层③ 部署：运行时前提与权限档
+
+部署层回答“编出来之后，运行还差什么”。脚本第四段给出两个 WARN 级前提：
+
+```bash
+echo "== 运行时环境 =="
+if [ -d /sys/kernel/tracing/events ]; then
+    echo 'OK    tracefs 已挂载于 /sys/kernel/tracing'
+else
+    echo 'WARN  tracefs 未挂载，可执行: sudo mount -t tracefs tracefs /sys/kernel/tracing'
+fi
+
+if [ "$(id -u)" -eq 0 ]; then
+    echo 'OK    当前为 root，可直接运行 loader'
+else
+    echo 'WARN  当前非 root：示例可编译，但运行 loader 需要 sudo 或 CAP_BPF/CAP_PERFMON 等能力'
+fi
+```
+
+两个 WARN 都不进 `fail` 计数：它们不影响编译，只影响运行。本机实跑恰好两行都中：
+
+```text
+== 运行时环境 ==
+WARN  tracefs 未挂载，可执行: sudo mount -t tracefs tracefs /sys/kernel/tracing
+WARN  当前非 root：示例可编译，但运行 loader 需要 sudo 或 CAP_BPF/CAP_PERFMON 等能力
+```
+
+`tracefs/debugfs` 是早期学习和排错的重要输出入口：Hello World 用 `bpf_printk()` 输出的文本不进 stdout，而是进入内核 tracing buffer，经 `/sys/kernel/tracing/trace_pipe` 查看；tracefs 还暴露 tracepoint 字段格式（如 `events/syscalls/sys_enter_openat/format`）。入门阶段如果“程序好像运行了但没有输出”，tracefs 是否挂载、trace_pipe 路径是否正确，是第一批要检查的问题。
+
+权限这一项，本机实况比脚本的 root/非 root 二分更严一层：`kernel.unprivileged_bpf_disabled=2`，非特权加载被内核彻底禁用，不存在“不 root 降级运行”的路径。tracing 类示例（01–08）的权限矩阵：root 可运行；非 root 加 `CAP_BPF`+`CAP_PERFMON` 可运行；非 root 且无能力集只能编译。09-netfilter-go 另有三项：内核 6.6+（`BPF_PROG_TYPE_NETFILTER` 的引入版本）、`CAP_NET_ADMIN`、bpffs 已挂载（通常为 `/sys/fs/bpf`）。安全警告与全书同口径：加载未经验证的 eBPF 程序会影响系统行为，只应在实验环境操作；网络路径示例还必须在隔离拓扑中验证——09 提供 `scripts/netns-lab.sh`（netns+veth 拓扑），一个错误的 drop 规则可能断开当前 SSH 连接。
+
+### 层④ 运行：加载类动作与预期档口径
+
+运行层回答“怎么加载、怎么停”。本章示例的运行形态只有两种。01–08 是单个 loader 前台运行：`sudo ./<loader>` 加载并挂载，Ctrl-C 退出即卸载，对象生命周期跟随进程，不 pin、无守护进程；运行期间可另开终端用 `bpftool prog list`、`bpftool map list` 观察。09 是进入隔离拓扑后运行 Go 控制面：`sudo ip netns exec nfguard bash` 后执行 `nfctl run`（加载、挂到 `NF_INET_LOCAL_OUT`、每 2 秒打印统计）、`nfctl block <port>`（下发 drop 规则）、Ctrl-C 卸载。
+
+口径先说死：本机无 root 且 `unprivileged_bpf_disabled=2`，上述加载类动作一项都无法实跑，全章所有“运行输出”一律标注**预期输出示例 / 运行级待验证**——与章级及各示例 README 的验证状态标注同口径。读者在满足层①–③的特权机上应能复现；正文给命令与判读，不虚构实跑记录。
+
+### 层⑤ 效果：自检汇总与各示例可见产出
+
+效果层回答“跑起来能看到什么”。自检脚本最后一段先给环境自身的判读收口：
+
+```bash
+echo "== 汇总 =="
+if [ "$fail" -eq 0 ]; then
+    echo '环境满足第 9 章示例的编译要求。'
+else
+    echo '存在 FAIL 项：请先补齐对应依赖（Ubuntu/Debian 可参考: sudo apt install clang llvm gcc bpftool libbpf-dev make）。'
+fi
+exit "$fail"
+```
+
+`fail` 为 0 时输出“环境满足第 9 章示例的编译要求”——准确含义是**编译要求齐备**，不代表运行级就绪（层③两项 WARN 仍在场）；有 FAIL 项则给出与层①表格一致的补装提示。脚本以 `exit "$fail"` 退出：0=无 FAIL，1=存在 FAIL（与第 2–4 章自检脚本同一约定）。本机实跑：
+
+```text
+== 汇总 ==
+环境满足第 9 章示例的编译要求。
+```
+
+自检之后，环境层的编译级效果由 `scripts/verify-build.sh` 兑现：BTF 前置探针 + 00-env 自检 + 逐示例 `make`，本机 2026-11-08 实跑 PASS=10、WARN=0、FAIL=0。每个示例的运行效果——加载后能看到什么——是后续各节的主题，这里一表总览，细节见对应小节与示例 README：
+
+| 示例 | 可见效果（预期输出示例 / 运行级待验证） |
+|---|---|
+| 01-hello-world | `trace_pipe` 出现 `Hello, eBPF world!`（第 4 节） |
+| 02-pid-filter | `trace_pipe` 仅出现目标 PID 的 `execve: pid=… comm=…` 行（第 5 节） |
+| 03-container-security | `trace_pipe` 出现目标容器的 `container-guard: cgid=… pid=… open(…)` 行（第 6 节） |
+| 04-ring-buffer | loader 按 `PID CGROUP_ID COMM` 三列打印结构化事件（第 7 节） |
+| 05-open-file-kprobe | loader 按 `PID COMM FILE` 三列打印打开的文件（第 8 节） |
+| 06-open-file-perf-event | 输出同 05，事件通道换成 perf buffer（第 9 节） |
+| 07-open-file-return | loader 打印 `PID COMM RET FILE`，RET 为 `fd=N` 或 `ERR=N(errno 名)`（第 10 节） |
+| 08-open-file-tracepoint | loader 打印 `PID COMM fd=N FILE`，挂载点换成 openat tracepoint（第 11 节） |
+| 09-netfilter-go | `nfctl block` 下发黑名单后命中端口流量被 drop，`stats` 打印 pass/drop 计数（第 12 节） |
+
+环境五层就绪后，下一节从第一个示例 Hello World 开始，逐层兑现它们。
 
 ## 4. Hello World
 
@@ -151,7 +280,7 @@ fi
 
 Hello World 示例的目标是让读者第一次看到 eBPF 输出。相较第 1 章的 tracepoint skeleton 示例，本节应给出更贴近 ebpf.top 入门系列的版本，并解释 `bpf_trace_printk` 与 `bpf_printk` 的关系。
 
-计划内核态代码：
+内核态代码（与示例 01 的 `hello.bpf.c` 同形；完整源码含注释与 license 声明，见 [`01-hello-world/`](../examples/chapter-09/01-hello-world/)）：
 
 ```c
 #include "vmlinux.h"
@@ -167,7 +296,7 @@ int hello(void *ctx)
 }
 ```
 
-计划命令：
+编译与运行命令（与示例 01 的 README 一致）：
 
 ```bash
 make
@@ -196,7 +325,7 @@ sudo cat /sys/kernel/tracing/trace_pipe
 
 没有过滤的 eBPF 程序会捕获系统中所有匹配事件。入门阶段很快会遇到噪声问题：你只想观察目标进程，却看到 shell、systemd、容器 runtime、监控 agent 的大量事件。PID 过滤是最小过滤能力。
 
-计划 map 设计：
+map 设计（节选自示例 02 的 `pid_filter.bpf.c`）：
 
 ```c
 struct {
@@ -207,7 +336,7 @@ struct {
 } target_pid SEC(".maps");
 ```
 
-计划 eBPF 过滤逻辑：
+过滤逻辑（节选自 `pid_filter.bpf.c`，随后的 comm 读取与输出见示例源码）：
 
 ```c
 __u32 key = 0;
@@ -238,21 +367,21 @@ sudo ./pid_filter --pid 12345
 
 这一篇把过滤维度从 PID 扩展到容器。容器环境中，单纯 PID 不稳定：容器会重启，进程会变化，同一个宿主机上有多个 namespace。更实际的做法是结合 cgroup id、mount namespace、pid namespace 或容器 runtime 暴露的元数据。
 
-计划示例目标：拦截或记录容器内进程访问敏感路径的行为。
+示例目标：识别目标容器并记录其进程访问敏感路径的行为。
 
-计划事件：
+事件流：
 
 ```text
 进程打开文件 -> eBPF 读取 comm/pid/cgroup_id/path 信息 -> 判断是否属于目标容器 -> 输出事件或拒绝
 ```
 
-计划使用的 helper：
+核心 helper：
 
 ```c
 __u64 cgid = bpf_get_current_cgroup_id();
 ```
 
-计划 map：
+map 形态（示意；实际定义见示例 03 `container_guard.bpf.c` 的 `target_cgroups` HASH map）：
 
 ```c
 // key: cgroup id
@@ -274,7 +403,7 @@ cgroup id 适合作为容器级过滤线索，是因为现代容器运行时通�
 
 ring buffer 是现代 eBPF 事件输出的重要机制。相比 `bpf_printk`，它传输结构化数据；相比 perf buffer，它提供 MPSC ring buffer 语义，用户态读取更直接。
 
-计划事件结构：
+事件结构（节选自示例 04 的 `ringbuf_exec_common.h`）：
 
 ```c
 struct event {
@@ -284,7 +413,7 @@ struct event {
 };
 ```
 
-计划 map：
+事件 map（节选自示例 04 的 `ringbuf_exec.bpf.c`）：
 
 ```c
 struct {
@@ -293,7 +422,7 @@ struct {
 } events SEC(".maps");
 ```
 
-计划 eBPF 输出逻辑：
+输出逻辑（节选自 `ringbuf_exec.bpf.c`）：
 
 ```c
 struct event *e = bpf_ringbuf_reserve(&events, sizeof(*e), 0);
@@ -327,7 +456,7 @@ ring buffer 满时，`bpf_ringbuf_reserve()` 会返回 NULL。示例里的 `if (
 - kprobe：`do_sys_openat2`、`do_filp_open` 或架构相关 syscall wrapper。
 - tracepoint：`syscalls:sys_enter_openat`、`syscalls:sys_enter_openat2`。
 
-kprobe 版本计划读取：
+kprobe 版本读取 filename 的核心动作：
 
 ```c
 // 从函数参数中读取 filename 指针，再用 bpf_probe_read_user_str 复制字符串。
@@ -355,7 +484,7 @@ PID     COMM             FILE
 
 这一篇与 ring buffer 形成对照：同样输出结构化事件，但使用 perf event array。
 
-计划 map：
+事件 map（节选自示例 06 的 `opensnoop_perf.bpf.c`）：
 
 ```c
 struct {
@@ -365,7 +494,7 @@ struct {
 } events SEC(".maps");
 ```
 
-计划输出：
+输出调用（与示例 06 的 `opensnoop_perf.bpf.c` 同形）：
 
 ```c
 struct event event = {};
@@ -386,14 +515,14 @@ libbpf 用户态一般使用 `perf_buffer__new()` 创建 reader，传入 map fd�
 
 只捕获 open enter 事件还不够。很多排障问题关心的是“打开失败了吗，错误码是什么”。返回值需要在函数返回或 syscall exit 时捕获。
 
-计划路径：
+enter/exit 两阶段路径：
 
 ```text
 enter 阶段：记录 pid -> filename
 exit 阶段：读取返回值 ret，关联 pid 查 filename，输出并删除临时状态
 ```
 
-计划临时 map：
+临时 map 形态（示意；实际定义见示例 07 的 `openret.bpf.c`）：
 
 ```c
 // key: pid
@@ -401,7 +530,7 @@ exit 阶段：读取返回值 ret，关联 pid 查 filename，输出并删除临
 BPF_MAP_TYPE_HASH inflight;
 ```
 
-计划输出：
+输出示例：
 
 ```text
 PID     COMM        RET     FILE
@@ -433,7 +562,7 @@ sudo cat /sys/kernel/tracing/events/syscalls/sys_enter_openat/format
 sudo cat /sys/kernel/tracing/events/syscalls/sys_exit_openat/format
 ```
 
-计划 section：
+section 形态（完整实现在示例 08 的 `opensnoop_tp.bpf.c`）：
 
 ```c
 SEC("tracepoint/syscalls/sys_enter_openat")
@@ -457,13 +586,13 @@ tracepoint 的稳定性不等于永远不变。不同架构、不同 syscall ABI
 
 系列最后一篇把学习从观测推进到网络钩子和 Go 控制面。Netfilter BPF 与 XDP/TC 的侧重点不同：它接近传统防火墙路径，适合解释报文过滤、策略判断和用户态控制面的关系。
 
-计划示例目标：
+示例目标：
 
 ```text
 Go 控制面加载 BPF 程序 -> 挂到 Netfilter hook -> map 下发阻断规则 -> 输出命中统计
 ```
 
-计划 Go 结构：
+Go 控制面形态（示意；完整实现在 [`09-netfilter-go`](../examples/chapter-09/09-netfilter-go/) 的 `cmd/nfctl/main.go`）：
 
 ```go
 package main
