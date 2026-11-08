@@ -46,7 +46,7 @@
 
 ## 机检汇总
 
-机检脚本 `scripts/verify-citations.sh` 以树根 `citations.txt` 为唯一数据源(38 条锚点,五组:①BTF 基础与解析 3 条/②kind 体系 5 条/③CO-RE 编译期 9 条/④libbpf 引擎 11 条/⑤内核引擎+UAPI 载体 10 条;每条只验「文件在场 + `grep -F` 符号命中」,按符号不按行号)。终跑实测(2026-11-08,走读树 `/work/linux/linux-6.6.78`):
+机检脚本 `scripts/verify-citations.sh` 以树根 `citations.txt` 为唯一数据源(38 条锚点,五组:①BTF 基础与解析 3 条/②kind 体系 5 条/③CO-RE 编译期 9 条/④libbpf 引擎 10 条/⑤内核引擎+UAPI 载体 11 条;每条只验「文件在场 + `grep -F` 符号命中」,按符号不按行号)。终跑实测(2026-11-08,走读树 `/work/linux/linux-6.6.78`):
 
 ```text
 TOTAL=38 PASS=38 FAIL=0 WALK_TREE=/work/linux/linux-6.6.78 TREE_VERSION=v6.6.78

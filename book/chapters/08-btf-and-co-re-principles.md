@@ -513,11 +513,12 @@ $ llvm-objdump -dr core.bpf.o | grep -F "CO-RE"  # 注解版:4 条记录
 		0000000000000090:  CO-RE <byte_off> [12] struct task_struct::comm (0:129)
 		00000000000000c8:  CO-RE <field_exists> [12] struct task_struct::kstack_offset (0:258)
 		00000000000000e8:  CO-RE <byte_off> [12] struct task_struct::kstack_offset (0:258)
-$ cd ../04-relo-slicer && python3 slice-relos.py ../03-core-read/core.bpf.o | tail -4
+$ cd ../04-relo-slicer && python3 slice-relos.py ../03-core-read/core.bpf.o | tail -5
 ## 汇总
 RELOS=4
 kind 分布:BPF_CORE_FIELD_BYTE_OFFSET×3、BPF_CORE_FIELD_EXISTS×1
 断言:记录数 > 0(实测 4)PASS;全部 kind ∈ [0,11] PASS
+结论:切片成功——.BTF.ext 五站走完;逐条记录的「源码一行 CO-RE 访问 ↔ .BTF.ext 一条记录」对照见站 5(数值均为本机实况,其他内核不同)。
 ```
 
 注解版给「哪条指令挂了哪条记录」;切片器给同一批记录的字节版(站 3 摘录,本机实况):
@@ -750,11 +751,12 @@ $ llvm-objdump -dr core.bpf.o | grep -F "CO-RE"
 	0000000000000090:  CO-RE <byte_off> [12] struct task_struct::comm (0:129)
 	00000000000000c8:  CO-RE <field_exists> [12] struct task_struct::kstack_offset (0:258)
 	00000000000000e8:  CO-RE <byte_off> [12] struct task_struct::kstack_offset (0:258)
-$ cd ../04-relo-slicer && python3 slice-relos.py ../03-core-read/core.bpf.o | tail -4
+$ cd ../04-relo-slicer && python3 slice-relos.py ../03-core-read/core.bpf.o | tail -5
 ## 汇总
 RELOS=4
 kind 分布:BPF_CORE_FIELD_BYTE_OFFSET×3、BPF_CORE_FIELD_EXISTS×1
 断言:记录数 > 0(实测 4)PASS;全部 kind ∈ [0,11] PASS
+结论:切片成功——.BTF.ext 五站走完;逐条记录的「源码一行 CO-RE 访问 ↔ .BTF.ext 一条记录」对照见站 5(数值均为本机实况,其他内核不同)。
 ```
 
 三条 `<byte_off>` 的立即数 0xaf0/0xd10/0x2548(2800/3344/9544)就是本机偏移;`<field_exists>` 占位 imm=1,补什么值编译期无从知道(3.8 之②)。**这批字节就是五层旅程的「行李」**——下一层换台机器,被改写的正是它们。
