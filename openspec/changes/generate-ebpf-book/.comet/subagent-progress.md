@@ -4,8 +4,12 @@
 - 工作方式(用户已确认,不得重新询问):isolation=current(master)、build_mode=subagent-driven-development(dispatch confirmed)、tdd_mode=direct、review_mode=thorough(每任务 reviewer,审查-修复最多 2 轮)
 - 设计文档: docs/superpowers/specs/2026-11-02-chapter08-teaching-design.md(方案 A 六资产+40–55k 五段,用户 2026-11-02 拍板)
 - Task 1 完成(a04ed82)、Task 2 完成(02162ad,review PASS,3 minors 延后)、Task 3 完成(34ae8dc,review PASS,5 minors 延后)、Task 4 完成(07ef5af,review PASS,2 minors 延后)、Task 5 完成(113feb3+修复 ca2cee2,1 轮修复后 review PASS,3 minors 延后)
-- 当前 Task 14「两项练习+主审专项(CO-RE 边界/非绝对可移植)+tasks.md 勾选(收口)」:阶段=implementing(BASE=159ca19,2026-11-08 后台 implementer 已派发(brief task-14-brief.md,报告 task-14-report.md);注入:C4 练习规格、13 种 kind 口径(练习① README 勿写十二种)、kind 名称对照按 13 个逐一(第 13 种 TYPE_MATCHES :7275)、篇幅余量仅 60(主审回修净增须等量就地压缩)、台账勘误三条(verifier.c :15753/:15754/:15749-15751、%8=:15771)、m-1/m-3 顺带授权)
-- Task 13 完成(7ee9fa6+修复 159ca19,1 轮修复 2 Important(切片器 console tail -5 对齐实跑、README 机检 ④⑤ 对调)全 ADDRESSED;3 minors 延后(m-1「35 条类型记录」、m-3「时点记录」标 T14 顺带);勾选提交 80f9d60;⚠️快照已统一校准 7.0.0-42 现测、机检 38/38 全绿、章级 54940)
+- **停靠(2026-11-08):第 8 章 build 全部收口**——14 任务实现+审查(每任务 thorough reviewer,审查-修复最多 2 轮)+实跑验证+勾选全毕;tasks.md「Chapter 8」8/8 已勾选(2030ed6);plan 14/14 勾选(收口提交 c8de401);无 Critical/Important 开放项
+- Task 14 完成(eba4c4d 练习 feat+2030ed6 tasks.md 勾选+修复 9a97bd8,1 轮修复 1 Important(练习①补 TYPE_ID_LOCAL 记录对齐 C4 类型 ID 语义)全 ADDRESSED,终审 Approved C0/I0/m2;勾选提交 c8de401)
+- Task 13 完成(7ee9fa6+修复 159ca19,1 轮修复 2 Important(切片器 console tail -5 对齐实跑、README 机检 ④⑤ 对调)全 ADDRESSED;3 minors 延后(m-1/m-3 已由 T14 顺带清偿);勾选提交 80f9d60;快照统一校准 7.0.0-42 现测、机检 38/38 全绿)
+- 章终态硬指标:章正文 wc -m=54987 ∈ [40000,55000];机检 verify-citations TOTAL=38 PASS=38 FAIL=0(负路径 exit 1);C8 交叉链接 28/2(≥8/≥1);禁语 grep 零命中(拷贝/已验证通过/验证通过);三标注在场(本机实况×14/预期输出示例×5/clang 18 实测×5);两练习 check ①9/9 ②6/6 全绿(负路径均 exit 1);主审抽检 76 处行号零失准
+- ⚠️ 未推送 GitHub:本地领先 origin/master 70+ 提交(ch06/ch07/ch08 全部),等用户明确指示再 push
+- 全书 change(generate-ebpf-book)tasks.md 各章已全部勾选,余 comet 层 build/verify 门与 park 决策,待用户指示
 - ⚠️ 台账勘误(Task 13 审查裁定,后续任务勿按旧行号动手):verifier.c "future proofing"=:15753、bpf_check_uarg_tail_zero=:15754、注释区间=:15749-15751(旧记 :15752/:15753 与 :15748-15750 均偏 1);verifier %8 校验=:15771(旧记 :15768);切片器汇总缺行实为「结论」行而非「## 汇总」(m1 误诊,修复轮按 tail -5 对齐)
 - Task 12 完成(42d9c11+修复 797af75,1 轮修复 1 Important(5.7 链路:attach 自动链走 load_module_btfs,btf__load_module_btf 为公开 API)全 ADDRESSED;5 minors 延后;勾选提交 5dbbe7d;⚠️全章 50877,55k 上限仅余 4123——T13 分节服从章级)
 - Task 11 完成(f9b1148+修复 25b53bf,1 轮修复 1 Important 全 ADDRESSED;5+1 minors 延后;勾选提交 219bd1b)
