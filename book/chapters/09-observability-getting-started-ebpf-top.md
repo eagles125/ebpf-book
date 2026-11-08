@@ -315,8 +315,7 @@ sudo cat /sys/kernel/tracing/trace_pipe
 
 选择 `execve` 是因为它容易触发、语义清楚，而且输出不会像调度器事件那样刷屏。读者启动 loader 后，只要在另一个终端执行 `/bin/true`、`ls` 或 `echo test`，系统就会进入 `execve`，从而触发 `tracepoint/syscalls/sys_enter_execve`。这让读者能把“我执行了一个命令”和“trace_pipe 出现一行 eBPF 输出”直接对应起来。
 
-`trace_pipe` 适合教学，是因为它把内核 tracing buffer 以文本流形式暴露出来。`bpf_printk("Hello, eBPF world!
-")` 的结果不会出现在 loader 的 stdout，而是进入 `/sys/kernel/tracing/trace_pipe`。这能帮助读者理解 eBPF 程序运行在内核事件上下文中，输出路径和用户态 printf 不同。
+`trace_pipe` 适合教学，是因为它把内核 tracing buffer 以文本流形式暴露出来。`bpf_printk("Hello, eBPF world!\n")` 的结果不会出现在 loader 的 stdout，而是进入 `/sys/kernel/tracing/trace_pipe`。这能帮助读者理解 eBPF 程序运行在内核事件上下文中，输出路径和用户态 printf 不同。
 
 生产代码不应大量使用 `bpf_printk`，原因是它做字符串格式化并写 tracing buffer，开销高且容易在高频事件下丢数据或干扰系统。真实工具通常只在开发和排错阶段保留少量 `bpf_printk`。当需要持续输出事件时，应使用 ring buffer 或 perf buffer；当只需要统计时，应使用 map 聚合，让用户态周期性读取。
 
@@ -385,8 +384,8 @@ __u64 cgid = bpf_get_current_cgroup_id();
 map 形态（示意；实际定义见示例 03 `container_guard.bpf.c` 的 `target_cgroups` HASH map）：
 
 ```c
-// key: cgroup id
-// value: policy flags，例如 allow/deny/log-only
+// key: cgroup id（__u64）
+// value: __u32 策略（POLICY_LOG=0 / POLICY_DENY=1；示例只启用 POLICY_LOG）
 BPF_MAP_TYPE_HASH target_cgroups;
 ```
 
@@ -457,18 +456,92 @@ ring buffer 满时，`bpf_ringbuf_reserve()` 会返回 NULL。示例里的 `if (
 - kprobe：`do_sys_openat2`、`do_filp_open` 或架构相关 syscall wrapper。
 - tracepoint：`syscalls:sys_enter_openat`、`syscalls:sys_enter_openat2`。
 
-kprobe 版本读取 filename 的核心动作：
+示例 05 选第一类中的 `do_sys_openat2`：它是 open/openat/openat2 三个系统调用在内核里的公共实现（fs/open.c，5.6+ 引入），原型为 `long do_sys_openat2(int dfd, const char __user *filename, struct open_how *how)`——第二个参数正是本节要抓的用户态 filename 指针。事件结构沿用第 7 节的三字段形态（节选自 `opensnoop_kprobe_common.h`）：
 
 ```c
-// 从函数参数中读取 filename 指针，再用 bpf_probe_read_user_str 复制字符串。
+#define FILENAME_LEN 128
+
+struct event {
+	__u32 pid;
+	char comm[16];
+	char filename[FILENAME_LEN];
+};
 ```
 
-预期输出：
+事件通道是 256 KB 的 ring buffer（节选自 `opensnoop_kprobe.bpf.c`）：
+
+```c
+struct {
+	__uint(type, BPF_MAP_TYPE_RINGBUF);
+	__uint(max_entries, 256 * 1024);
+} events SEC(".maps");
+```
+
+kprobe 版本读取 filename 的动作全部集中在入口函数里（节选自 `opensnoop_kprobe.bpf.c`）：
+
+```c
+SEC("kprobe/do_sys_openat2")
+int BPF_KPROBE(opensnoop_entry, int dfd, const char *filename,
+	       struct open_how *how)
+{
+	struct event *e;
+
+	e = bpf_ringbuf_reserve(&events, sizeof(*e), 0);
+	if (!e)
+		return 0;
+
+	e->pid = bpf_get_current_pid_tgid() >> 32;
+	bpf_get_current_comm(&e->comm, sizeof(e->comm));
+
+	/* filename 是用户态地址：读取用户内存，可能失败/截断 */
+	bpf_probe_read_user_str(&e->filename, sizeof(e->filename),
+				(const void *)filename);
+
+	bpf_ringbuf_submit(e, 0);
+	return 0;
+}
+```
+
+对照这段代码逐段看：
+
+- **取参**：`BPF_KPROBE` 宏（`<bpf/bpf_tracing.h>`）按位置把 `do_sys_openat2` 的形参绑定到 `dfd`、`filename`、`how`。不用宏时的等价写法是 `int opensnoop_entry(struct pt_regs *ctx)` 内取 `PT_REGS_PARM2(ctx)`——这正是 kprobe 与 tracepoint 的一个差别：kprobe 上下文是 `pt_regs`，函数参数要按调用约定自己还原，宏只是把这个机械步骤封装掉。
+- **预留**：`bpf_ringbuf_reserve()` 与判空 `return 0` 同第 7 节：缓冲满时返回 NULL，先丢掉这条事件。
+- **基础字段**：`e->pid` 取 `bpf_get_current_pid_tgid() >> 32`（第 5 节讲过的进程 PID 语义），`bpf_get_current_comm()` 填任务名。
+- **读 filename（本节主角）**：`filename` 形参是用户态地址，必须用 `bpf_probe_read_user_str()` 从触发事件的那个进程的地址空间复制进事件内的 `filename[128]` 缓冲；读取可能失败（指针无效、缺页）或被 128 字节截断，输出里偶见的空文件名多来自这里，生产工具应检查 helper 的返回值。
+- **提交**：`bpf_ringbuf_submit(e, 0)` 之后，事件才对用户态可见。
+
+用户态 loader（节选自 `opensnoop_kprobe.c`）先 `opensnoop_kprobe_bpf__open_and_load()` 一步完成加载与校验，再挂载并创建 ring buffer reader：
+
+```c
+	if (opensnoop_kprobe_bpf__attach(skel)) {
+		fprintf(stderr, "挂载 BPF 程序失败（do_sys_openat2 是否存在于当前内核？）\n");
+		opensnoop_kprobe_bpf__destroy(skel);
+		return 1;
+	}
+
+	ring = ring_buffer__new(bpf_map__fd(skel->maps.events),
+				handle_event, NULL, NULL);
+```
+
+attach 的失败信息指向 kprobe 的固有依赖：程序绑定的是内核函数名，`do_sys_openat2` 必须出现在当前内核的符号表里（老内核可换 `do_sys_open`，或改用第 11 节的 tracepoint 版本）。reader 的回调把字节流按 `struct event` 解释并打印三列（节选自 `opensnoop_kprobe.c`）：
+
+```c
+static int handle_event(void *ctx, void *data, size_t data_sz)
+{
+	const struct event *e = data;
+
+	printf("%-8u %-16s %s\n", e->pid, e->comm, e->filename);
+	return 0;
+}
+```
+
+`main()` 的主循环就是第 7 节的 `ring_buffer__poll(ring, 100)`：100 是超时毫秒数，返回 `-EINTR` 时置位退出标志收尾。预期输出（列宽按上面的 printf 格式串逐列排布；预期输出示例 / 运行级待验证）：
 
 ```text
-PID     COMM             FILE
-12345   cat              /etc/hosts
-12346   nginx            /var/log/nginx/access.log
+PID      COMM             FILE
+1001     cat              /etc/hosts
+1002     ls               /tmp
+1003     nginx            /var/log/nginx/access.log
 ```
 
 文件打开跟踪示例最容易踩指针和时序两个坑。
@@ -526,8 +599,8 @@ exit 阶段：读取返回值 ret，关联 pid 查 filename，输出并删除临
 临时 map 形态（示意；实际定义见示例 07 的 `openret.bpf.c`）：
 
 ```c
-// key: pid
-// value: filename/comm/timestamp
+// key: pid_tgid（64 位，避免多线程同进程冲突）
+// value: comm + filename（struct inflight_value）
 BPF_MAP_TYPE_HASH inflight;
 ```
 
@@ -541,7 +614,7 @@ PID      COMM             RET        FILE
 
 返回值示例要把“两个事件拼成一次完整操作”讲清楚。
 
-enter 和 exit 需要通过 map 关联，是因为 openat 进入时能看到 filename，但还不知道结果；退出时能看到返回值，但 filename 参数未必还方便读取。常见做法是在 enter 阶段用 pid/tid 作为 key，把 filename、comm、时间戳写入 `inflight` map；exit 阶段用同一个 key 查回临时状态，加上返回值后输出完整事件。
+enter 和 exit 需要通过 map 关联，是因为 openat 进入时能看到 filename，但还不知道结果；退出时能看到返回值，但 filename 参数未必还方便读取。常见做法是在 enter 阶段用 64 位 `pid_tgid` 作为 key，把 comm、filename 写入 `inflight` map；exit 阶段用同一个 key 查回临时状态，加上返回值后输出完整事件。
 
 返回值为负数时通常表示 `-errno`。例如 `-2` 对应 `ENOENT`，表示文件不存在；非负值通常是文件描述符 fd。示例输出不能只打印数字，还应解释如何把负返回值映射到错误原因。完整工具可以在用户态把 `-ret` 转换为 errno 名称和错误字符串。
 
@@ -567,10 +640,10 @@ section 形态（完整实现在示例 08 的 `opensnoop_tp.bpf.c`）：
 
 ```c
 SEC("tracepoint/syscalls/sys_enter_openat")
-int enter_openat(struct trace_event_raw_sys_enter *ctx) { ... }
+int tp_openat_enter(struct trace_event_raw_sys_enter *ctx) { ... }
 
 SEC("tracepoint/syscalls/sys_exit_openat")
-int exit_openat(struct trace_event_raw_sys_exit *ctx) { ... }
+int tp_openat_exit(struct trace_event_raw_sys_exit *ctx) { ... }
 ```
 
 tracepoint 篇要强调“稳定，但仍要核对”。
@@ -607,7 +680,7 @@ Netfilter + Go 示例要让读者第一次看到“控制面/数据面分离”�
 
 Go 用户态负责控制面，C eBPF 程序负责数据面。数据面在内核网络路径上高频执行，只做解析报文、查 map、更新统计、返回动作；Go 控制面负责加载对象、挂载程序、解析命令行、把规则写入 map、读取统计、优雅退出。这样分工后，规则变更不需要重新编译 BPF 程序，控制面也不会进入高频报文处理路径。
 
-map pinning 用来把 map 固定到 bpffs，例如 `/sys/fs/bpf/nf_guard/rules`。如果不 pin，map 生命周期通常跟 loader 进程和 fd 绑定，进程退出后 map 可能被释放。pin 后，另一个控制面进程可以重新打开同一个 map，读取或更新规则。生产工具常用 pinning 支持 daemon 重启、状态保留和多进程协作，但也要做好清理，避免留下过期 map。
+map pinning 用来把 map 固定到 bpffs，例如 `/sys/fs/bpf/nf_guard_rules`（rules 与 stats 两个 map 都经 `LIBBPF_PIN_BY_NAME` 固定在这里）。如果不 pin，map 生命周期通常跟 loader 进程和 fd 绑定，进程退出后 map 可能被释放。pin 后，另一个控制面进程可以重新打开同一个 map，读取或更新规则。生产工具常用 pinning 支持 daemon 重启、状态保留和多进程协作，但也要做好清理，避免留下过期 map。
 
 Netfilter、XDP、TC 的钩子位置不同。XDP 在驱动收包早期，适合极高吞吐的早期丢包；TC 位于 qdisc ingress/egress，和 skb、容器 veth、改包动作结合更自然；Netfilter 位于传统防火墙路径，适合理解 hook、协议栈阶段和策略过滤。入门示例选择 Netfilter，是为了把 eBPF 与经典防火墙概念连接起来；第 15 至第 17 章会系统比较 XDP 和 TC。
 
