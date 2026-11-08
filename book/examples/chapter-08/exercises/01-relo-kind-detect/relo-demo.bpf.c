@@ -2,12 +2,15 @@
  *
  * 【文件用途】
  *   刻意包含多种 CO-RE 重定位记录的最小对象,供 04-relo-slicer 切片判读
- *   「每条记录补丁什么、怎么补」(kind 语义)。覆盖三种 kind:
+ *   「每条记录补丁什么、怎么补」(kind 语义)。覆盖四种 kind:
  *     - kind 0(BPF_CORE_FIELD_BYTE_OFFSET):BPF_CORE_READ 读字段;
  *     - kind 2(BPF_CORE_FIELD_EXISTS):bpf_core_field_exists 兼容分支;
+ *     - kind 6(BPF_CORE_TYPE_ID_LOCAL):bpf_core_type_id_local 问「demo_event
+ *       在本机 BTF 里的类型 ID 是几」(宏出口 tools/lib/bpf/bpf_core_read.h
+ *       :165,v6.6.78;加载期引擎免候选查找、直接回填本地 ID——正文 4.2 的
+ *       TYPE_ID_LOCAL 例外,relo_core.c:1319-1327);
  *     - kind 9(BPF_CORE_TYPE_SIZE):bpf_core_type_size 问目标类型大小
- *       (uapi bpf.h:7272;注意 kind 6 是 TYPE_ID_LOCAL、kind 9 是 TYPE_SIZE,
- *       对照口径=13 种,uapi bpf.h:7262-7276)。
+ *       (uapi bpf.h:7272;对照口径=13 种,uapi bpf.h:7262-7276)。
  *   类型全部自编(仿 01-btf-kinds 的 demo 风格),不依赖内核类型漂移;
  *   参数指针当根指针用(正文 3.3 探针同款手法)。
  *
@@ -16,7 +19,7 @@
  *   语义,预期失败而非事故)——README「参考思路」有展开。
  *
  * 【验证状态】编译级已验证(本机 clang 18.1.3 实测产 demo.bpf.o,
- *   切片器五站全过、RELOS=5);不涉及加载运行。
+ *   切片器五站全过、RELOS=6);不涉及加载运行。
  *
  * 【安全声明】仅编译与切片,不加载、不 attach;程序体只做整数运算,
  *   不读内核内存(bpf_probe_read_kernel 由宏族引入但永不执行)。
@@ -79,6 +82,12 @@ int demo_detect(void *ctx)
 		/* 记录 kind 0:读 flags(访问链 0:1) */
 		mode += BPF_CORE_READ(cfg, flags);
 	}
+
+	/* 记录 kind 6(TYPE_ID_LOCAL):问「demo_event 在本机 BTF 里的类型 ID
+	 * 是几」——编译期未知,加载期引擎免候选查找、直接回填本地 ID(正文
+	 * 4.2 的 TYPE_ID_LOCAL 例外,relo_core.c:1319-1327);结果并进返回值,
+	 * 防 -O2 把这条访问连同记录一起优化掉 */
+	mode += bpf_core_type_id_local(struct demo_event) != 0;
 
 	return mode;
 }

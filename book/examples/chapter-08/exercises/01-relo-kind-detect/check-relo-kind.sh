@@ -4,15 +4,17 @@
 # 【脚本用途与输入】
 # 对本练习产出的 demo.bpf.o 实跑 ../../04-relo-slicer/slice-relos.py,
 # 按练习① 的验收口径逐项断言:切片器五站走通(退出码 0)、记录数 ≥3、
-# 三种目标 kind(0 字段字节偏移 / 2 字段存在 / 9 类型大小)的 uapi 枚举名
-# 逐个在切片输出里在场。
+# 四种目标 kind(0 字段字节偏移 / 2 字段存在 / 6 本地类型 ID / 9 类型大小)
+# 逐个**绑「kind 分布」行**断言(名称×条数,如 BPF_CORE_TYPE_ID_LOCAL×1)。
+# 分布行由切片器站 4 对**逐条记录**判定汇总而来——站 4 的静态名称表不算数,
+# 记录里真有该 kind 且条数一致才命中(防「名字在名称表里就过」的弱断言)。
 #   - 切片器:环境变量 SLICER,默认 ../../04-relo-slicer/slice-relos.py;
 #   - 判读对象:环境变量 OBJ,默认 demo.bpf.o(不在场先 make);
 #   - 只编译只切片:不加载 BPF 程序、不写源码树、对内核零触碰。
 #
 # 【输出结构】
 #   - 逐项一行:PASS <描述> 或 FAIL <描述>(附原因);
-#   - 末尾固定汇总:TOTAL=8 PASS=<n> FAIL=<n> OBJ=<对象> SLICER=<切片器>
+#   - 末尾固定汇总:TOTAL=9 PASS=<n> FAIL=<n> OBJ=<对象> SLICER=<切片器>
 #     (TOTAL/PASS/FAIL 口径同 scripts/verify-citations.sh);
 #   - 退出码:FAIL=0 → 0;FAIL≠0 → 1。
 #
@@ -24,8 +26,9 @@
 # 【失败模式】
 #   1. 对象不在场:先在练习目录跑 make(两步链见 Makefile 头注);
 #   2. 切片器退出码非 0:按切片器自己的 FAIL 行修(缺 .BTF.ext 多半是漏 -g);
-#   3. kind 名未命中:relo-demo.bpf.c 被改动导致 kind 集合变化——对照
-#      uapi bpf.h:7262-7276(13 种)同步更新本脚本与 README 判读表。
+#   3. 分布行断言未命中:relo-demo.bpf.c 被改动导致 kind 集合或条数变化——
+#      对照 uapi bpf.h:7262-7276(13 种)重切重判,同步更新本脚本与
+#      README 判读表(名称×条数两边必须一致)。
 set -u
 cd "$(dirname "$0")"    # 相对路径一律以脚本所在目录为基准
 
@@ -88,25 +91,32 @@ else
     fail_row "记录数 ≥3" "RELOS 行缺失或数值不足(实测:${relos:-无})"
 fi
 
-# 三种目标 kind 的 uapi 枚举名逐个在场(与 relo-demo.bpf.c 的 kind 注释对应;
+# 四种目标 kind 逐个绑「kind 分布」行断言(名称×条数;分布行=站 4 逐记录
+# 判定的汇总,静态名称表不算数;与 relo-demo.bpf.c 的 kind 注释一一对应,
 # 名称表权威来源:uapi bpf.h:7262-7276,13 种)
 total=$((total + 1))
-if printf '%s\n' "$out" | grep -F -q 'BPF_CORE_FIELD_BYTE_OFFSET'; then
-    pass_row "kind 0(BPF_CORE_FIELD_BYTE_OFFSET,字段字节偏移)在场"
+if printf '%s\n' "$out" | grep -F -q 'BPF_CORE_FIELD_BYTE_OFFSET×3'; then
+    pass_row "kind 0(BPF_CORE_FIELD_BYTE_OFFSET,字段字节偏移)×3 在分布行"
 else
-    fail_row "kind 0(BPF_CORE_FIELD_BYTE_OFFSET)在场" "切片输出未含该枚举名"
+    fail_row "kind 0(BPF_CORE_FIELD_BYTE_OFFSET)×3 在分布行" "分布行未命中(记录缺失或条数不符)"
 fi
 total=$((total + 1))
-if printf '%s\n' "$out" | grep -F -q 'BPF_CORE_FIELD_EXISTS'; then
-    pass_row "kind 2(BPF_CORE_FIELD_EXISTS,字段存在)在场"
+if printf '%s\n' "$out" | grep -F -q 'BPF_CORE_FIELD_EXISTS×1'; then
+    pass_row "kind 2(BPF_CORE_FIELD_EXISTS,字段存在)×1 在分布行"
 else
-    fail_row "kind 2(BPF_CORE_FIELD_EXISTS)在场" "切片输出未含该枚举名"
+    fail_row "kind 2(BPF_CORE_FIELD_EXISTS)×1 在分布行" "分布行未命中(记录缺失或条数不符)"
 fi
 total=$((total + 1))
-if printf '%s\n' "$out" | grep -F -q 'BPF_CORE_TYPE_SIZE'; then
-    pass_row "kind 9(BPF_CORE_TYPE_SIZE,类型大小)在场"
+if printf '%s\n' "$out" | grep -F -q 'BPF_CORE_TYPE_ID_LOCAL×1'; then
+    pass_row "kind 6(BPF_CORE_TYPE_ID_LOCAL,本地类型 ID)×1 在分布行"
 else
-    fail_row "kind 9(BPF_CORE_TYPE_SIZE)在场" "切片输出未含该枚举名"
+    fail_row "kind 6(BPF_CORE_TYPE_ID_LOCAL)×1 在分布行" "分布行未命中(记录缺失或条数不符)"
+fi
+total=$((total + 1))
+if printf '%s\n' "$out" | grep -F -q 'BPF_CORE_TYPE_SIZE×1'; then
+    pass_row "kind 9(BPF_CORE_TYPE_SIZE,类型大小)×1 在分布行"
+else
+    fail_row "kind 9(BPF_CORE_TYPE_SIZE)×1 在分布行" "分布行未命中(记录缺失或条数不符)"
 fi
 
 printf 'TOTAL=%d PASS=%d FAIL=%d OBJ=%s SLICER=%s\n' \

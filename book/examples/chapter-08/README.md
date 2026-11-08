@@ -23,7 +23,7 @@
 | `04-relo-slicer/` | 切片器(python) | `slice-relos.py` 五站:①ELF 段布局(.BTF/.BTF.ext/.rel.BTF.ext 尺寸)②btf_ext 头(magic/长度/偏移)③core_relo 记录解析(insn_off/type_id/access_str_off/kind)④kind 对照 uapi 枚举 ⑤access string 解码与源码字段对照;仅标准库 | 编译级已验证(实跑切片,记录数>0 断言) | Task 5 落地,实测全绿(RELOS=4,断言全 PASS) |
 | `05-kernel-relo/` | 切片器(bash) | `trace-kernel-relo.sh` 五站:①内核引擎入口 `bpf_core_apply` ②候选查找 `bpf_core_find_cands` 与兼容 `bpf_core_types_are_compat` ③verifier 接线 `check_core_relo` ④UAPI 载体(attr core_relos 三字段)⑤轻骨架提交 `gen_loader.c`——与 libbpf 引擎对照 | 编译级已验证(只读走读树切片) | Task 6 落地,实测全绿(五站全中,`STATIONS=5`) |
 | `scripts/` | 符号机检 | `verify-citations.sh`:机检树根 citations.txt,逐行验文件在场 + `grep -F` 符号命中,输出 TOTAL/PASS/FAIL 汇总 | 编译级(只读机检) | Task 7 落地 |
-| `exercises/` | 课后扩展 | `01-relo-kind-detect/`(对预置源码自建的 demo.bpf.o 用 04 切片器判读每条重定位记录的 kind 语义;`check-relo-kind.sh` 8 项断言)、`02-core-compat/`(用 `bpf_core_field_exists`/`bpf_core_type_exists` 构造跨版本兼容分支;`check-compat.sh` 编译级+锚点 6 项断言),防剧透结构(任务与提示在前、参考思路独立成节后置) | 编译级(机检/编译断言) | 已落地(Task 14):两练习 check 脚本本机实跑全绿(①TOTAL=8 PASS=8、②TOTAL=6 PASS=6;负路径均实测 exit 1) |
+| `exercises/` | 课后扩展 | `01-relo-kind-detect/`(对预置源码自建的 demo.bpf.o 用 04 切片器判读每条重定位记录的 kind 语义,四种 kind 0/2/6/9;`check-relo-kind.sh` 9 项断言,kind 断言绑「kind 分布」行)、`02-core-compat/`(用 `bpf_core_field_exists`/`bpf_core_type_exists` 构造跨版本兼容分支;`check-compat.sh` 编译级+锚点 6 项断言),防剧透结构(任务与提示在前、参考思路独立成节后置) | 编译级(机检/编译断言) | 已落地(Task 14):两练习 check 脚本本机实跑全绿(①TOTAL=9 PASS=9、②TOTAL=6 PASS=6;负路径均实测 exit 1) |
 | `citations.txt` | 锚点清单 | 树根,格式「文件\|符号\|说明」,五组约 40 行:①BTF 基础与解析 ②kind 体系 ③CO-RE 编译期(宏族七条)④libbpf 引擎 ⑤内核引擎+UAPI 载体 | 编译级(机检数据源) | Task 7 落地 |
 
 ## 学习路径
