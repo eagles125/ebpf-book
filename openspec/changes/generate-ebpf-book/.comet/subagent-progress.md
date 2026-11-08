@@ -2,7 +2,8 @@
 
 - Plan: docs/superpowers/plans/2026-11-08-chapter09-retrofit-teaching.md(7 任务,base c37b5f6;免设计文档——用户 2026-11-08 拍板「先看总体规划」后「请继续」按建议推进;comet plan 指针已切换)
 - 工作方式(用户已确认,不得重新询问):isolation=current(master)、build_mode=subagent-driven-development(dispatch confirmed)、tdd_mode=direct、review_mode=thorough(每任务 reviewer,审查-修复最多 2 轮)
-- 当前 Task 1「资产前置——00-env README + verify-build.sh」:阶段=implementing(2026-11-08 后台 implementer 已派发,brief task-1-brief.md,报告 task-1-report.md;SDD 台账 .superpowers/sdd/2026-11-08-chapter09-retrofit-teaching/progress.md)
+- 当前 Task 2「正文 §3 五层环境改造(计划脚本清零)+T1 五 minors 顺手清偿」:阶段=implementing(2026-11-08 后台 implementer 已派发,brief task-2-brief.md,报告 task-2-report.md)
+- Task 1 完成(8399d30+5268817,review 一次通过 Approved C0/I0/m5;计划外发现:nfctl Go 控制面从未编译过,授权最小修复已兑现;verify-build 10/10+负路径 exit 1;ch09 示例此前「已编译级验证」声明由此坐实)
 - Batch 4 总体规划已过目(2026-11-08):ch09 改造(7 任务)→ ch10 BCC → ch11 bpftrace → ch12 性能诊断 → ch13 网络 → ch14 可视化平台;每章开工点=设计拍板;ch07 无 sockmap 内容(ch13 该节全新,勿虚构回指);ch10-14 编译级锚点已探明(bpftrace -d 无 root 可用/BCC bpfcc-tools 已装/promtool 缺、无 k8s 集群)
 - ⚠️ 编排文件保护:本文件与 `.comet/**`、plan checkbox 为控制器专管——subagent 不得触碰,不得对其执行 git restore/checkout/stash
 
