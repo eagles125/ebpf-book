@@ -40,7 +40,7 @@
 ## 环境前提
 
 - **内核 6.6+**（`BPF_PROG_TYPE_NETFILTER` 引入版本）。
-- Go 1.21+；首次构建执行 `go mod tidy` 拉取依赖并生成 `go.sum`。
+- Go 1.22+；`go.sum` 已随示例入库，`go mod tidy` 仅在增删依赖或更换版本时需要（见下文编译节）。
 - bpffs 已挂载（`mount | grep bpf`，通常为 `/sys/fs/bpf`）。
 - root 或 `CAP_BPF` + `CAP_NET_ADMIN`。
 - **安全警告**：网络路径示例必须在隔离拓扑中验证。错误的 drop 规则可能断开

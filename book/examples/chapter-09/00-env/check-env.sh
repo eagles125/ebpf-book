@@ -2,6 +2,7 @@
 # 第 9 章示例环境自检脚本（对应 ebpf.top BPF 入门系列：开发环境搭建）。
 # 用法：bash check-env.sh
 # 输出各项依赖的检查结果；FAIL 项表示对应示例可能无法编译或运行。
+# 退出码：0=无 FAIL，1=存在 FAIL（与 ch02–04 自检脚本尾部 exit "$fail" 同一约定）。
 
 set -u
 
@@ -65,3 +66,4 @@ if [ "$fail" -eq 0 ]; then
 else
     echo '存在 FAIL 项：请先补齐对应依赖（Ubuntu/Debian 可参考: sudo apt install clang llvm gcc bpftool libbpf-dev make）。'
 fi
+exit "$fail"

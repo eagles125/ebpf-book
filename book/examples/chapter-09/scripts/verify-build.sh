@@ -25,8 +25,8 @@ else
 fi
 
 echo "== 环境自检 =="
-# 00-env 是纯脚本：ch09 的 check-env.sh 尾部不带 exit "$fail"（ch02–04 有），
-# 退出码不随 FAIL 变化——机检以输出中的 FAIL 行为准（WARN 行不算）。
+# check-env.sh 尾部 exit "$fail"（0=无 FAIL，1=存在 FAIL，与 ch02–04 同约定）；
+# 本机检仍以输出中的 FAIL 行 grep 兜底判定（WARN 行不算），退出码仅作辅助。
 bash 00-env/check-env.sh >"$LOG" 2>&1
 if grep -q '^FAIL  ' "$LOG"; then
     echo "FAIL  00-env"; sed -n '1,30p' "$LOG"; fail=$((fail+1))
@@ -45,7 +45,8 @@ run "07-open-file-return"     make -C 07-open-file-return clean all
 run "08-open-file-tracepoint" make -C 08-open-file-tracepoint clean all
 
 echo "== 09-netfilter-go（需内核 6.6+） =="
-# 与 00-env/check-env.sh 内核段同一判定：主版本 >6，或 =6 且次版本 >=6。
+# 门禁为本脚本的精确判定：主版本 >6，或 =6 且次版本 >=6（即 6.6+）。
+# 00-env/check-env.sh 内核段仅按主版本行内提示——6.0–6.5 内核上两者判定会分歧，以这里为准。
 # 不满足记 SKIP（不算失败）；Go 依赖拉取失败记 WARN（ch17 口径：需网络 go mod tidy，
 # 编译级待人工复验）；其余失败照常记 FAIL。
 kmaj=$(uname -r | cut -d. -f1); kmin=$(uname -r | cut -d. -f2)

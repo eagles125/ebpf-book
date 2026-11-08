@@ -5,9 +5,9 @@
 01-hello-world 之前先跑一次自检，可以把「依赖缺失」和「代码写错」分开——前者看本页装包，
 后者才需要回到对应示例的排错节。
 
-- **验证状态：编译级（只读自检）**——脚本只读 `uname`、`/sys`、`/proc` 与命令可用性，不加载任何 BPF 程序，无 root 可跑；下节输出为本机实跑实录。
+- **验证状态：编译级（只读自检）**——脚本只读 `uname`、`/sys` 与命令可用性，不加载任何 BPF 程序，无 root 可跑；下节输出为本机实跑实录。
 - **本机实况声明：文中数值（内核版本、文件存在性、WARN 项）为编写环境实况，其他内核/发行版数值不同。**
-- **退出码约定：脚本恒以 0 退出**——FAIL 只体现在输出的 `FAIL` 行与末段汇总，不改变退出码（与 ch02–04 自检脚本尾部 `exit "$fail"` 的约定不同，如实注明）；`scripts/verify-build.sh` 机检 00-env 时以 `FAIL` 行为准。
+- **退出码约定：脚本尾部 `exit "$fail"`——0=无 FAIL，1=存在 FAIL**（与 ch02–04 自检脚本同一约定）；`scripts/verify-build.sh` 机检 00-env 时仍以输出的 `FAIL` 行 grep 兜底判定，不依赖退出码。
 
 ## 用法
 
@@ -47,11 +47,11 @@ WARN  当前非 root：示例可编译，但运行 loader 需要 sudo 或 CAP_BP
 
 ### 第一段：内核
 
-脚本取 `uname -r` 的主、次版本号分三档：
+脚本取 `uname -r` 的主版本号分三档（不解析次版本）：
 
 | 输出 | 含义 | 缺了怎么办 / 对本章的影响 |
 |---|---|---|
-| `OK 内核版本 >= 6.x` | 满足全部示例要求；09-netfilter-go 的 Netfilter 程序类型另需 6.6+（verify-build.sh 用同一判定做门禁） | — |
+| `OK 内核版本 >= 6.x` | 满足全部示例要求；09-netfilter-go 的 Netfilter 程序类型另需 6.6+（verify-build.sh 门禁按主+次版本精确判 6.6+，此处仅按主版本提示，6.0–6.5 内核上两者判定会分歧） | — |
 | `OK 内核版本 5.x` | 示例 01–08 可用 | 09-netfilter-go 的加载会被 verifier 以 unknown program type 拒绝，只能走读其数据面代码 |
 | `WARN 内核版本低于 5.10` | 多数示例可能不受支持 | 升级发行版内核（方法论级）；低版本缺 tracepoint/kprobe 特性时，对应示例编译或加载失败 |
 
@@ -73,9 +73,9 @@ WARN  当前非 root：示例可编译，但运行 loader 需要 sudo 或 CAP_BP
 | bpftool | vmlinux.h 生成与 skeleton 生成两步都依赖它，缺失时停在第一步 | 01–09 全部 | `sudo apt install bpftool`（或发行版 linux-tools 包） |
 | make | 构建无法启动 | 01–09 全部 | `sudo apt install make` |
 | libbpf 头文件（`/usr/include/bpf/bpf_helpers.h`） | loader 编译报找不到头 | 01–08 | `sudo apt install libbpf-dev` |
-| Go | 控制面 `go build` 失败 | 仅 09-netfilter-go | `sudo apt install golang-go`（示例 README 要求 Go 1.21+） |
+| Go | 控制面 `go build` 失败 | 仅 09-netfilter-go | `sudo apt install golang-go`（示例 README 要求 Go 1.22+） |
 
-任一项 FAIL 都不终止脚本；末段汇总会给出与上表一致的 `apt install` 提示行。09-netfilter-go 首次构建还需 `go mod tidy` 拉取 `cilium/ebpf` 依赖并生成 `go.sum`，该步依赖网络，见其 README 的编译节。
+任一项 FAIL 都不终止脚本；末段汇总会给出与上表一致的 `apt install` 提示行。09-netfilter-go 的 `go.sum` 已随仓库提供，常规构建不强制联网；`go mod tidy` 仅在增删依赖或更换版本时需要，用于校验并补齐 indirect 条目，见其 README 的编译节。
 
 ### 第四段：运行时环境（两项 WARN）
 
@@ -91,10 +91,10 @@ WARN  当前非 root：示例可编译，但运行 loader 需要 sudo 或 CAP_BP
 
 本机实况：无 root、`kernel.unprivileged_bpf_disabled=2`、tracefs 未挂载、内核 7.0.0-42-generic。按上述自检结果，本章示例的可达档位：
 
-- **编译级**：示例 01–08 的 `make` 全链（clang 编译 BPF → bpftool gen skeleton → gcc 链接 loader）无 root 即可完成，由 `scripts/verify-build.sh` 逐项机检；09-netfilter-go 的 BPF 数据面同理，Go 控制面另需 `go mod tidy` 拉取依赖。
+- **编译级**：示例 01–08 的 `make` 全链（clang 编译 BPF → bpftool gen skeleton → gcc 链接 loader）无 root 即可完成，由 `scripts/verify-build.sh` 逐项机检；09-netfilter-go 的 BPF 数据面同理，Go 控制面依赖 `cilium/ebpf`（`go.sum` 已随仓库提供）。
 - **运行级（一律预期输出示例 / 运行级待验证）**：01–08 的 loader 加载与事件读取、09 的 netns 拓扑实验，都需要 root 或对应能力集（tracing 类 `CAP_BPF`/`CAP_PERFMON`，09 另需 `CAP_NET_ADMIN`）；本机一项都不具备，各示例 README 中的「预期输出」均为教学说明，不是本机运行结果。
-- **09-netfilter-go 内核门禁**：该示例需内核 6.6+，check-env.sh 内核段与 verify-build.sh 用同一判定；内核不满足时机检记 SKIP，不记 FAIL。
+- **09-netfilter-go 内核门禁**：该示例需内核 6.6+——verify-build.sh 门禁按主+次版本精确判定；check-env.sh 内核段仅按主版本行内提示，6.0–6.5 内核上两者判定会分歧（以 verify-build.sh 为准）；内核不满足时机检记 SKIP，不记 FAIL。
 
 ## 与 verify-build.sh 的关系
 
-`scripts/verify-build.sh` 对本章逐目录做编译级机检，00-env 的检查项即本脚本：运行 `bash 00-env/check-env.sh` 后按输出的 `FAIL` 行判定（见顶部退出码约定）。编译级机检只回答「能不能编出来」；「编出来之后能不能跑」按上一节的档位声明，不由机检回答。
+`scripts/verify-build.sh` 对本章逐目录做编译级机检，00-env 的检查项即本脚本：运行 `bash 00-env/check-env.sh`（脚本以 `exit "$fail"` 退出）后，机检按输出的 `FAIL` 行 grep 兜底判定（见顶部退出码约定）。编译级机检只回答「能不能编出来」；「编出来之后能不能跑」按上一节的档位声明，不由机检回答。
