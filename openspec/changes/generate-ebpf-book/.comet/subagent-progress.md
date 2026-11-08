@@ -1,21 +1,14 @@
-# Comet 检查点 — generate-ebpf-book(ch08 章级循环)
+# Comet 检查点 — generate-ebpf-book(ch09 改造,Batch 4 首项)
 
-- Plan: docs/superpowers/plans/2026-11-02-chapter08-teaching.md(14 任务,base 8a11de8)
+- Plan: docs/superpowers/plans/2026-11-08-chapter09-retrofit-teaching.md(7 任务,base c37b5f6;免设计文档——用户 2026-11-08 拍板「先看总体规划」后「请继续」按建议推进;comet plan 指针已切换)
 - 工作方式(用户已确认,不得重新询问):isolation=current(master)、build_mode=subagent-driven-development(dispatch confirmed)、tdd_mode=direct、review_mode=thorough(每任务 reviewer,审查-修复最多 2 轮)
-- 设计文档: docs/superpowers/specs/2026-11-02-chapter08-teaching-design.md(方案 A 六资产+40–55k 五段,用户 2026-11-02 拍板)
-- Task 1 完成(a04ed82)、Task 2 完成(02162ad,review PASS,3 minors 延后)、Task 3 完成(34ae8dc,review PASS,5 minors 延后)、Task 4 完成(07ef5af,review PASS,2 minors 延后)、Task 5 完成(113feb3+修复 ca2cee2,1 轮修复后 review PASS,3 minors 延后)
-- **停靠(2026-11-08):第 8 章 build 全部收口**——14 任务实现+审查(每任务 thorough reviewer,审查-修复最多 2 轮)+实跑验证+勾选全毕;tasks.md「Chapter 8」8/8 已勾选(2030ed6);plan 14/14 勾选(收口提交 c8de401);无 Critical/Important 开放项
-- Task 14 完成(eba4c4d 练习 feat+2030ed6 tasks.md 勾选+修复 9a97bd8,1 轮修复 1 Important(练习①补 TYPE_ID_LOCAL 记录对齐 C4 类型 ID 语义)全 ADDRESSED,终审 Approved C0/I0/m2;勾选提交 c8de401)
-- Task 13 完成(7ee9fa6+修复 159ca19,1 轮修复 2 Important(切片器 console tail -5 对齐实跑、README 机检 ④⑤ 对调)全 ADDRESSED;3 minors 延后(m-1/m-3 已由 T14 顺带清偿);勾选提交 80f9d60;快照统一校准 7.0.0-42 现测、机检 38/38 全绿)
-- 章终态硬指标:章正文 wc -m=54987 ∈ [40000,55000];机检 verify-citations TOTAL=38 PASS=38 FAIL=0(负路径 exit 1);C8 交叉链接 28/2(≥8/≥1);禁语 grep 零命中(拷贝/已验证通过/验证通过);三标注在场(本机实况×14/预期输出示例×5/clang 18 实测×5);两练习 check ①9/9 ②6/6 全绿(负路径均 exit 1);主审抽检 76 处行号零失准
-- ⚠️ 未推送 GitHub:本地领先 origin/master 70+ 提交(ch06/ch07/ch08 全部),等用户明确指示再 push
-- 全书 change(generate-ebpf-book)tasks.md 各章已全部勾选,余 comet 层 build/verify 门与 park 决策,待用户指示
-- ⚠️ 台账勘误(Task 13 审查裁定,后续任务勿按旧行号动手):verifier.c "future proofing"=:15753、bpf_check_uarg_tail_zero=:15754、注释区间=:15749-15751(旧记 :15752/:15753 与 :15748-15750 均偏 1);verifier %8 校验=:15771(旧记 :15768);切片器汇总缺行实为「结论」行而非「## 汇总」(m1 误诊,修复轮按 tail -5 对齐)
-- Task 12 完成(42d9c11+修复 797af75,1 轮修复 1 Important(5.7 链路:attach 自动链走 load_module_btfs,btf__load_module_btf 为公开 API)全 ADDRESSED;5 minors 延后;勾选提交 5dbbe7d;⚠️全章 50877,55k 上限仅余 4123——T13 分节服从章级)
-- Task 11 完成(f9b1148+修复 25b53bf,1 轮修复 1 Important 全 ADDRESSED;5+1 minors 延后;勾选提交 219bd1b)
-- Task 10 完成(db348d2,review 一次通过:spec ✅/质量 Approved,0C/0I/2 minors 延后;勾选提交 0d1a801;⚠️审查发现本机已重启 7.0.0-42,task_struct ID 快照值已漂移,已记台账)
-- Task 9 完成(6083508+修复 222dce0,1 轮修复 2 Important 全 ADDRESSED;6+1 minors 延后;勾选提交 233a544;'my_type'→'demo_dev' 口径修正已认)
-- Task 8 完成(3fe62e9+修复 f80ce28,1 轮修复::164 task_struct 表述消歧,复查 ADDRESSED;2 minors 延后;勾选提交 9b799a8;C7 计数笔误协调侧已修正 4c042c0)
-- Task 7 完成(3793eb8+修复 eb3eb6f,1 轮修复:gen_loader 锚点 :970→:971 实测修正+留痕如实化,复查 ADDRESSED;3 minors 延后;勾选提交 c7c267b;⚠️实跑证据以 implementer 两轮报告为凭、复查者核实自洽,主会话已核锚点前提)
-- Task 6 完成(a7e0139,review 一次通过:spec ✅/质量 Approved,0C/0I/3 minors 延后;⚠️实跑证据已由主会话正负路径复跑核销;勾选提交 0d2b5cd)
-- ch07 已收口(park 检查点 de78ef1);ch06 状态见 git 历史
+- 当前 Task 1「资产前置——00-env README + verify-build.sh」:阶段=implementing(2026-11-08 后台 implementer 已派发,brief task-1-brief.md,报告 task-1-report.md;SDD 台账 .superpowers/sdd/2026-11-08-chapter09-retrofit-teaching/progress.md)
+- Batch 4 总体规划已过目(2026-11-08):ch09 改造(7 任务)→ ch10 BCC → ch11 bpftrace → ch12 性能诊断 → ch13 网络 → ch14 可视化平台;每章开工点=设计拍板;ch07 无 sockmap 内容(ch13 该节全新,勿虚构回指);ch10-14 编译级锚点已探明(bpftrace -d 无 root 可用/BCC bpfcc-tools 已装/promtool 缺、无 k8s 集群)
+- ⚠️ 编排文件保护:本文件与 `.comet/**`、plan checkbox 为控制器专管——subagent 不得触碰,不得对其执行 git restore/checkout/stash
+
+## 已完成批次与章节
+
+- **Batch 3(第 5–8 章)验收完成**(2026-11-08,c37b5f6,已 push):批次验证报告 docs/superpowers/reports/2026-11-08-generate-ebpf-book-batch3-verify.md;ch08 SDD 台账 .superpowers/sdd/2026-11-02-chapter08-teaching/progress.md(14 任务全 ledger+延后项)
+- **第 8 章**停靠 7dfde35:14/14 任务、终审 Approved、章 54987 ∈ [40k,55k]、机检 38/38、练习 9/9+6/6;⚠️台账勘误(未来触及 ch08 锚点者注意):verifier.c "future proofing"=:15753、bpf_check_uarg_tail_zero=:15754、注释区间=:15749-15751、verifier %8=:15771(旧记均偏 1);切片器汇总缺行实为「结论」行(tail -5 口径)
+- ch07 已收口(park 检查点 de78ef1);ch02–06 状态见 git 历史与各自验收记录;ch17/ch01/ch09-骨架为早期批次(1-4 部分完成,9 章骨架待本批次改造)
+- ⚠️ 推送状态:origin/master = c37b5f6;自 c37b5f6 起新增提交待下次 push(用户已授权 push,沿用 gh 凭据助手 `git -c credential.helper='!gh auth git-credential' push origin master`)
