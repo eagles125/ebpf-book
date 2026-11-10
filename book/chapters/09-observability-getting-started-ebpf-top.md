@@ -405,7 +405,7 @@ sudo ./pid_filter -p 12345
 
 `bpf_get_current_pid_tgid()` 返回一个 64 位值，高 32 位通常是线程组 ID，也就是用户经常理解的进程 PID；低 32 位是当前线程 ID。很多入门工具写 `bpf_get_current_pid_tgid() >> 32`，是为了按进程过滤，而不是按单个线程过滤。如果读者要跟踪多线程程序中的某个具体线程，才需要关注低 32 位。
 
-用 array map 存目标 PID，比把 PID 写死在 BPF 程序里更灵活。假设把 `12345` 直接写进 `pid_filter.bpf.c`，每换一个进程都要重新编译、重新加载、重新挂载程序。使用 `BPF_MAP_TYPE_ARRAY` 后，内核态程序只读 key 0 对应的 value；用户态 loader 可以在启动时写入 `--pid 12345`，也可以运行中更新为另一个 PID。
+用 array map 存目标 PID，比把 PID 写死在 BPF 程序里更灵活。假设把 `12345` 直接写进 `pid_filter.bpf.c`，每换一个进程都要重新编译、重新加载、重新挂载程序。使用 `BPF_MAP_TYPE_ARRAY` 后，内核态程序只读 key 0 对应的 value；用户态 loader 可以在启动时写入 `-p 12345`，也可以运行中更新为另一个 PID。
 
 用户态更新 map 后，内核态程序下一次触发即可看到新值，因为 map 是内核对象，不是编译期常量。示例里的逻辑 `if (target && *target != 0 && *target != current) return 0;` 表示：如果配置了非 0 目标 PID，并且当前进程不匹配，就直接返回，不输出事件。这样过滤发生在内核事件现场，噪声不会再被传到用户态。
 
