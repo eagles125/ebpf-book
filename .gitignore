@@ -38,3 +38,6 @@ book/examples/chapter-09/05-open-file-kprobe/opensnoop_kprobe
 book/examples/chapter-09/06-open-file-perf-event/opensnoop_perf
 book/examples/chapter-09/07-open-file-return/openret
 book/examples/chapter-09/08-open-file-tracepoint/opensnoop_tp
+book/examples/chapter-09/exercises/01-comm-filter/comm_filter
+book/examples/chapter-09/exercises/02-minimal-failed/opensnoop_mf
+book/examples/chapter-09/exercises/03-ringbuf-to-perf/perf_exec
