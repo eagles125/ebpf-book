@@ -25,33 +25,33 @@ base-ref: c37b5f6
 
 ### Task 1: 资产前置——00-env README + verify-build.sh
 
-- [ ] Task 1: 资产前置——00-env README + verify-build.sh
+- [x] Task 1: 资产前置——00-env README + verify-build.sh
 
 **Files:** Create `book/examples/chapter-09/00-env/README.md`、`book/examples/chapter-09/scripts/verify-build.sh`(可执行)
 
-- [ ] **Step 1:** `00-env/README.md`——check-env.sh 用法与输出解读(五段? 按脚本实跑输出逐段解读;「本机实况,其他内核数值不同」口径;无 root 限制声明)
-- [ ] **Step 2:** `scripts/verify-build.sh`——同 ch02–04 口径:逐示例 `make` 编译级验证(00-env 跳过 make、09-netfilter-go 注意内核 6.6+ 判定),输出 PASS/FAIL 汇总,FAIL≠0 exit 1;实跑全绿留痕(含负路径 exit 1 证据)
-- [ ] **Step 3:** 提交 `feat(ch09): 00-env README 与 verify-build 机检脚本`
+- [x] **Step 1:** `00-env/README.md`——check-env.sh 用法与输出解读(五段? 按脚本实跑输出逐段解读;「本机实况,其他内核数值不同」口径;无 root 限制声明)
+- [x] **Step 2:** `scripts/verify-build.sh`——同 ch02–04 口径:逐示例 `make` 编译级验证(00-env 跳过 make、09-netfilter-go 注意内核 6.6+ 判定),输出 PASS/FAIL 汇总,FAIL≠0 exit 1;实跑全绿留痕(含负路径 exit 1 证据)
+- [x] **Step 3:** 提交 `feat(ch09): 00-env README 与 verify-build 机检脚本`
 
 ### Task 2: 正文 §3 五层环境改造(「计划脚本」清零)
 
-- [ ] Task 2: 正文 §3 五层环境改造(「计划脚本」清零)
+- [x] Task 2: 正文 §3 五层环境改造(「计划脚本」清零)
 
 **Files:** Modify `book/chapters/09-observability-getting-started-ebpf-top.md`
 
-- [ ] **Step 1:** §3「eBPF 开发环境搭建」按五层环境阐述重组(依赖/编译/部署/运行/效果):删除 :111「计划脚本:」内联草稿,替换为对 `00-env/check-env.sh` 的逐段走读(真实源码注解+本机实跑真实输出摘录,console 标注语言);发行版命令按「方法论级/预期档」如实标注
-- [ ] **Step 2:** 全章 grep「计划」零命中(§3 之外如有同病一并清偿,逐处登记);篇幅留痕
-- [ ] **Step 3:** 提交 `docs(ch09): 三节五层环境改造(计划脚本替换为逐段走读)`
+- [x] **Step 1:** §3「eBPF 开发环境搭建」按五层环境阐述重组(依赖/编译/部署/运行/效果):删除 :111「计划脚本:」内联草稿,替换为对 `00-env/check-env.sh` 的逐段走读(真实源码注解+本机实跑真实输出摘录,console 标注语言);发行版命令按「方法论级/预期档」如实标注
+- [x] **Step 2:** 全章 grep「计划」零命中(§3 之外如有同病一并清偿,逐处登记);篇幅留痕
+- [x] **Step 3:** 提交 `docs(ch09): 三节五层环境改造(计划脚本替换为逐段走读)`
 
 ### Task 3: 正文 §8 占位代码补全 + 全章占位清零
 
-- [ ] Task 3: 正文 §8 占位代码补全 + 全章占位清零
+- [x] Task 3: 正文 §8 占位代码补全 + 全章占位清零
 
 **Files:** Modify 同文件
 
-- [ ] **Step 1:** §8「kprobe 版本计划读取:」注释占位块 → `05-open-file-kprobe` 真实源码的逐段走读(do_sys_openat2 取参、bpf_probe_read_user_str 读取、ring buffer 提交,与 §8 现有指针/时序讲解逐段对齐)
-- [ ] **Step 2:** 全章占位扫描(占位/待补/TODO/略/「完整代码见」悬空),逐处清偿或如实改指真实文件;§12 Netfilter 与 09-netfilter-go 同口径核对(其代码若完整则只对齐描述)
-- [ ] **Step 3:** 提交 `docs(ch09): 八节 kprobe 代码补全与全章占位清零`
+- [x] **Step 1:** §8「kprobe 版本计划读取:」注释占位块 → `05-open-file-kprobe` 真实源码的逐段走读(do_sys_openat2 取参、bpf_probe_read_user_str 读取、ring buffer 提交,与 §8 现有指针/时序讲解逐段对齐)
+- [x] **Step 2:** 全章占位扫描(占位/待补/TODO/略/「完整代码见」悬空),逐处清偿或如实改指真实文件;§12 Netfilter 与 09-netfilter-go 同口径核对(其代码若完整则只对齐描述)
+- [x] **Step 3:** 提交 `docs(ch09): 八节 kprobe 代码补全与全章占位清零`
 
 ### Task 4: 学生侧环节——每大节动手清单/检查点/自测
 
