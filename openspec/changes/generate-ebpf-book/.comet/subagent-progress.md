@@ -2,7 +2,7 @@
 
 - Plan: docs/superpowers/plans/2026-11-08-chapter09-retrofit-teaching.md(7 任务,base c37b5f6;免设计文档——用户 2026-11-08 拍板「先看总体规划」后「请继续」按建议推进;comet plan 指针已切换)
 - 工作方式(用户已确认,不得重新询问):isolation=current(master)、build_mode=subagent-driven-development(dispatch confirmed)、tdd_mode=direct、review_mode=thorough(每任务 reviewer,审查-修复最多 2 轮)
-- 当前 Task 4「十二节学生侧环节(动手清单/检查点/自测)+T3 两 minors 顺手清偿」:阶段=task-review(2026-11-10 implementer 回报 DONE 无风险信号,提交 a9691bd+8759fe5,wc -m 29450→40818 ∈[30k,45k];审查包 review-e11bc3d..8759fe5.diff,reviewer 后台已派发,修复轮预算 thorough 2 轮;implementer 越出指派的两处自选对齐——§5 --pid→-p 正文修正、引号「」→“ ”全量转换——已随 diff 交 reviewer 判定)
+- 当前 Task 4「十二节学生侧环节+T3 两 minors 顺手清偿」:阶段=fix round 1/2(review round 1 = Needs fixes C0/I1/m2:I1 = :408 `--pid` 残留与同节 `-p` 命令块自相矛盾;原 implementer 不可唤醒,已派发全新修复 agent,要求一词替换+wc 留痕+提交 `chore(ch09): T4 审查回修(§5 --pid 残留对齐 -p)`+报告追加 fix round 小节;修复后走 scoped re-review;minors mT4-1/mT4-2 记台账归 T6)
 - Task 3 完成(7ba8084+6eebee4,恢复:实现已提交但报告因会话中断未写出,未重复派发;review 一次通过 Approved C0/I0/m3,§8 五段摘录与示例源码逐字一致、输出块与真实 printf 字节一致;minors mT3-1/mT3-2 归 T4 顺手清偿,mT3-3 观察项留台账;plan 勾选 T1–T3 task-checkoff PASS,39a410c)
 - Task 2 完成(95f5ffc+77b4659,review 一次通过 Approved C0/I0/m3;「计划」21→0;§3 五层与 ch02/05/08 同构;全章 26556)
 - Task 1 完成(8399d30+5268817,review 一次通过 Approved C0/I0/m5;计划外发现:nfctl Go 控制面从未编译过,授权最小修复已兑现;verify-build 10/10+负路径 exit 1;ch09 示例此前「已编译级验证」声明由此坐实)
