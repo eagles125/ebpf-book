@@ -456,7 +456,7 @@ ring buffer 满时，`bpf_ringbuf_reserve()` 会返回 NULL。示例里的 `if (
 - kprobe：`do_sys_openat2`、`do_filp_open` 或架构相关 syscall wrapper。
 - tracepoint：`syscalls:sys_enter_openat`、`syscalls:sys_enter_openat2`。
 
-示例 05 选第一类中的 `do_sys_openat2`：它是 open/openat/openat2 三个系统调用在内核里的公共实现（fs/open.c，5.6+ 引入），原型为 `long do_sys_openat2(int dfd, const char __user *filename, struct open_how *how)`——第二个参数正是本节要抓的用户态 filename 指针。事件结构沿用第 7 节的三字段形态（节选自 `opensnoop_kprobe_common.h`）：
+示例 05 选第一类中的 `do_sys_openat2`：它是 open/openat/openat2 三个系统调用在内核里的公共实现（fs/open.c，5.6+ 引入），原型为 `long do_sys_openat2(int dfd, const char __user *filename, struct open_how *how)`——第二个参数正是本节要抓的用户态 filename 指针。事件结构与第 7 节同为三字段固定大小形态，字段换成 pid/comm/filename（节选自 `opensnoop_kprobe_common.h`）：
 
 ```c
 #define FILENAME_LEN 128
@@ -604,7 +604,7 @@ exit 阶段：读取返回值 ret，关联 pid 查 filename，输出并删除临
 BPF_MAP_TYPE_HASH inflight;
 ```
 
-输出示例（列宽按 `openret.c` 中 `handle_event` 的 printf 格式串逐列排布）：
+输出示例（列宽按 `openret.c` 中 `handle_event` 的 printf 格式串逐列排布；预期输出示例 / 运行级待验证）：
 
 ```text
 PID      COMM             RET        FILE
