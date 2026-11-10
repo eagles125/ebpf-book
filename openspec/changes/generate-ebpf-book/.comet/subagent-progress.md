@@ -1,8 +1,11 @@
 # Comet 检查点 — generate-ebpf-book(ch09 改造,Batch 4 首项)
 
+> **⏸ 暂停点(2026-11-11,用户休息)**:Task 5 implementer 仍在后台运行,让其自然收尾(自行提交+写报告),完成后协调者只登记不派审。**恢复路径**:重新走 /comet-classic Step 0/1 → 本检查点 → ①若 task-5-report.md 存在且含状态行/提交哈希=Task 5 已完成,直接生成审查包(BASE=405f6cd, HEAD=当时 HEAD)派发 thorough reviewer;②若报告缺失但 exercises 提交已在=按 Task 3 恢复先例(协调者实测证据替代自报,直接进入审查,不重复派发);③若两皆无=Task 5 未完成,核对脏工作区归属后重新派发 implementer。任务间禁止暂停的连续执行约束在恢复后继续生效。
+
 - Plan: docs/superpowers/plans/2026-11-08-chapter09-retrofit-teaching.md(7 任务,base c37b5f6;免设计文档——用户 2026-11-08 拍板「先看总体规划」后「请继续」按建议推进;comet plan 指针已切换)
 - 工作方式(用户已确认,不得重新询问):isolation=current(master)、build_mode=subagent-driven-development(dispatch confirmed)、tdd_mode=direct、review_mode=thorough(每任务 reviewer,审查-修复最多 2 轮)
-- 当前 Task 4「十二节学生侧环节+T3 两 minors 顺手清偿」:阶段=scoped re-review(fix round 1 已回报 DONE:全新修复 agent 提交 5593776,--pid 全章零命中,wc -m 40815;审查包 review-8759fe5..5593776.diff,re-reviewer 后台已派发,核验 I1 是否 ADDRESSED+修复有无新破坏;通过即转 Approved/勾选/派 T5)
+- 当前 Task 5「exercises ≥3 项(02 变体按 comm 过滤/05 加 minimal+failed 字段/ring buffer→perf buffer 迁移对照)+verify-build.sh 扩展覆盖」:阶段=implementing(2026-11-11 后台 implementer 已派发,brief task-5-brief.md,报告 task-5-report.md,BASE 405f6cd;结构先例 ch17/ch08 exercises;不动章正文与章级 README,汇总行数字变化留待 T6 回填正文 PASS=10 引用)
+- Task 4 完成(a9691bd+8759fe5+5593776,1 轮修复收敛:review Needs fixes I1=:408 --pid 残留,fix re-review ADDRESSED 无新破坏;wc -m 40815;plan 勾选 405f6cd;mT4-1/mT4-2 记台账归 T6 顺手清偿)
 - Task 3 完成(7ba8084+6eebee4,恢复:实现已提交但报告因会话中断未写出,未重复派发;review 一次通过 Approved C0/I0/m3,§8 五段摘录与示例源码逐字一致、输出块与真实 printf 字节一致;minors mT3-1/mT3-2 归 T4 顺手清偿,mT3-3 观察项留台账;plan 勾选 T1–T3 task-checkoff PASS,39a410c)
 - Task 2 完成(95f5ffc+77b4659,review 一次通过 Approved C0/I0/m3;「计划」21→0;§3 五层与 ch02/05/08 同构;全章 26556)
 - Task 1 完成(8399d30+5268817,review 一次通过 Approved C0/I0/m5;计划外发现:nfctl Go 控制面从未编译过,授权最小修复已兑现;verify-build 10/10+负路径 exit 1;ch09 示例此前「已编译级验证」声明由此坐实)
