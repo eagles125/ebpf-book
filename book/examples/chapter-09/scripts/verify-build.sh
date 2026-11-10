@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# 第 9 章编译级验证：00-env 自检 + 示例 01–08 全链 make + 09-netfilter-go（内核 6.6+ 门禁）汇总。
+# 第 9 章编译级验证：00-env 自检 + 示例 01–08 全链 make + 09-netfilter-go（内核 6.6+ 门禁）
+# + exercises 三项课后练习逐项 make 汇总。
 # 无特权可执行；退出码 0=无 FAIL，1=存在 FAIL（WARN/SKIP 不算失败，需人工复验）。
 # 安全警告：加载未经验证的 eBPF 程序会影响系统行为——本脚本只编译不加载。
 
@@ -72,6 +73,11 @@ if [ "${kmaj:-0}" -gt 6 ] || { [ "${kmaj:-0}" -eq 6 ] && [ "${kmin:-0}" -ge 6 ];
 else
     echo "SKIP  09-netfilter-go（内核 <6.6，Netfilter 示例编译级待验证）"
 fi
+
+echo "== 练习编译（exercises，libbpf-bootstrap 全链） =="
+run "exercises/01-comm-filter"     make -C exercises/01-comm-filter clean all
+run "exercises/02-minimal-failed"  make -C exercises/02-minimal-failed clean all
+run "exercises/03-ringbuf-to-perf" make -C exercises/03-ringbuf-to-perf clean all
 
 echo
 echo "== 汇总: PASS=$pass WARN=$warn FAIL=$fail =="
