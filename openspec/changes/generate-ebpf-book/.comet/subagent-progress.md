@@ -2,7 +2,8 @@
 
 - Plan: docs/superpowers/plans/2026-11-08-chapter09-retrofit-teaching.md(7 任务,base c37b5f6;免设计文档——用户 2026-11-08 拍板「先看总体规划」后「请继续」按建议推进;comet plan 指针已切换)
 - 工作方式(用户已确认,不得重新询问):isolation=current(master)、build_mode=subagent-driven-development(dispatch confirmed)、tdd_mode=direct、review_mode=thorough(每任务 reviewer,审查-修复最多 2 轮)
-- 当前 Task 3「正文 §8 kprobe 代码补全+全章占位清零+T2 三 minors/三交接项」:阶段=implementing(2026-11-08 后台 implementer 已派发,brief task-3-brief.md,报告 task-3-report.md)
+- 当前 Task 4「十二节学生侧环节(动手清单/检查点/自测)+T3 两 minors 顺手清偿」:阶段=implementing(2026-11-10 后台 implementer 已派发,brief task-4-brief.md,报告 task-4-report.md,BASE 39a410c)
+- Task 3 完成(7ba8084+6eebee4,恢复:实现已提交但报告因会话中断未写出,未重复派发;review 一次通过 Approved C0/I0/m3,§8 五段摘录与示例源码逐字一致、输出块与真实 printf 字节一致;minors mT3-1/mT3-2 归 T4 顺手清偿,mT3-3 观察项留台账;plan 勾选 T1–T3 task-checkoff PASS,39a410c)
 - Task 2 完成(95f5ffc+77b4659,review 一次通过 Approved C0/I0/m3;「计划」21→0;§3 五层与 ch02/05/08 同构;全章 26556)
 - Task 1 完成(8399d30+5268817,review 一次通过 Approved C0/I0/m5;计划外发现:nfctl Go 控制面从未编译过,授权最小修复已兑现;verify-build 10/10+负路径 exit 1;ch09 示例此前「已编译级验证」声明由此坐实)
 - Batch 4 总体规划已过目(2026-11-08):ch09 改造(7 任务)→ ch10 BCC → ch11 bpftrace → ch12 性能诊断 → ch13 网络 → ch14 可视化平台;每章开工点=设计拍板;ch07 无 sockmap 内容(ch13 该节全新,勿虚构回指);ch10-14 编译级锚点已探明(bpftrace -d 无 root 可用/BCC bpfcc-tools 已装/promtool 缺、无 k8s 集群)
