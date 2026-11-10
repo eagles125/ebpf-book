@@ -87,6 +87,14 @@ eBPF 程序：读取上下文 -> 过滤 -> 读写 map -> 输出事件
 用户态：loader / CLI / daemon / dashboard
 ```
 
+本节与下一节是纯概念节，不设动手实践清单；自测采用思辨式，答案都能在本节五个概念里找到。
+
+**检查点**(自测后看提示):
+
+1. “eBPF 程序不会自己调度、不会睡眠”——那它什么时候才会执行？本章最靠前与最靠后的两个示例各在等什么事件？——提示：第一个概念；Hello World 等 `tracepoint/syscalls/sys_enter_execve`，Netfilter 示例等报文经过网络钩子。
+2. “eBPF 能不能做某件事”为什么不能泛泛回答？开口前要先问哪一句？——提示：第二个概念；先问程序挂在哪里——程序类型决定上下文、可用 helper 与返回动作（XDP 可返回 `XDP_DROP`，tracepoint 返回 0）。
+3. `bpf_map_lookup_elem()` 的返回值为什么必须先判空再解引用？这是语法洁癖还是安全前提？——提示：第四个概念；helper 可能返回 NULL，verifier 必须能证明每一次内存访问安全，否则拒绝加载。
+
 ## 2. eBPF 开发学习路径总结
 
 这一篇应转化为本书的“实践学习路线图”。读者不应一开始就被 verifier、CO-RE、网络、Cilium 全部淹没，而应按能力递进：
@@ -103,6 +111,12 @@ eBPF 程序：读取上下文 -> 过滤 -> 读写 map -> 输出事件
 ```
 
 本章后续示例正好对应这条路径。
+
+**检查点**(自测后看提示):
+
+1. 阶段 1“能编译和加载 Hello World”与阶段 2“能在内核事件中读取上下文”的实质差别是什么？对应本章哪两个示例之间的跨越？——提示：01 只输出一行常量文本；从 02 起程序开始从事件现场读 pid/comm，为过滤与结构化输出打底。
+2. 阶段 3“过滤”与阶段 4“map 保存状态”为什么排在阶段 5“结构化事件输出”之前？——提示：map 先让 eBPF 从无状态回调变成可配置、可聚合的工具（02/03 用它下发过滤配置）；输出机制解决的是“事件怎么搬到用户态”，是建立在状态之上的下一层能力。
+3. 同一个“捕获进程打开文件”业务，为什么要按 6→7 的顺序先写返回值版、再迁 tracepoint 版，最后才进阶段 8 的网络钩子？——提示：10→11 是把同一工具迁移到稳定事件接口的练习；网络钩子的返回值是 drop/accept 决策语义，观测语义练稳之后再换决策语义（第 12 节）。
 
 ## 3. eBPF 开发环境搭建
 
@@ -275,6 +289,23 @@ exit "$fail"
 
 环境五层就绪后，下一节从第一个示例 Hello World 开始，逐层兑现它们。
 
+**学生动手**（示例资产 [`00-env/`](../examples/chapter-09/00-env/) 与 [`scripts/verify-build.sh`](../examples/chapter-09/scripts/)；两步均编译级、无 root 可复跑）：
+
+```bash
+# ①环境自检：内核/工具链/BTF/运行时/汇总五段输出
+bash book/examples/chapter-09/00-env/check-env.sh
+# ②全章机检：BTF 前置探针 + 00-env 自检 + 01-08 逐示例 make + 09 内核门禁
+bash book/examples/chapter-09/scripts/verify-build.sh
+```
+
+预期看到：①五段逐项 OK，仅层③两行 WARN（对照层①–⑤的走读逐段核对，FAIL 项按层①表格补装后重跑）；②末尾汇总 `PASS=10 WARN=0 FAIL=0`（本机 2026-11-08 实跑口径）。加载类动作不在机检范围内——脚本只编译不加载，运行级命令一律按层④口径“预期输出示例 / 运行级待验证”，逐示例见第 4–12 节的学生动手。
+
+**检查点**(自测后看提示):
+
+1. 同样是“环境不达标”，BTF 缺失记 FAIL、内核版本低于 6.x 只记 WARN，两者的处理路径差在哪？——提示：层②/层①；BTF 卡死 01–09 编译链的第一条命令（换发行版或按附录 C 自编内核可补），内核版本无法用包管理器补装，脚本只提示、不拦截。
+2. 层③的两个 WARN（tracefs 未挂载、非 root）为什么都不进 fail 计数？本机 `kernel.unprivileged_bpf_disabled=2` 又比脚本的 root/非 root 二分严在哪？——提示：两者只影响运行、不影响编译；非特权加载被内核彻底禁用，不存在“不 root 降级运行”的路径，tracing 类示例只能 root 或 `CAP_BPF`+`CAP_PERFMON`。
+3. verify-build.sh 的 `PASS=10` 数的是哪十项？为什么它不能替你完成运行验证？——提示：00-env 自检 + 示例 01–08 逐个 make + 09（内核 6.6+ 门禁通过时）；脚本首行的安全声明就是边界——只编译、不加载。
+
 ## 4. Hello World
 
 **独立示例**：[`book/examples/chapter-09/01-hello-world/`](../examples/chapter-09/01-hello-world/)。
@@ -319,6 +350,23 @@ sudo cat /sys/kernel/tracing/trace_pipe
 
 生产代码不应大量使用 `bpf_printk`，原因是它做字符串格式化并写 tracing buffer，开销高且容易在高频事件下丢数据或干扰系统。真实工具通常只在开发和排错阶段保留少量 `bpf_printk`。当需要持续输出事件时，应使用 ring buffer 或 perf buffer；当只需要统计时，应使用 map 聚合，让用户态周期性读取。
 
+**学生动手**（示例 [`01-hello-world/`](../examples/chapter-09/01-hello-world/)；第一步编译级、无 root，其余运行级）：
+
+```bash
+cd book/examples/chapter-09/01-hello-world
+make                                        # 编译级：vmlinux.h -> hello.bpf.o -> skel -> hello
+sudo ./hello                                # 运行级：加载并前台运行，Ctrl-C 退出
+sudo cat /sys/kernel/tracing/trace_pipe     # 另一终端；触发：执行 /bin/true、ls 等任意命令
+```
+
+预期看到：loader 打印加载提示；另一终端每执行一条命令，`trace_pipe` 就出现一行 `bpf_trace_printk: Hello, eBPF world!`（预期输出示例 / 运行级待验证）。没有输出时按 README 失败表排查三件事：tracefs 是否挂载、是否触发了 `execve`、加载权限是否足够。
+
+**检查点**(自测后看提示):
+
+1. `bpf_printk("Hello, eBPF world!\n")` 的输出为什么不出现在 `./hello` 的 stdout？它走了哪条路径？——提示：helper 写的是内核 tracing buffer；经 `/sys/kernel/tracing/trace_pipe` 查看，这正是 eBPF 运行在内核事件上下文、与用户态 printf 输出路径不同的体现。
+2. 第一个示例为什么选 `execve` tracepoint，而不是调度器之类的高频事件？——提示：容易触发、语义清楚、输出不会刷屏；执行任意命令即可把“我执行了命令”和“trace_pipe 出现一行输出”直接对应起来。
+3. `bpf_printk` 为什么不适合生产？要持续输出事件、只要统计计数分别该换什么？——提示：字符串格式化并写 tracing buffer，开销高且高频下易丢数据；持续事件用 ring buffer/perf buffer，纯统计用 map 聚合（见“横向对比”表）。
+
 ## 5. 通过 PID 过滤
 
 **独立示例**：[`book/examples/chapter-09/02-pid-filter/`](../examples/chapter-09/02-pid-filter/)。
@@ -350,7 +398,7 @@ if (target && *target != 0 && *target != current)
 用户态运行方式：
 
 ```bash
-sudo ./pid_filter --pid 12345
+sudo ./pid_filter -p 12345
 ```
 
 这里的关键是理解 PID 过滤为什么要通过 helper 和 map 组合完成。
@@ -360,6 +408,23 @@ sudo ./pid_filter --pid 12345
 用 array map 存目标 PID，比把 PID 写死在 BPF 程序里更灵活。假设把 `12345` 直接写进 `pid_filter.bpf.c`，每换一个进程都要重新编译、重新加载、重新挂载程序。使用 `BPF_MAP_TYPE_ARRAY` 后，内核态程序只读 key 0 对应的 value；用户态 loader 可以在启动时写入 `--pid 12345`，也可以运行中更新为另一个 PID。
 
 用户态更新 map 后，内核态程序下一次触发即可看到新值，因为 map 是内核对象，不是编译期常量。示例里的逻辑 `if (target && *target != 0 && *target != current) return 0;` 表示：如果配置了非 0 目标 PID，并且当前进程不匹配，就直接返回，不输出事件。这样过滤发生在内核事件现场，噪声不会再被传到用户态。
+
+**学生动手**（示例 [`02-pid-filter/`](../examples/chapter-09/02-pid-filter/)；loader 只认 `-p`，不带参数则输出全部进程）：
+
+```bash
+cd book/examples/chapter-09/02-pid-filter
+make                                        # 编译级
+sudo ./pid_filter -p $(pgrep -x bash)       # 运行级：只观察 bash 的 execve
+sudo cat /sys/kernel/tracing/trace_pipe     # 另一终端；触发：执行 /bin/true
+```
+
+预期看到：`trace_pipe` 只出现目标 PID 的 `execve: pid=… comm=bash` 行，其他进程（systemd、监控 agent 等）的 execve 不再出现（预期输出示例 / 运行级待验证）——过滤发生在内核态，这正是与“全部传到用户态再过滤”的本质区别。过滤不生效时先查 `-p` 的目标是否存在、目标命令是否为 shell 内建。
+
+**检查点**(自测后看提示):
+
+1. `bpf_get_current_pid_tgid() >> 32` 丢掉的是什么？什么时候才需要低 32 位？——提示：高 32 位是线程组 ID（用户通常理解的进程 PID），低 32 位是线程 ID；跟踪多线程程序中的某个具体线程时才用低 32 位。
+2. 目标 PID 放在 `max_entries=1` 的 ARRAY map 里，而不是写死在 BPF 源码里，换来什么？——提示：换目标进程不用重新编译、加载、挂载；map 是内核对象而非编译期常量，用户态更新后内核态下一次触发即可见。
+3. 过滤逻辑 `if (target && *target != 0 && *target != current)` 里，第一个判断去掉会发生什么？——提示：`bpf_map_lookup_elem()` 可能返回 NULL，不判空就解引用会被 verifier 直接拒绝加载。
 
 ## 6. 借助 eBPF 保护容器安全
 
@@ -396,6 +461,24 @@ cgroup id 适合作为容器级过滤线索，是因为现代容器运行时通�
 安全策略必须区分“观测”和“阻断”。如果程序挂在 tracepoint 或普通 kprobe 上，它通常只能记录事件，不能可靠地改变系统调用结果。比如你可以在 openat tracepoint 上看到容器进程正在打开 `/etc/shadow`，但不能因此声称这个 tracepoint 程序已经阻止了打开。要做阻断，应选择有决策语义的挂载点，例如 LSM BPF 钩子、cgroup hooks，或网络路径上的 XDP/TC/Netfilter 返回动作。
 
 因此，本章示例要明确边界：容器安全的入门版先做“识别目标容器并输出敏感行为事件”。如果要扩展为阻断版，需要切换到合适的程序类型，并说明返回值如何影响内核决策。这样读者不会把观测型探针误用成访问控制系统。
+
+**学生动手**（示例 [`03-container-security/`](../examples/chapter-09/03-container-security/)；README 的“简化实验”不依赖真实容器，把当前 shell 所在 cgroup 当目标）：
+
+```bash
+cd book/examples/chapter-09/03-container-security
+make                                        # 编译级
+CGID=$(stat -c %i "/sys/fs/cgroup$(grep -o '/.*' /proc/self/cgroup | head -1)")
+sudo ./container_guard -c "$CGID"           # 运行级：注册目标 cgroup
+sudo cat /sys/kernel/tracing/trace_pipe     # 另一终端；触发：cat /etc/hosts、ls
+```
+
+预期看到：`trace_pipe` 出现目标 cgroup 内进程的 `container-guard: cgid=… pid=… open(…)` 行，宿主机其他 cgroup 的进程不出现（预期输出示例 / 运行级待验证）。真实容器实验先取容器 cgroup 的 inode 号（如 `stat -c %i /sys/fs/cgroup/system.slice/docker-<容器长ID>.scope`），并确认 cgroup v2。
+
+**检查点**(自测后看提示):
+
+1. 为什么 cgroup id 比 PID 更适合标识容器？`bpf_get_current_cgroup_id()` 的返回值在用户态怎么对上？——提示：PID 随容器重启变化，cgroup 层级更贴近资源隔离与容器生命周期；返回值是 cgroup 的 inode 号（v2），与 `stat -c %i <路径>` 可直接对应。
+2. 看到容器进程打开 `/etc/shadow` 的事件，能说“这个 tracepoint 程序阻止了这次打开”吗？要做阻断该换什么？——提示：不能；tracepoint/kprobe 只有观测语义，阻断要换有决策语义的挂载点——LSM BPF、cgroup hooks 或网络路径的 XDP/TC/Netfilter。
+3. `target_cgroups` 为什么用 HASH map 而不是第 5 节的 ARRAY？——提示：ARRAY 的 key 恒为 0，只当“全局配置变量”用；这里按 64 位 cgroup id 查询、目标容器可多个，key 是稀疏的大整数空间，HASH 才合适。
 
 ## 7. 在 eBPF 中使用 ring buffer
 
@@ -444,6 +527,23 @@ ring buffer 满时，`bpf_ringbuf_reserve()` 会返回 NULL。示例里的 `if (
 事件结构建议固定大小，是为了让 verifier 和用户态 reader 都能明确事件边界。比如 `char comm[16]` 对应内核任务名长度，文件路径可以设置为 `char filename[256]` 或 `char filename[128]`。读取字符串时要用 `bpf_probe_read_user_str()` 或相关 helper，并传入目标缓冲区大小，不能假设用户指针一定有效，也不能越界写入事件结构。
 
 用户态 `ring_buffer__poll()` 负责等待和消费事件。它通常接收一个超时时间，例如 100ms 或 1000ms。超时不是错误，只表示这段时间没有事件；返回负值才需要按错误处理。这个行为适合写 daemon：主循环可以一边 poll 事件，一边响应退出信号或刷新统计。
+
+**学生动手**（示例 [`04-ring-buffer/`](../examples/chapter-09/04-ring-buffer/)）：
+
+```bash
+cd book/examples/chapter-09/04-ring-buffer
+make                                        # 编译级
+sudo ./ringbuf_exec                         # 运行级：结构化事件直接打到 loader 的 stdout
+/bin/true; ls; echo test                    # 另一终端触发 execve
+```
+
+预期看到：loader 的 stdout 按 `PID  CGROUP_ID  COMM` 三列打印事件（预期输出示例 / 运行级待验证）——不再经过 `trace_pipe`，与第 4 节对比就是输出通道从文本日志换成了 ring buffer。ring buffer 需要内核 5.8+。
+
+**检查点**(自测后看提示):
+
+1. reserve 之后、submit 之前，这条事件处于什么状态？既不 submit 也不 discard 会怎样？——提示：`bpf_ringbuf_reserve()` 预留的空间对用户态不可见；不提交也不丢弃会导致 verifier 拒绝或运行路径不完整。
+2. `if (!e) return 0;` 防的是什么？生产程序通常再加什么让用户态感知丢事件？——提示：ring buffer 满时 reserve 返回 NULL，这是高频事件下的背压路径；生产工具增加 per-CPU drop 计数，让用户态知道丢了多少。
+3. `ring_buffer__poll(ring, 100)` 返回 0 与返回负值分别意味着什么？为什么这个语义适合写 daemon？——提示：100ms 超时、无事件返回 0 是正常情况，负值才按错误处理；主循环可以边 poll 边响应退出信号。
 
 ## 8. 捕获进程打开文件信息
 
@@ -552,6 +652,23 @@ PID      COMM             FILE
 
 文件名通常在 enter 阶段最容易拿到，因为系统调用刚进入内核时参数仍然可见。但 open 是否成功、返回的 fd 是多少、错误码是什么，要到 exit 阶段才知道。这也是为什么后续返回值示例需要在 enter 阶段把 filename 暂存到 map，exit 阶段再按 pid 查回它并补上返回值。
 
+**学生动手**（示例 [`05-open-file-kprobe/`](../examples/chapter-09/05-open-file-kprobe/)；先确认挂载点符号在当前内核存在，再编译运行）：
+
+```bash
+sudo cat /proc/kallsyms | grep do_sys_openat2   # 符号确认（5.6+ 内核应在场）
+cd book/examples/chapter-09/05-open-file-kprobe
+make                                            # 编译级
+sudo ./opensnoop_kprobe                         # 运行级；另一终端触发：cat /etc/hosts、ls /tmp
+```
+
+预期看到：loader 按 `PID  COMM  FILE` 三列打印打开的文件（预期输出示例 / 运行级待验证）；`do_sys_openat2` 不在当前内核符号表里时，attach 失败并打印中文报错——这正是 kprobe 绑定内核函数名的固有依赖，老内核可换 `do_sys_open` 或改用第 11 节的 tracepoint 版。
+
+**检查点**(自测后看提示):
+
+1. `BPF_KPROBE` 宏替你做了什么？不用宏时的等价写法是什么？——提示：按调用约定从 `pt_regs` 还原 `do_sys_openat2` 的形参；等价写法是 `int opensnoop_entry(struct pt_regs *ctx)` 内取 `PT_REGS_PARM2(ctx)`。
+2. 读 filename 用 `bpf_probe_read_user_str()`，什么时候才用 `bpf_probe_read_kernel_str()`？混用会怎样？——提示：filename 是触发进程的用户态地址；读内核结构里的字符串才用 kernel 版；两者混用是 verifier 报错的高频原因。
+3. 为什么要在 enter 阶段读文件名？open 是否成功、fd 是多少要到哪一阶段才知道？——提示：系统调用刚进入内核时参数指针仍然可见；结果要到 exit 阶段，这正是第 10 节用临时 map 关联 enter/exit 的动机。
+
 ## 9. 捕获进程打开文件信息 perf_event 篇
 
 **独立示例**：[`book/examples/chapter-09/06-open-file-perf-event/`](../examples/chapter-09/06-open-file-perf-event/)。
@@ -582,6 +699,22 @@ perf buffer 基于 `BPF_MAP_TYPE_PERF_EVENT_ARRAY`，通常按 CPU 建立事件�
 libbpf 用户态一般使用 `perf_buffer__new()` 创建 reader，传入 map fd、每 CPU 页数、事件回调和丢失回调，再用 `perf_buffer__poll()` 进入循环。事件回调负责把原始字节解释成 `struct event`；丢失回调负责记录 lost samples。完整示例要让读者看到：内核态输出结构体，用户态按同一个结构体布局解析。
 
 与 ring buffer 相比，perf buffer API 更老，使用面更广，很多 BCC 时代工具和旧内核环境仍然依赖它。ring buffer 在现代 libbpf 项目中更简洁，但不能因此跳过 perf buffer。给同一 opensnoop 事件写两个版本，可以让读者直观看到两者差异：BPF 侧一个调用 `bpf_perf_event_output()`，另一个调用 `bpf_ringbuf_reserve/submit()`；用户态一个用 `perf_buffer__poll()`，另一个用 `ring_buffer__poll()`。
+
+**学生动手**（示例 [`06-open-file-perf-event/`](../examples/chapter-09/06-open-file-perf-event/)）：
+
+```bash
+cd book/examples/chapter-09/06-open-file-perf-event
+make                                        # 编译级
+sudo ./opensnoop_perf                       # 运行级；另一终端触发：cat /etc/hosts
+```
+
+预期看到：输出三列与示例 05 同形（预期输出示例 / 运行级待验证）；高负载时可能出现“CPU N 丢失 X 个事件”的丢失警告——这正是 perf buffer 与 ring buffer 在背压行为上的可感差异。
+
+**检查点**(自测后看提示):
+
+1. `BPF_F_CURRENT_CPU` 让事件写到哪？用户态 reader 为什么因此要管理 per-CPU 缓冲？——提示：写到当前 CPU 对应的 perf buffer，避免跨 CPU 竞争；`perf_buffer__new()` 按 map fd 与每 CPU 页数建通道，用户态要逐 CPU poll 并各自处理丢失统计。
+2. perf buffer 的丢失回调为什么是必选项而非装饰？ring buffer 满时的对应机制是什么？——提示：缓冲满时内核直接丢样并计数，不接 lost 回调，数据“悄悄变少”无从察觉；ring buffer 走的是 reserve 返回 NULL 的背压路径（第 7 节）。
+3. 给同一 opensnoop 事件写 05/06 两个版本，BPF 侧与用户态侧各换了哪一对调用？——提示：BPF 侧 `bpf_ringbuf_reserve/submit()` ↔ `bpf_perf_event_output()`；用户态 `ring_buffer__poll()` ↔ `perf_buffer__poll()`，事件结构与其余逻辑保持一致。
 
 ## 10. 捕获进程打开文件信息返回值
 
@@ -622,6 +755,25 @@ enter 和 exit 需要通过 map 关联，是因为 openat 进入时能看到 fil
 
 key 设计要谨慎。只用 tgid 可能在多线程程序中冲突，因为同一进程多个线程可能同时执行 open；通常更安全的是使用 `pid_tgid` 的完整 64 位值，或者至少用低 32 位 tid 区分线程。遇到异步、嵌套或递归场景时，还可能需要额外时间戳或栈层次信息。
 
+**学生动手**（示例 [`07-open-file-return/`](../examples/chapter-09/07-open-file-return/)；触发要覆盖成功与失败两种返回值）：
+
+```bash
+cd book/examples/chapter-09/07-open-file-return
+make                                        # 编译级
+sudo ./openret                              # 运行级
+# 另一终端分别触发成功与失败：
+cat /etc/hosts                              # RET 为 fd=N
+cat /not-exist-file                         # RET 为 ERR=-2（ENOENT）
+```
+
+预期看到：`PID  COMM  RET  FILE` 四列输出，成功行 `fd=3`、失败行 `ERR=-2(ENOENT)`（预期输出示例 / 运行级待验证）。
+
+**检查点**(自测后看提示):
+
+1. enter/exit 两阶段为什么必须借临时 map 关联？key 为什么用完整 64 位 pid_tgid？——提示：enter 时看不到返回值、exit 时拿不到入参（kretprobe 上下文里没有函数参数）；只取 tgid 会在多线程程序中冲突——同一进程多个线程可能同时执行 open。
+2. `-2`、`-13` 这样的负返回值怎么变成人话？非负值又是什么？——提示：内核返回 `-errno`——`-2` 是 ENOENT（文件不存在）、`-13` 是 EACCES（权限不足）；非负值是文件描述符 fd；完整工具在用户态把 `-ret` 映射为 errno 名与错误字符串。
+3. exit 阶段输出事件后为什么必须 `bpf_map_delete_elem()`？漏删有两个什么后果？——提示：旧 filename 残留会被后续 exit 错误关联（事件串位）；map 持续增长相当于内存泄漏；即使异常分支也应先删临时项再返回。
+
 ## 11. 捕获进程打开文件信息 tracepoint 篇
 
 **独立示例**：[`book/examples/chapter-09/08-open-file-tracepoint/`](../examples/chapter-09/08-open-file-tracepoint/)。
@@ -654,6 +806,25 @@ syscall tracepoint 的参数通常放在 `ctx->args[]` 中。以 openat 为例�
 
 tracepoint 的稳定性不等于永远不变。不同架构、不同 syscall ABI、不同内核配置可能导致字段或事件可用性差异。完整章节应要求读者先运行 `ls /sys/kernel/tracing/events/syscalls/` 和 `cat .../format`，再编译对应示例。这样做比直接复制别人机器上的上下文结构更可靠。
 
+**学生动手**（示例 [`08-open-file-tracepoint/`](../examples/chapter-09/08-open-file-tracepoint/)；“先查 format、再写代码”是本节的方法论）：
+
+```bash
+sudo ls /sys/kernel/tracing/events/syscalls/            # 发现事件（运行级：tracefs 需挂载）
+sudo cat /sys/kernel/tracing/events/syscalls/sys_enter_openat/format
+sudo cat /sys/kernel/tracing/events/syscalls/sys_exit_openat/format
+cd book/examples/chapter-09/08-open-file-tracepoint
+make                                                    # 编译级
+sudo ./opensnoop_tp                                     # 运行级；触发同第 10 节
+```
+
+预期看到：format 文件列出事件字段、偏移、大小与字段名（`args[]` 的布局以它为准）；loader 输出与示例 07 逐行一致（预期输出示例 / 运行级待验证）——两个版本只是“取数据的入口”不同。
+
+**检查点**(自测后看提示):
+
+1. tracepoint 与 kprobe 的稳定性差别，在“字段从哪来”上如何体现？——提示：kprobe 绑定内核函数名与参数布局，随版本漂移；tracepoint 是内核显式提供的事件点，字段格式经 tracefs 的 `format` 文件暴露，按格式读上下文即可。
+2. openat 的用户态 filename 指针在 `ctx->args[]` 的第几个？最终以什么为准？——提示：`args[1]`（`args[0]` 是 dfd、`args[2]` 是 flags）；具体以 `/sys/kernel/tracing/events/syscalls/sys_enter_openat/format` 为准，先查再写代码。
+3. “tracepoint 稳定”为什么仍要求读者先 `ls`/`cat format` 再编译？——提示：不同架构、不同 syscall ABI、不同内核配置可能造成字段或事件可用性差异；先核对再用，比直接复制别人机器上的上下文结构更可靠。
+
 ## 12. 在 Netfilter 中使用 eBPF 以及 Go 经验总结
 
 **独立示例**：[`book/examples/chapter-09/09-netfilter-go/`](../examples/chapter-09/09-netfilter-go/)（含 `scripts/netns-lab.sh` 隔离拓扑脚本）。
@@ -685,6 +856,28 @@ map pinning 用来把 map 固定到 bpffs，例如 `/sys/fs/bpf/nf_guard_rules`�
 Netfilter、XDP、TC 的钩子位置不同。XDP 在驱动收包早期，适合极高吞吐的早期丢包；TC 位于 qdisc ingress/egress，和 skb、容器 veth、改包动作结合更自然；Netfilter 位于传统防火墙路径，适合理解 hook、协议栈阶段和策略过滤。入门示例选择 Netfilter，是为了把 eBPF 与经典防火墙概念连接起来；第 15 至第 17 章会系统比较 XDP 和 TC。
 
 网络路径示例必须在隔离拓扑中验证。一个错误的 drop 规则可能让当前 SSH 连接断开，一个错误的 NAT 校验和可能污染宿主机网络排障。完整章节应使用 network namespace、veth pair 和专用测试地址构造实验环境，所有 attach/detach 脚本都要有清理路径。只有在隔离拓扑通过后，才考虑真实网卡实验。
+
+**学生动手**（示例 [`09-netfilter-go/`](../examples/chapter-09/09-netfilter-go/)；网络路径，全程在隔离拓扑内，需要内核 6.6+ 与 root）：
+
+```bash
+cd book/examples/chapter-09/09-netfilter-go
+make                                        # 编译级：go build + vmlinux.h -> bpf/nf_guard.bpf.o -> nfctl
+# ——以下运行级（预期输出示例 / 运行级待验证）——
+sudo bash scripts/netns-lab.sh up           # 创建 netns+veth 隔离拓扑
+sudo ip netns exec nfguard bash             # 进入命名空间后执行：
+./nfctl run                                 # 加载并挂到 NF_INET_LOCAL_OUT，每 2 秒打印统计
+./nfctl block 53                            # 另一 netns 终端：拉黑 UDP 53，dig 应超时
+./nfctl stats                               # 观察 pass/drop 计数变化
+# 清理：./nfctl unblock 53 -> Ctrl-C -> exit -> netns-lab.sh down -> 删除 pinned map
+```
+
+预期看到：`run` 打印挂载信息与 pin 路径（`/sys/fs/bpf/nf_guard_rules`、`/sys/fs/bpf/nf_guard_stats`）；`block 53` 后 `dig +short example.com @1.1.1.1` 请求超时，`stats` 的 drop 计数增长（README 预期输出示例 / 运行级待验证）。完整实验流程与清理路径见示例 README。
+
+**检查点**(自测后看提示):
+
+1. “控制面/数据面分离”在本示例里各由谁承担？规则变更为什么不需要重新编译 BPF 程序？——提示：C 数据面只做解析报文、查 map、更新统计、返回动作；Go 控制面负责加载、规则下发与统计读取；规则在 map 里，改 map 即改规则，控制面也不进入高频报文路径。
+2. map pinning 解决什么问题？rules 与 stats 两个 map pin 在哪、不 pin 会怎样？——提示：`/sys/fs/bpf/nf_guard_rules` 与 `/sys/fs/bpf/nf_guard_stats`（`LIBBPF_PIN_BY_NAME`）；不 pin 则 map 生命周期与 loader 进程 fd 绑定、退出即释放，`block`/`stats` 等独立子命令也无法直接打开同一个 map。
+3. Netfilter、XDP、TC 的钩子位置与取舍各是什么？本示例为什么必须先建 netns？——提示：XDP 在驱动收包早期、TC 在 qdisc ingress/egress、Netfilter 在传统防火墙路径；一个错误的 drop 规则可能断开当前 SSH 连接，隔离拓扑加清理路径是网络路径示例的硬前提。
 
 ## 横向对比：输出机制选择
 
